@@ -1,0 +1,11 @@
+{
+  "name": "mycompany",
+  "owner": { "name": "Lumos" },
+  "plugins": [
+    {
+      "name": "clock-in",
+      "source": ".",
+      "description": "Founder-mode multi-department Agent-Teams orchestration. Trigger 「开始上班」."
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "active": true,
+  "project": "<项目名>",
+  "sot": "docs/SoT.md",
+  "taskboard": "docs/TaskBoard.md",
+  "backlog": "docs/BACKLOG.md",
+  "decisions": "docs/DECISIONS.md",
+  "roster": [],
+  "redlines": [],
+  "thresholds": {
+    "refute_rounds": 3,
+    "retune_after_bounces": 3,
+    "fire_after_more_fails": 3,
+    "meeting_batch": 3,
+    "chaos_depts_near_fire": 2,
+    "chaos_idle_rounds": 3,
+    "chaos_redline_hits": 3,
+    "chaos_ceo_refutes": 3,
+    "chaos_pingpong": 4,
+    "chaos_unowned_domain_fails": 3
+  }
+}

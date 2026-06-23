@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# orchestrate-brief — render the CEO morning brief (overnight runs).
+# Exposed on PATH via the plugin's bin/ dir, so the CEO calls it by bare name:
+#   echo '{"shipped":[…],"queued":[…],"needs_boss":[…],"note":"…"}' | orchestrate-brief --pdf
+# Resolves brief.py relative to ITS OWN location — no CLAUDE_PLUGIN_ROOT (empty in a
+# shell), no cwd assumption, works from any project. Passes stdin + all flags through.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/orchestrate/scripts/brief.py" "$@"

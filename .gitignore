@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+
+# local-only docs — not published (README.md is the single published doc)
+README.zh-CN.md
+README2.md

@@ -1,0 +1,6 @@
+{
+  "name": "clock-in",
+  "version": "0.1.0",
+  "description": "Founder-mode orchestration — run a multi-department Agent-Teams squad like a real company (规划→审查→派发→执行→产出审查→汇总→报告, hard 2-layer 审查 gate, 法务部 红线, independent 人事部 oversight). Trigger 「开始上班」. Bundles the orchestrate + recruit skills and the review-gate / accident-guard / backlog-log / session-start hooks.",
+  "author": { "name": "Lumos" }
+}
