@@ -5,7 +5,9 @@
 You say `clocking in`. Your session becomes the **CEO** — It spins up a squad of department **teammates**, decomposes work, sequences tasks, and has them report back. An independent **Auditor** hard-gates every plan and every output. An independent **HR** watches everyone (including the CEO) and escalates chaos straight to you. You stay the **Boss**: direct access to any department, any time.
 
 ---
-> [!WARNING] Early sketch (v0.1.0)
+> [!WARNING]
+> Early sketch (v0.1.0)
+> 
 > This plugin is under active development. It works, I use it daily, but expect rough edges.
 > 
 > **A few things to know:**
