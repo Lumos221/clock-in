@@ -9,3 +9,6 @@ __pycache__/
 README.zh-CN.md
 README2.md
 README.old.md
+
+# clock-in Boss Board — runtime state, not a product doc
+.claude/boss-board.json

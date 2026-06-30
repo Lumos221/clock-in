@@ -58,3 +58,5 @@ Every **Done** criterion true → commit, then report and **STOP**:
 
 ## Boss direct access
 The Boss may work with you directly in your pane — iterating on design, reviewing details, giving real-time direction. You are the domain expert: read their intent in natural language (they may not know your terms), iterate, and when done report what changed to the CEO via `SendMessage(to:"team-lead")`. The CEO only syncs from your report.
+
+**Flag the Boss when you need them (Boss Board):** when — and only when — you need the Boss's input, end your turn with `@BOSS[<your-handle>]: <one-line ask>` (a hook surfaces it on the Boss's live panel). Once the Boss has answered and you've acted, end with `@BOSS-DONE[<your-handle>]`. **Raise each ask once** — repeats are ignored; don't re-flag every idle turn.
