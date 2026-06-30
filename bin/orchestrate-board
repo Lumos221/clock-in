@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# orchestrate-board — the Boss Board: a live "Needs-You" panel of pending asks.
+# Exposed on PATH via the plugin's bin/ dir, so any pane calls it by bare name:
+#   orchestrate-board add --dept QA --kind needs --text "Postgres or SQLite?"
+#   orchestrate-board done QA-1
+# Resolves board.py relative to ITS OWN location — works from any cwd. Passes
+# all args through.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/orchestrate/scripts/board.py" "$@"
