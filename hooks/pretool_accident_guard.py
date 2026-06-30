@@ -11,8 +11,9 @@ Only acts when an active .claude/orchestrate.json marker exists (path-based look
 cwd-independent, so it covers teammates)."""
 import sys, json, os, re
 
+RM_RF = r"\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r"   # rm -rf / -fr
 IRREVERSIBLE = [
-    r"\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r",   # rm -rf / -fr
+    RM_RF,
     r"\bgit\s+reset\s+--hard\b",
     r"\bgit\s+clean\s+-[a-z]*f",
     r"\bgit\s+push\b.*--force",
@@ -21,6 +22,20 @@ IRREVERSIBLE = [
     r"\bdd\s+if=",
     r">\s*/dev/sd",
 ]
+
+
+def rm_rf_only_dotnext(cmd):
+    """Whitelist `rm -rf .next` — the regenerable Next.js build cache (safe to delete; the
+    standard dev-restart step). Boss-approved 2026-06-30. True ONLY if EVERY rm -rf in the
+    command targets exactly one `.next` dir; any non-.next / extra target → False (stays blocked)."""
+    saw = False
+    for seg in re.split(r"[;&|]+|\n", cmd):
+        if re.search(RM_RF, seg):
+            saw = True
+            m = re.search(r"\brm\s+-\S+\s+(.+)$", seg.strip())
+            if not m or not re.fullmatch(r"(?:\./|[\w./@+-]+/)?\.next/?", m.group(1).strip()):
+                return False
+    return saw
 
 
 def find_marker(start):
@@ -62,6 +77,8 @@ def main():
     cmd = (data.get("tool_input", {}) or {}).get("command", "")
     for pat in IRREVERSIBLE:
         if re.search(pat, cmd):
+            if pat == RM_RF and rm_rf_only_dotnext(cmd):
+                continue  # whitelisted: rm -rf of the regenerable .next build cache
             sys.stderr.write(
                 "🛑 accident-guard: `%s` is an IRREVERSIBLE op. SOP is archive-over-remove — "
                 "archive instead, or get the Boss's explicit approval to run it." % cmd)
