@@ -19,14 +19,13 @@ You stay the Boss. Your session becomes a CEO that delegates to a squad of speci
 
 </div>
 
-<!-- ┌──────────────────────────────────────────────────────────────────────────┐
-     │  HERO DEMO GOES HERE — this is the single biggest win for the README.     │
-     │  Record ~15–25s: you say "clocking in" → CEO recruits departments →       │
-     │  teammate panes spawn → a task flows through the L1 + L2 review gates →    │
-     │  `/clock-in:brief` renders the morning-brief PDF.                          │
-     │  Export to docs/assets/demo.gif, then uncomment the line below.           │
-     └──────────────────────────────────────────────────────────────────────────┘ -->
-<!-- <p align="center"><img src="docs/assets/demo.gif" alt="clock-in in action" width="820"></p> -->
+<p align="center">
+  <img src="docs/assets/hero.png" width="820"
+       alt="A real L2 output-gate bounce: the Auditor catches a defect that would have rendered ~5% of outputs blank, before it merged.">
+</p>
+<p align="center"><sub>A real moment, not a mockup — the <strong>L2 output gate</strong> bounced a defect (~5% of records would have rendered blank) <em>before it merged</em>.</sub></p>
+
+<!-- When you have a ~20s screen recording, drop it at docs/assets/demo.gif and swap the <img> above to use it. -->
 
 ---
 
@@ -97,10 +96,11 @@ reqs   →  plan   →  reviews → review  →  to depts → execute → review
                               [L1 gate]                       [L2 gate]
 ```
 
-<!-- SCREENSHOT SPOT — an annotated capture of the running org (CEO + a couple of
-     department panes + a docs/reviews/*.pass marker) lands well right here.
-     Export to docs/assets/run.png and uncomment: -->
-<!-- <p align="center"><img src="docs/assets/run.png" alt="an orchestration run" width="820"></p> -->
+<p align="center">
+  <img src="docs/assets/loop.png" width="820"
+       alt="Department teammates reporting work up to the CEO — committed SHAs, disk-verified, awaiting re-review.">
+</p>
+<p align="center"><sub>The loop in motion: departments do the work and report up to the CEO — committed SHAs, disk-verified, awaiting re-review.</sub></p>
 
 ### Let it run all night — wake up in the loop
 Render a one-glance brief of **what shipped, what's queued, and what needs you** with `/clock-in:brief`:
