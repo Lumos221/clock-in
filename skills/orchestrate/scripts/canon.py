@@ -30,6 +30,24 @@ def fmt_list(lst):
     return ", ".join(lst) if lst else "—"
 
 
+# ---------------------------------------------------------------- markers
+CANON_ACK_RE = re.compile(r"@CANON-ACK\[([^\]\s]+)\]\s+(\S+)")
+CANON_RE = re.compile(r"@CANON\[([^\]\s]+)\]\s+(\S+)\s*(?:→|->)\s*(\S+?)\s*(?:\(affects:\s*([^)]*)\))?\s*$")
+
+
+def parse_canon_markers(text):
+    registers, acks = [], []
+    for line in (text or "").splitlines():
+        m = CANON_ACK_RE.search(line)
+        if m:
+            acks.append((m.group(1), m.group(2)))
+            continue
+        m = CANON_RE.search(line)
+        if m:
+            registers.append((m.group(1), m.group(2), m.group(3), parse_cell_list(m.group(4))))
+    return {"registers": registers, "acks": acks}
+
+
 # ---------------------------------------------------------------- table model
 def find_row(rows, topic):
     for r in rows:

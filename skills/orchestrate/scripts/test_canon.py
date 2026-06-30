@@ -75,5 +75,28 @@ class TableModel(unittest.TestCase):
         self.assertIn("| pricing-tier | Fin |", out)
 
 
+class MarkerParse(unittest.TestCase):
+    def test_register_with_affects_and_unicode_path(self):
+        out = canon.parse_canon_markers("ok\n@CANON[Fin] pricing-tier → docs/财务/pricing-tier.md (affects: Marketing, Docs)")
+        self.assertEqual(out["registers"], [("Fin", "pricing-tier", "docs/财务/pricing-tier.md", ["Marketing", "Docs"])])
+        self.assertEqual(out["acks"], [])
+
+    def test_register_without_affects_and_ascii_arrow(self):
+        out = canon.parse_canon_markers("@CANON[Legal] redline -> docs/合规/红线法律依据.md")
+        self.assertEqual(out["registers"], [("Legal", "redline", "docs/合规/红线法律依据.md", [])])
+
+    def test_ack_marker(self):
+        out = canon.parse_canon_markers("done\n@CANON-ACK[Marketing] pricing-tier")
+        self.assertEqual(out["acks"], [("Marketing", "pricing-tier")])
+        self.assertEqual(out["registers"], [])
+
+    def test_ack_is_not_parsed_as_register(self):
+        out = canon.parse_canon_markers("@CANON-ACK[Marketing] pricing-tier")
+        self.assertEqual(out["registers"], [])
+
+    def test_no_marker(self):
+        self.assertEqual(canon.parse_canon_markers("nothing here"), {"registers": [], "acks": []})
+
+
 if __name__ == "__main__":
     unittest.main()
