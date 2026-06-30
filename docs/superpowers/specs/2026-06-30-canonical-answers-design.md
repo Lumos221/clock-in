@@ -32,6 +32,7 @@ A **mechanically-maintained canonical-answer registry** (`docs/CANON.md`) plus a
 
 **Non-goals (out of scope — revisit after this lands)**
 - The `SoT.md` "Now" status-block bloat (a separate status-discipline problem).
+- **`DECISIONS.md` integration** — letting a registry pointer reference a `DECISIONS.md` entry (so a binding *decision* with no document becomes read-first), and any decision-propagation mechanism. Discussed and deliberately **parked for a follow-up round** (the DECISIONS mechanism needs further discussion). This v1 indexes canonical **files** only; the `file` column holds a dept file path (no `source`/decision-ref rename).
 - The platform task system / `TaskBoard.md` / the existing task hooks — untouched.
 - Auto-detecting that a dept read a peer's folder (not enforceable; handled by rule + the registry being the easy path).
 
