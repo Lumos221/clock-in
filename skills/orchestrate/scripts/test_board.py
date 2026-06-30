@@ -122,5 +122,45 @@ class Runtime(unittest.TestCase):
             self.assertEqual(len(store["entries"]), 1)
 
 
+class HookFlow(unittest.TestCase):
+    def _run_hook(self, root, transcript_text):
+        import subprocess, json as _json
+        tpath = os.path.join(root, "transcript.jsonl")
+        with open(tpath, "w", encoding="utf-8") as f:
+            f.write(_json.dumps({"type": "assistant",
+                                 "message": {"role": "assistant",
+                                             "content": [{"type": "text", "text": transcript_text}]}}) + "\n")
+        hook = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))))), "hooks", "stop_boss_board.py")
+        env = dict(os.environ, BOSS_BOARD_SKIP_SERVER="1")
+        subprocess.run([sys.executable, hook], input=_json.dumps({"transcript_path": tpath, "cwd": root}),
+                       text=True, env=env, timeout=20)
+
+    def test_raise_marker_adds_open_entry(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "Working on it.\n@BOSS[QA]: Postgres or SQLite?")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            self.assertEqual(len(store["entries"]), 1)
+            self.assertEqual(store["entries"][0]["dept"], "QA")
+            self.assertEqual(store["entries"][0]["status"], "open")
+
+    def test_done_marker_resolves(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@BOSS[QA]: ask?")
+            self._run_hook(d, "Thanks, done.\n@BOSS-DONE[QA]")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            self.assertEqual(store["entries"][0]["status"], "resolved")
+
+    def test_inactive_marker_is_noop(self):
+        with tempfile.TemporaryDirectory() as d:
+            # no .claude/orchestrate.json -> hook must do nothing
+            self._run_hook(d, "@BOSS[QA]: ignored?")
+            self.assertFalse(os.path.exists(os.path.join(d, board.STORE_REL)))
+
+
 if __name__ == "__main__":
     unittest.main()
