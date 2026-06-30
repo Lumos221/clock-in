@@ -92,5 +92,35 @@ class MarkerParse(unittest.TestCase):
         self.assertEqual(out["dones"], ["QA"])
 
 
+class Runtime(unittest.TestCase):
+    def test_project_root_finds_marker_else_cwd(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write("{}")
+            sub = os.path.join(d, "a", "b")
+            os.makedirs(sub)
+            self.assertEqual(os.path.realpath(board.project_root(sub)),
+                             os.path.realpath(d))
+
+    def test_derive_port_is_deterministic_and_in_range(self):
+        with tempfile.TemporaryDirectory() as d:
+            p1 = board.derive_port(d)
+            p2 = board.derive_port(d)
+            self.assertEqual(p1, p2)
+            self.assertTrue(49152 <= p1 <= 65535)
+
+    def test_board_add_persists_and_is_idempotent_via_disk(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            board._SKIP_SERVER = True   # test hook: don't spawn the server/open browser
+            e1 = board.board_add(d, "QA", "needs", "ask one")
+            e2 = board.board_add(d, "QA", "needs", "ask one")
+            self.assertEqual(e1["id"], "QA-1")
+            self.assertEqual(e2["id"], "QA-1")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            self.assertEqual(len(store["entries"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
