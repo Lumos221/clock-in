@@ -147,3 +147,132 @@ def save_rows(path, rows, project):
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(render(rows, project))
     os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------- project root / IO
+def project_root(start=None):
+    d = os.path.abspath(start or os.getcwd())
+    if os.path.isfile(d):
+        d = os.path.dirname(d)
+    cur = d
+    while True:
+        if os.path.exists(os.path.join(cur, ".claude", "orchestrate.json")):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return d
+        cur = parent
+
+
+def canon_path(root):
+    return os.path.join(root, CANON_REL)
+
+
+def project_name(root):
+    return os.path.basename(os.path.abspath(root))
+
+
+def _today():
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def git_short_sha(root, file):
+    for cmd in (["git", "-C", root, "log", "-1", "--format=%h", "--", file],
+                ["git", "-C", root, "rev-parse", "--short", "HEAD"]):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            sha = out.stdout.strip()
+            if sha:
+                return sha
+        except Exception:
+            pass
+    return "—"
+
+
+def archive_file(root, file):
+    src = file if os.path.isabs(file) else os.path.join(root, file)
+    if not os.path.exists(src):
+        return None
+    arch = os.path.join(os.path.dirname(src), "archive")
+    os.makedirs(arch, exist_ok=True)
+    dst = os.path.join(arch, os.path.basename(src))
+    os.replace(src, dst)
+    return dst
+
+
+# ---------------------------------------------------------------- command wrappers
+def cmd_set(root, dept, topic, file, affects):
+    p = canon_path(root)
+    rows = load_rows(p)
+    res = apply_set(rows, dept, topic, file, git_short_sha(root, file), affects, _today())
+    if res["old_file"]:
+        archive_file(root, res["old_file"])
+    save_rows(p, rows, project_name(root))
+    return res
+
+
+def cmd_get(root, topic):
+    return get_file(load_rows(canon_path(root)), topic)
+
+
+def cmd_list(root, dept=None):
+    return list_rows(load_rows(canon_path(root)), dept)
+
+
+def cmd_ack(root, topic, dept):
+    p = canon_path(root)
+    rows = load_rows(p)
+    ok = apply_ack(rows, topic, dept)
+    save_rows(p, rows, project_name(root))
+    return ok
+
+
+def cmd_supersede(root, topic):
+    p = canon_path(root)
+    rows = load_rows(p)
+    r = apply_supersede(rows, topic)
+    if r:
+        archive_file(root, r["file"])
+    save_rows(p, rows, project_name(root))
+    return r
+
+
+def cmd_archive(root, file):
+    return archive_file(root, file)
+
+
+# ---------------------------------------------------------------- CLI
+def _opt(argv, name, default=None):
+    return argv[argv.index(name) + 1] if name in argv and argv.index(name) + 1 < len(argv) else default
+
+
+def main():
+    argv = sys.argv[1:]
+    cmd = argv[0] if argv else ""
+    root = project_root()
+    if cmd == "set":
+        res = cmd_set(root, _opt(argv, "--dept", "?"), _opt(argv, "--topic", ""),
+                      _opt(argv, "--file", ""), parse_cell_list(_opt(argv, "--affects", "")))
+        print("%s %s" % (res["action"], _opt(argv, "--topic", "")))
+    elif cmd == "get":
+        f = cmd_get(root, argv[1] if len(argv) > 1 else "")
+        print(f if f else "not found")
+    elif cmd == "list":
+        for r in cmd_list(root, _opt(argv, "--dept")):
+            flag = (" ⚠ recheck: " + ", ".join(r["needs_recheck"])) if r["needs_recheck"] else ""
+            print("%s [%s] %s%s" % (r["topic"], r["dept"], r["file"], flag))
+    elif cmd == "ack":
+        ok = cmd_ack(root, argv[1] if len(argv) > 1 else "", _opt(argv, "--dept", "?"))
+        print("ack ok" if ok else "topic not found")
+    elif cmd == "supersede":
+        r = cmd_supersede(root, argv[1] if len(argv) > 1 else "")
+        print(("superseded " + r["topic"]) if r else "topic not found")
+    elif cmd == "archive":
+        dst = cmd_archive(root, argv[1] if len(argv) > 1 else "")
+        print(("archived → " + dst) if dst else "file not found")
+    else:
+        sys.stderr.write("usage: orchestrate-canon set|get|list|ack|supersede|archive\n")
+
+
+if __name__ == "__main__":
+    main()

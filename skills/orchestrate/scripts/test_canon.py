@@ -98,5 +98,43 @@ class MarkerParse(unittest.TestCase):
         self.assertEqual(canon.parse_canon_markers("nothing here"), {"registers": [], "acks": []})
 
 
+class Commands(unittest.TestCase):
+    def _proj(self, d):
+        os.makedirs(os.path.join(d, ".claude"))
+        open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+
+    def test_project_root_finds_marker(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            sub = os.path.join(d, "a"); os.makedirs(sub)
+            self.assertEqual(os.path.realpath(canon.project_root(sub)), os.path.realpath(d))
+
+    def test_set_persists_and_get_list(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            canon.cmd_set(d, "Fin", "pricing-tier", "docs/财务/pricing-tier.md", ["Marketing"])
+            self.assertEqual(canon.cmd_get(d, "pricing-tier"), "docs/财务/pricing-tier.md")
+            self.assertEqual([r["topic"] for r in canon.cmd_list(d, "Fin")], ["pricing-tier"])
+
+    def test_set_repoint_archives_old_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            fin = os.path.join(d, "docs", "财务"); os.makedirs(fin)
+            old = os.path.join(fin, "old.md"); open(old, "w").write("old")
+            new = os.path.join(fin, "pricing-tier.md"); open(new, "w").write("new")
+            canon.cmd_set(d, "Fin", "pricing-tier", "docs/财务/old.md", [])
+            canon.cmd_set(d, "Fin", "pricing-tier", "docs/财务/pricing-tier.md", ["Marketing"])
+            self.assertFalse(os.path.exists(old))                          # moved
+            self.assertTrue(os.path.exists(os.path.join(fin, "archive", "old.md")))
+            self.assertEqual(canon.cmd_get(d, "pricing-tier"), "docs/财务/pricing-tier.md")
+
+    def test_ack_clears_flag(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            canon.cmd_set(d, "Fin", "pricing-tier", "f.md", ["Marketing"])
+            self.assertTrue(canon.cmd_ack(d, "pricing-tier", "Marketing"))
+            self.assertEqual(canon.cmd_list(d, "Fin")[0]["needs_recheck"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
