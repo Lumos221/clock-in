@@ -71,5 +71,26 @@ class StoreCore(unittest.TestCase):
             self.assertEqual(board.load_store(p)["entries"][0]["id"], "QA-1")
 
 
+class MarkerParse(unittest.TestCase):
+    def test_raise_marker_extracts_dept_and_one_line_ask(self):
+        out = board.parse_markers("blah\n@BOSS[QA]: Postgres or SQLite?\nmore")
+        self.assertEqual(out["raises"], [("QA", "Postgres or SQLite?")])
+        self.assertEqual(out["dones"], [])
+
+    def test_done_marker_by_dept_and_by_id(self):
+        out = board.parse_markers("@BOSS-DONE[QA]\nx\n@BOSS-DONE[RnD-2]")
+        self.assertEqual(out["dones"], ["QA", "RnD-2"])
+        self.assertEqual(out["raises"], [])
+
+    def test_no_marker_is_empty(self):
+        out = board.parse_markers("just a normal message, discuss this later")
+        self.assertEqual(out, {"raises": [], "dones": []})
+
+    def test_done_line_is_not_also_a_raise(self):
+        out = board.parse_markers("@BOSS-DONE[QA]")
+        self.assertEqual(out["raises"], [])
+        self.assertEqual(out["dones"], ["QA"])
+
+
 if __name__ == "__main__":
     unittest.main()

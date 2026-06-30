@@ -95,3 +95,21 @@ def save_store(path, store):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(store, f, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------- markers
+RAISE_RE = re.compile(r"@BOSS\[([^\]\s]+)\]:\s*(.+)")
+DONE_RE = re.compile(r"@BOSS-DONE\[([^\]\s]+)\]")
+
+
+def parse_markers(text):
+    raises, dones = [], []
+    for line in (text or "").splitlines():
+        m = DONE_RE.search(line)
+        if m:
+            dones.append(m.group(1))
+            continue
+        m = RAISE_RE.search(line)
+        if m:
+            raises.append((m.group(1), m.group(2).strip()))
+    return {"raises": raises, "dones": dones}
