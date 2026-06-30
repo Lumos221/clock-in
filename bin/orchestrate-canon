@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# orchestrate-canon — the canonical-answers registry (docs/CANON.md).
+# Exposed on PATH via the plugin's bin/ dir, so any pane calls it by bare name:
+#   orchestrate-canon set --dept Fin --topic pricing-tier --file docs/财务/pricing-tier.md --affects Marketing
+#   orchestrate-canon get pricing-tier
+# Resolves canon.py relative to ITS OWN location — works from any cwd. Passes args through.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/orchestrate/scripts/canon.py" "$@"
