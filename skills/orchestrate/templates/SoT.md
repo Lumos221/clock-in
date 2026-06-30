@@ -23,6 +23,5 @@
 <the few that still shape the project — name the decision + its date; grep that date in `DECISIONS.md` to reach the `## <date> · …` entry (no fragile #anchors)>
 - <decision title> → `DECISIONS.md` (<date>)
 
-## Canonical files
-<the one that *matters* per answered question — dept proposes, CEO accepts>
-- <What, e.g. 合规裁定> → `docs/<其领域>/<file>.md`
+## Canonical answers
+→ `docs/CANON.md`  (machine-maintained registry — current file per answered question; **read-first**, don't duplicate its pointers here)

@@ -62,7 +62,8 @@ The layout is consistent across projects/sessions, not improvised. Every domain 
 | `docs/TaskBoard.md` | **live board** — active cards (todo/doing/review/blocked) **+ the last ~5 shipped** (one-liners); older shipped drop off (in BACKLOG) | CEO writes cards; depts own their `status`; 审查官 marks done; CEO moves a passed card to *Recently shipped* (keep ~5) | while orchestrating |
 | `docs/BACKLOG.md` | **finished-task log** (append-only, traceback) | **completion hook** (auto, via `log.py`) | never — on-demand |
 | `docs/DECISIONS.md` | **decision log** — the **complete** record: every decision + its **why** | **CEO** prose | on-demand; SoT gists the important ones |
-| `docs/<其领域>/` | dept work products; the **canonical** one earns a SoT pointer | the dept | on-demand |
+| `docs/CANON.md` | **canonical-answer registry** — current authoritative file per answered question (cross-domain lookup) | **`canon.py`** (auto, via `@CANON` hook) | read-first by depts (small) |
+| `docs/<其领域>/` | dept work products; the **canonical** one earns a `CANON.md` row | the dept | on-demand |
 | `docs/reviews/` · `复盘-*` · `handover-*` | gate ledger · HR memory · handovers | 审查官 · 人事部 · departing dept | on-demand |
 
 - TaskBoard holds *live* work **+ the last ~5 shipped** (one-liners) — on an L2 pass the card is auto-logged to BACKLOG and moves to *Recently shipped*, trimmed to ~5 (older drop off; full history stays in BACKLOG). `SoT.md` stays tight: **pointers, not detail.**
@@ -205,4 +206,4 @@ Parallel teammates own **non-overlapping files** (§2.4).
 
 ---
 
-References: `reference/departments.md` (dept + expert menu) · `reference/meetings.md` (morning brief) · `reference/hr-oversight.md` (人事部) · `scripts/log.py` (task log) · `scripts/brief.py` (morning brief) · `reference/boss-board.md` (Boss Board) · `scripts/board.py` (Boss Board panel).
+References: `reference/departments.md` (dept + expert menu) · `reference/meetings.md` (morning brief) · `reference/hr-oversight.md` (人事部) · `scripts/log.py` (task log) · `scripts/brief.py` (morning brief) · `reference/boss-board.md` (Boss Board) · `scripts/board.py` (Boss Board panel) · `reference/canon.md` (canonical answers) · `scripts/canon.py` (canon registry).

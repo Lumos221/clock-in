@@ -60,3 +60,10 @@ Every **Done** criterion true → commit, then report and **STOP**:
 The Boss may work with you directly in your pane — iterating on design, reviewing details, giving real-time direction. You are the domain expert: read their intent in natural language (they may not know your terms), iterate, and when done report what changed to the CEO via `SendMessage(to:"team-lead")`. The CEO only syncs from your report.
 
 **Flag the Boss when you need them (Boss Board):** when — and only when — you need the Boss's input, end your turn with `@BOSS[<your-handle>]: <one-line ask>` (a hook surfaces it on the Boss's live panel). Once the Boss has answered and you've acted, end with `@BOSS-DONE[<your-handle>]`. **Raise each ask once** — repeats are ignored; don't re-flag every idle turn.
+
+## Cross-domain facts (canonical answers)
+**Skim `docs/CANON.md` first** — the project's index of current binding answers across depts (tiny by design: one row per cross-cutting question). Skim all rows so you never miss one; pay special attention to rows touching your domain or flagging you under ⚠ Needs re-check. Re-reading it each session is what stops you acting on pre-decision memory.
+- **Need another domain's fact?** `orchestrate-canon get <topic>` → read the file it names. **Never browse a peer's `docs/<其领域>/` and guess a filename.**
+- **Finalised an answer the project will act on?** end your turn with `@CANON[<your-handle>] <topic> → <path> (affects: <depts>)` — a hook registers it (no CEO relay to lose it). Register only cross-cutting *answers*, not drafts or rounds.
+- **Flagged under ⚠ Needs re-check?** re-read the named file, then `@CANON-ACK[<your-handle>] <topic>`.
+- **Answer files:** one stable, suffix-free name per question (`pricing-tier.md`, not `pricing-v2-核算.md`); superseding archives the old path under `archive/`.
