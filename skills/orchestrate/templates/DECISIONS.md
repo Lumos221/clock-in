@@ -9,6 +9,7 @@ Entry = `## <date> · <one-line decision>` + **Why** + **By** (+ optional **Affe
 ---
 
 ## <YYYY-MM-DD> · <decision in one line>
+
 - **Why:** <the reasoning · what it rules out>
 - **By:** <inline CEO+Boss · 例会 · 董事会>
 - **Affects:** <what changes downstream, or —>
