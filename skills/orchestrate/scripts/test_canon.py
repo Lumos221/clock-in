@@ -136,5 +136,39 @@ class Commands(unittest.TestCase):
             self.assertEqual(canon.cmd_list(d, "Fin")[0]["needs_recheck"], [])
 
 
+class HookFlow(unittest.TestCase):
+    def _run_hook(self, root, text):
+        import subprocess, json as _json
+        tpath = os.path.join(root, "t.jsonl")
+        with open(tpath, "w", encoding="utf-8") as f:
+            f.write(_json.dumps({"type": "assistant", "message": {"role": "assistant",
+                    "content": [{"type": "text", "text": text}]}}) + "\n")
+        hook = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))))), "hooks", "stop_canon.py")
+        subprocess.run([sys.executable, hook],
+                       input=_json.dumps({"transcript_path": tpath, "cwd": root}),
+                       text=True, timeout=20)
+
+    def test_register_marker_writes_row(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "done\n@CANON[Fin] pricing-tier → docs/财务/pricing-tier.md (affects: Marketing)")
+            self.assertEqual(canon.cmd_get(d, "pricing-tier"), "docs/财务/pricing-tier.md")
+
+    def test_ack_marker_clears_flag(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@CANON[Fin] pricing-tier → f.md (affects: Marketing)")
+            self._run_hook(d, "@CANON-ACK[Marketing] pricing-tier")
+            self.assertEqual(canon.cmd_list(d)[0]["needs_recheck"], [])
+
+    def test_inactive_project_is_noop(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._run_hook(d, "@CANON[Fin] pricing-tier → f.md")
+            self.assertFalse(os.path.exists(os.path.join(d, "docs", "CANON.md")))
+
+
 if __name__ == "__main__":
     unittest.main()

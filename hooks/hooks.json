@@ -34,12 +34,22 @@
         "hooks": [
           { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_boss_board.py" }
         ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_canon.py" }
+        ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
           { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_boss_board.py" }
+        ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_canon.py" }
         ]
       }
     ]
