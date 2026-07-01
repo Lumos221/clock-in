@@ -46,7 +46,7 @@ You're the Boss. Your Claude Code session becomes a **manager** that breaks your
   <img src="docs/assets/hero.png" width="760"
        alt="An independent reviewer catches a defect that would have shipped broken output, and bounces it before it merges.">
 </p>
-<p align="center"><sub>A real moment, not a mockup — the independent reviewer caught a defect that would have shipped broken output, and bounced it <em>before it merged</em>.</sub></p>
+<p align="center"><sub>The independent reviewer caught a defect that would have shipped broken output, and bounced it <em>before it merged</em>.</sub></p>
 
 The point is **separation of powers.** Quality comes from the structure, not from trusting one model to mark its own homework. Most "multi-agent" tools are one prompt wearing different hats — this one isn't.
 
@@ -57,7 +57,7 @@ The point is **separation of powers.** Quality comes from the structure, not fro
 
 ## Why I built it
 
-My thoughts are jumpy. I start more threads than I finish, and the ones I don't write down slip away — so I lean hard on structure outside my head. And I can't leave a rough tool alone; when a structure doesn't quite work, I keep polishing it until it does. clock-in is the scaffolding I built to run AI agents without dropping threads: the checks, the shared memory, the one place where whatever needs me shows up.
+My thoughts are jumpy and bursty. I start more threads than I finish, and the ones I don't write down slip away — so I lean hard on structure outside my head. And I can't leave a rough tool alone; when a structure doesn't quite work, I keep polishing it until it does. clock-in is the scaffolding I built to run AI agents without dropping threads: the checks, the shared memory, the one place where whatever needs me shows up.
 
 Build for a mind that needs structure to stay on track, and you get something steadier for everyone. That's clock-in.
 
