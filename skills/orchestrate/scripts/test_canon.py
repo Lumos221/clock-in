@@ -224,5 +224,57 @@ class RenderMirror(unittest.TestCase):
         self.assertNotIn("Key decisions", out)
 
 
+class DecisionIO(unittest.TestCase):
+    def _proj(self, d, decisions_body):
+        os.makedirs(os.path.join(d, ".claude"))
+        open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+        os.makedirs(os.path.join(d, "docs"))
+        open(os.path.join(d, "docs", "DECISIONS.md"), "w", encoding="utf-8").write(decisions_body)
+
+    def test_marker_parses_decisions_pointer(self):
+        out = canon.parse_canon_markers("@CANON[Fin] monetization-model → DECISIONS (affects: Marketing)")
+        self.assertEqual(out["registers"], [("Fin", "monetization-model", "DECISIONS", ["Marketing"])])
+
+    def test_set_decision_stamps_date_and_mirrors_on_disk(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d, "## 2026-06-30 · [monetization-model] Free=credits · Paid=packs\n")
+            canon.cmd_set(d, "Fin", "monetization-model", "DECISIONS", ["Marketing"])
+            row = canon.find_row(canon.load_rows(canon.canon_path(d)), "monetization-model")
+            self.assertEqual(row["file"], "DECISIONS")
+            self.assertEqual(row["version"], "2026-06-30")
+            self.assertIn("Free=credits · Paid=packs", open(canon.canon_path(d), encoding="utf-8").read())
+
+    def test_supersede_bumps_version_and_flags(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d, "## 2026-06-30 · [monetization-model] v1\n")
+            canon.cmd_set(d, "Fin", "monetization-model", "DECISIONS", ["Marketing"])
+            canon.cmd_ack(d, "monetization-model", "Marketing")
+            # log a newer tagged entry ON TOP, then re-register
+            body = "## 2026-07-02 · [monetization-model] v2\n\n## 2026-06-30 · [monetization-model] v1\n"
+            open(os.path.join(d, "docs", "DECISIONS.md"), "w", encoding="utf-8").write(body)
+            canon.cmd_set(d, "Fin", "monetization-model", "DECISIONS", ["Marketing"])
+            row = canon.find_row(canon.load_rows(canon.canon_path(d)), "monetization-model")
+            self.assertEqual(row["version"], "2026-07-02")
+            self.assertEqual(row["needs_recheck"], ["Marketing"])
+
+    def test_get_display_decision_vs_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d, "## 2026-06-30 · [monetization-model] Free=credits\n")
+            canon.cmd_set(d, "Fin", "monetization-model", "DECISIONS", [])
+            self.assertEqual(canon.cmd_get_display(d, "monetization-model"),
+                             "Free=credits → docs/DECISIONS.md")
+            canon.cmd_set(d, "Fin", "pricing-tier", "docs/财务/pricing-tier.md", [])
+            self.assertEqual(canon.cmd_get_display(d, "pricing-tier"), "docs/财务/pricing-tier.md")
+            self.assertEqual(canon.cmd_get_display(d, "nope"), "not found")
+
+    def test_roundtrip_ignores_mirrored_section(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d, "## 2026-06-30 · [monetization-model] Free=credits\n")
+            canon.cmd_set(d, "Fin", "monetization-model", "DECISIONS", ["Marketing"])
+            rows = canon.load_rows(canon.canon_path(d))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["file"], "DECISIONS")
+
+
 if __name__ == "__main__":
     unittest.main()

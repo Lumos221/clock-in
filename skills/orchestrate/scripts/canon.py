@@ -152,9 +152,12 @@ def render(rows, project, decisions=None):
 
 def save_rows(path, rows, project):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(path)))  # <root>/docs/CANON.md -> <root>
+    decisions = {r["topic"]: decision_entry(root, r["topic"])[1]
+                 for r in rows if r["file"] == "DECISIONS"}
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        f.write(render(rows, project))
+        f.write(render(rows, project, decisions))
     os.replace(tmp, path)
 
 
@@ -233,8 +236,9 @@ def archive_file(root, file):
 def cmd_set(root, dept, topic, file, affects):
     p = canon_path(root)
     rows = load_rows(p)
-    res = apply_set(rows, dept, topic, file, git_short_sha(root, file), affects, _today())
-    if res["old_file"]:
+    version = (decision_entry(root, topic)[0] or "—") if file == "DECISIONS" else git_short_sha(root, file)
+    res = apply_set(rows, dept, topic, file, version, affects, _today())
+    if res["old_file"] and res["old_file"] != "DECISIONS":
         archive_file(root, res["old_file"])
     save_rows(p, rows, project_name(root))
     return res
@@ -242,6 +246,16 @@ def cmd_set(root, dept, topic, file, affects):
 
 def cmd_get(root, topic):
     return get_file(load_rows(canon_path(root)), topic)
+
+
+def cmd_get_display(root, topic):
+    r = find_row(load_rows(canon_path(root)), topic)
+    if not r:
+        return "not found"
+    if r["file"] == "DECISIONS":
+        gist = decision_entry(root, topic)[1] or "(no [%s] entry in DECISIONS.md)" % topic
+        return "%s → docs/DECISIONS.md" % gist
+    return r["file"]
 
 
 def cmd_list(root, dept=None):
@@ -284,8 +298,7 @@ def main():
                       _opt(argv, "--file", ""), parse_cell_list(_opt(argv, "--affects", "")))
         print("%s %s" % (res["action"], _opt(argv, "--topic", "")))
     elif cmd == "get":
-        f = cmd_get(root, argv[1] if len(argv) > 1 else "")
-        print(f if f else "not found")
+        print(cmd_get_display(root, argv[1] if len(argv) > 1 else ""))
     elif cmd == "list":
         for r in cmd_list(root, _opt(argv, "--dept")):
             flag = (" ⚠ recheck: " + ", ".join(r["needs_recheck"])) if r["needs_recheck"] else ""
