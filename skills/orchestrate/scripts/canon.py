@@ -9,6 +9,7 @@ from datetime import datetime
 
 COLS = ["topic", "dept", "file", "version", "updated", "affects", "needs-recheck"]
 CANON_REL = os.path.join("docs", "CANON.md")
+DECISIONS_REL = os.path.join("docs", "DECISIONS.md")
 
 HEADER = (
     "# %s · CANON — canonical answers (read-first · machine-maintained · do not hand-edit)\n\n"
@@ -187,6 +188,26 @@ def git_short_sha(root, file):
         except Exception:
             pass
     return "—"
+
+
+def decision_entry(root, topic):
+    """(date, gist) of the topmost DECISIONS.md headline tagged [topic]; (None, None) if absent.
+    gist = headline with the [token] and a leading 'YYYY-MM-DD ·' stripped."""
+    try:
+        text = open(os.path.join(root, DECISIONS_REL), encoding="utf-8").read()
+    except Exception:
+        return (None, None)
+    tag = "[%s]" % topic
+    for line in text.splitlines():
+        s = line.strip()
+        if not s.startswith("#") or tag not in s:
+            continue
+        head = s.lstrip("#").strip().replace(tag, " ")
+        m = re.match(r"\s*(\d{4}-\d{2}-\d{2})[\s·:\-]*(.*)$", head)
+        if m:
+            return (m.group(1), re.sub(r"\s+", " ", m.group(2)).strip(" ·"))
+        return (None, re.sub(r"\s+", " ", head).strip(" ·"))
+    return (None, None)
 
 
 def archive_file(root, file):

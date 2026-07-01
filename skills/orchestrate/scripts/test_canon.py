@@ -170,5 +170,37 @@ class HookFlow(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(d, "docs", "CANON.md")))
 
 
+class DecisionResolve(unittest.TestCase):
+    def _write(self, d, body):
+        os.makedirs(os.path.join(d, "docs"), exist_ok=True)
+        open(os.path.join(d, "docs", "DECISIONS.md"), "w", encoding="utf-8").write(body)
+
+    def test_resolves_tag_strips_date_and_token(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._write(d, "# log\n\n## 2026-06-30 · [monetization-model] Free=credits · Paid=packs\n- Why: x\n")
+            date, gist = canon.decision_entry(d, "monetization-model")
+            self.assertEqual(date, "2026-06-30")
+            self.assertEqual(gist, "Free=credits · Paid=packs")
+
+    def test_topmost_wins_on_date_collision_and_supersede(self):
+        with tempfile.TemporaryDirectory() as d:
+            # newest on top: a later monetization entry sits above the older one
+            self._write(d,
+                "## 2026-07-02 · [monetization-model] v2 credits model\n- Why: revised\n\n"
+                "## 2026-06-30 · [pricing-tier] unrelated same-ish day\n\n"
+                "## 2026-06-30 · [monetization-model] v1 credits model\n")
+            date, gist = canon.decision_entry(d, "monetization-model")
+            self.assertEqual((date, gist), ("2026-07-02", "v2 credits model"))
+
+    def test_missing_tag_returns_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._write(d, "## 2026-06-30 · [other] thing\n")
+            self.assertEqual(canon.decision_entry(d, "monetization-model"), (None, None))
+
+    def test_no_decisions_file_returns_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(canon.decision_entry(d, "x"), (None, None))
+
+
 if __name__ == "__main__":
     unittest.main()
