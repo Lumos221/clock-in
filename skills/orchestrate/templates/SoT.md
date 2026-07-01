@@ -23,5 +23,5 @@
 <the few that still shape the project — name the decision + its date; grep that date in `DECISIONS.md` to reach the `## <date> · …` entry (no fragile #anchors)>
 - <decision title> → `DECISIONS.md` (<date>)
 
-## Canonical answers
-→ `docs/CANON.md`  (machine-maintained registry — current file per answered question; **read-first**, don't duplicate its pointers here)
+## Canonical answers & key decisions
+→ `docs/CANON.md`  (machine-maintained — current file **and** in-force key decision per question; **read-first**, don't restate its rows here)

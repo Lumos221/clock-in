@@ -13,6 +13,12 @@ A decision settled in one dept must reach the depts that act on it. `CANON.md` i
 ## File convention
 One **stable, suffix-free** file per question (`pricing-tier.md`, not `pricing-v2.md`) — bare name = current. Updates are in-place (git holds history). Re-pointing to a *different* path archives the old one under `<dir>/archive/`. The ASCII topic-key is decoupled from the filename (which may stay Chinese).
 
+## Decisions (a row can point at a decision, not just a file)
+A **key in-force decision** earns a row too — pointer = the literal `DECISIONS`. Tag its `DECISIONS.md` headline with the topic-key (`## <date> · [monetization-model] …`); canon greps the **topmost** `[topic-key]` (newest, per 新在上) and **mirrors that headline** as the gist under "Key decisions (mirrored)". Author the one-liner once in `DECISIONS.md`; it can't drift.
+- **Register / supersede:** `@CANON[<dept>] <topic> → DECISIONS (affects: …)`. Reverse by logging a new tagged entry on top + re-registering; canon re-points and flags dependents. The old entry stays in the log as history.
+- **Lookup:** `orchestrate-canon get <topic>` → the mirrored headline + `docs/DECISIONS.md` (the why).
+- Only **key/binding** decisions are tagged; tactical ones stay log-only. `DECISIONS.md` remains the full on-demand why-log.
+
 ## Anti-bloat
 One row per *question*, not per file/version — updates re-point the same row. Only an explicit `@CANON` registers (nothing sweeps a folder in). Only cross-cutting settled answers qualify. So `CANON.md` grows with distinct cross-cutting questions (small, stable), not file count.
 
