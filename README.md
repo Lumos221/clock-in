@@ -7,51 +7,92 @@
 
 # 🕘 clock-in
 
-**Run your Claude Code session like a founder-mode company.**
+**Your AI agents keep dropping the thread. Give them a company.**
 
-You stay the Boss. Your session becomes a CEO that delegates to a squad of specialist departments — with an independent Auditor gating every plan and output, and an independent HR watching the whole org, including the CEO.
+One agent forgets what another already settled. Context bloats until quality slips. "Done" turns out to mean "looks done." clock-in fixes that with **structure, not bigger prompts** — it runs your Claude Code session like a small company, where quality and memory come from *how the work is organised*, not from hoping the model gets it right.
 
-[![version](https://img.shields.io/badge/version-0.1.0-3b82f6)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/github/v/tag/Lumos221/clock-in?label=version&color=3b82f6)](CHANGELOG.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://docs.claude.com/en/docs/claude-code)
-[![Agent Teams](https://img.shields.io/badge/Agent%20Teams-required-f59e0b)](#requirements)
+[![Agent Teams](https://img.shields.io/badge/Agent%20Teams-required-f59e0b)](#youll-need)
 [![license: MIT](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-22c55e)](#feedback)
 
 </div>
 
 <p align="center">
-  <img src="docs/assets/hero.png" width="820"
-       alt="A real L2 output-gate bounce: the Auditor catches a defect that would have rendered ~5% of outputs blank, before it merged.">
+  <img src="docs/assets/boss-board.png" width="760"
+       alt="A live 'Needs you' panel: the open questions from across the team that are waiting on the Boss's decision.">
 </p>
-<p align="center"><sub>A real moment, not a mockup — the <strong>L2 output gate</strong> bounced a defect (~5% of records would have rendered blank) <em>before it merged</em>.</sub></p>
+<p align="center"><sub>The one place the threads that would've been dropped end up — every open question waiting on <em>your</em> call, in a single always-open panel.</sub></p>
 
-<!-- When you have a ~20s screen recording, drop it at docs/assets/demo.gif and swap the <img> above to use it. -->
+---
+
+## At a glance
+
+- **You can trust "done."** Nothing is marked finished until an independent reviewer has actually checked it — the plan *and* the result.
+- **Nothing settled gets forgotten.** The team keeps a shared memory of every decision and answer, so one part never contradicts another or works off stale information.
+- **Nothing waiting on you slips.** Whatever needs your call surfaces in one place, instead of getting buried in the noise.
+- **You steer in plain language.** Say what you want; the team plans it, does it, and reports back. You don't manage the machinery.
+- **Someone independent watches the whole team** — even the manager. If something's going wrong, you hear about it directly.
+- **It stays fast on long projects.** It keeps only what matters in view and leaves the rest on disk, so it doesn't bog down or lose the plot.
 
 ---
 
 ## What it is
 
-clock-in turns one Claude Code session into a small company. **You stay the Boss.** Your session becomes a **CEO** that breaks work into slices and hands them to specialist **department** teammates — while an independent **Auditor** gate-checks every plan *and* every result, and an independent **HR** watches the whole org, including the CEO.
+You're the Boss. Your Claude Code session becomes a **manager** that breaks your goal into pieces and hands each to a **specialist** — engineering, testing, ops, legal, finance, docs, whatever the work needs. An **independent reviewer** checks every plan before work starts and every result before it's called done. A separate **overseer** watches the whole team — including the manager — and comes straight to you when something's off. And the team **remembers**: decisions and settled answers are kept where everyone can see them, so the work stays consistent as it grows.
 
-The point: **real separation of powers**, so quality is enforced by *structure*, not by trust. Most "multi-agent" setups are one prompt wearing different hats. This one isn't.
+<p align="center">
+  <img src="docs/assets/hero.png" width="760"
+       alt="An independent reviewer catches a defect that would have shipped broken output, and bounces it before it merges.">
+</p>
+<p align="center"><sub>A real moment, not a mockup — the independent reviewer caught a defect that would have shipped broken output, and bounced it <em>before it merged</em>.</sub></p>
+
+The point is **separation of powers.** Quality comes from the structure, not from trusting one model to mark its own homework. Most "multi-agent" tools are one prompt wearing different hats — this one isn't.
 
 > [!NOTE]
-> clock-in thinks bilingually — roles carry Chinese names (e.g. 审查官 Auditor, 法务部 Legal, 人事部 HR) and the workflow has a Chinese shorthand. You never need to read them; everything works in plain English. They're labels, not a requirement.
+> clock-in thinks bilingually — some roles carry Chinese names and the workflow has a Chinese shorthand. You never need to read them; everything works in plain English. They're flavour, not a requirement.
+
+---
+
+## Why I built it
+
+My thoughts are jumpy. I start more threads than I finish, and the ones I don't write down slip away — so I lean hard on structure outside my head. And I can't leave a rough tool alone; when a structure doesn't quite work, I keep polishing it until it does. clock-in is the scaffolding I built to run AI agents without dropping threads: the checks, the shared memory, the one place where whatever needs me shows up.
+
+Build for a mind that needs structure to stay on track, and you get something steadier for everyone. That's clock-in.
+
+---
+
+## What it's like to work with it
+
+You say what you want, in plain words. The manager drafts a plan and runs it past you. Once you're happy, the specialists do the work and check each other's output — and you get a short, clear report of what changed.
+
+Founder-mode means you're never boxed out: drop in on any specialist directly, hash something out, and it catches the manager up afterwards. You keep full control even as the work grows past what you could hold in your head.
+
+<p align="center">
+  <img src="docs/assets/loop.png" width="820"
+       alt="Specialist teammates reporting their finished work up to the manager for an independent re-check.">
+</p>
+<p align="center"><sub>The team in motion — specialists do the work and report up, each result waiting on an independent check before it counts as done.</sub></p>
+
+Leave it running and come back to a **one-glance summary of what shipped, what's queued, and what needs your decision** — so a long unattended run doesn't turn into an archaeology dig.
+
+<p align="center">
+  <img src="docs/assets/brief-example.png" alt="A one-glance morning brief: what shipped, what's queued, and what needs the Boss." width="620">
+</p>
+<p align="center"><sub>Wake up to the state of the run — shipped · queued · needs-you — instead of scrolling back through the night.</sub></p>
 
 ---
 
 ## Quick start
 
-### Requirements
+### You'll need
 
-| What | Why |
-|---|---|
-| **Claude Code** with **Agent Teams** enabled | The system is built on teammates. Without it, nothing spawns. |
-| **Python 3** (standard library only) | Runs the hooks and scripts. No `pip install`. |
-| **A git repo** (recommended) | Departments commit each step; reports carry commit SHAs. |
-| **A Chromium-family browser** (optional) | Only for `/clock-in:brief` — renders the brief as PDF/PNG. Without one it opens as HTML. |
+- **Claude Code with Agent Teams enabled** — the whole thing runs on teammates.
+- **Python 3** — standard library only, nothing to `pip install`.
+- **A git repo** (recommended) — the team commits as it goes, so you can always see and trust the history.
 
-Enable Agent Teams in your Claude Code `settings.json`:
+Turn on Agent Teams in your Claude Code `settings.json`:
 
 ```json
 { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
@@ -60,205 +101,35 @@ Enable Agent Teams in your Claude Code `settings.json`:
 ### Install
 
 ```text
-# 1 · add the marketplace
 /plugin marketplace add Lumos221/clock-in
-
-# 2 · install the plugin
 /plugin install clock-in@mycompany
-
-# 3 · ensure Agent Teams is on (above), then restart Claude Code
 ```
 
-Hooks **auto-wire on enable** — no manual `settings.json` hook setup needed.
+Then restart Claude Code. (Everything wires itself up on enable — no extra setup.)
 
-### Run it
+### Start
 
-Open a project (ideally a git repo) and start it any of these ways:
-
-> **`/clock-in:orchestrate`**  ·  or just say **"clocking in"**  ·  or **「开始上班」**
-
-On the **first run** the CEO recruits the departments your project needs, scaffolds its source-of-truth files, and asks you to restart-and-resume (`claude -c`) so the new agent files load. After that, every run picks up the roster and runs the spine.
+Open a project and just say **"clocking in"** (or 「开始上班」). The first time, it sets up the team your project needs and asks you to restart so everything loads; after that it picks up right where you left off.
 
 > [!TIP]
-> **Skip it for small stuff.** Single-file tweaks or ≤3-step tasks don't need an org — just ask Claude directly. clock-in is for multi-part work.
+> **Skip it for small stuff.** A one-file tweak doesn't need a company — just ask Claude directly. clock-in earns its keep on multi-part work.
 
 ---
 
-## See it in action
-
-Once you clock in, every piece of work flows down one spine — and **a task literally cannot be marked done until the Auditor has signed off**:
-
-```
-锁需求 → 起草方案 → Boss过目 → 方案审查 → 派发 → 部门执行 → 产出审查 → 汇总 → 报告
-
-lock      draft     Boss      plan       dispatch  depts     output     consol-  report
-reqs   →  plan   →  reviews → review  →  to depts → execute → review  →  idate  → to Boss
-                              [L1 gate]                       [L2 gate]
-```
-
-<p align="center">
-  <img src="docs/assets/loop.png" width="820"
-       alt="Department teammates reporting work up to the CEO — committed SHAs, disk-verified, awaiting re-review.">
-</p>
-<p align="center"><sub>The loop in motion: departments do the work and report up to the CEO — committed SHAs, disk-verified, awaiting re-review.</sub></p>
-
-### Let it run all night — wake up in the loop
-Render a one-glance brief of **what shipped, what's queued, and what needs you** with `/clock-in:brief`:
-
-<p align="center">
-  <img src="docs/assets/brief-example.png" alt="Example CEO morning brief — shipped, queued, and needs-you lists" width="620">
-</p>
-<p align="center"><sub>A real brief from <code>/clock-in:brief</code> — shipped · queued · needs-you, footed with the run's gate status.</sub></p>
-
-| Command | What it does |
-|---|---|
-| `/clock-in:orchestrate` | Start or resume founder-mode orchestration (= "clocking in" / 「开始上班」). |
-| `/clock-in:recruit` | Build or extend the department roster. |
-| `/clock-in:brief` | Render the CEO morning brief (PDF / PNG / HTML) and open it. |
-
----
-
-
-## How it works
-
-```
-Boss (you) ─── can reach any department directly
-│
-├─ CEO (main session) ── routes · decomposes · sequences
-│  └─ Departments (teammates) ── own their method + quality bar; do the work
-│     ├─ staff (subagents) ─────────── one-shot grunt work
-│     └─ Prof_ / Spec_ (subagents) ─── outside expertise, required by depts, hired by HR
-│
-├─ Auditor / 审查官 (subagent) ── independent review: L1 plan + L2 output
-│
-└─ HR / 人事部 (teammate) ─── independent oversight; authors agent files;
-                              reports to the Boss directly
-```
-
-**Who owns what**
-
-- **CEO** — *who* does it, *what* the slice is, the done-when bar, cross-dept sequence.
-- **Department** — *how* (its method), its own quality bar, proposing its next steps.
-- **Boss (you)** — the product-quality floor, big forks, red-line calls, direct access.
-
-**The two gates** — the Auditor is an independent subagent running two hard checks:
-
-- **L1 · Plan** (before any work): passes only if the plan is feasible, complete, well-decomposed, risks-listed, and in scope. Otherwise it writes a `.refute` marker with reasons and the CEO must revise.
-- **L2 · Output** (before "done"): passes only if the output meets acceptance criteria + the department's quality bar, is correct (tests pass), stays in bounds, and is traceable. Otherwise it writes a `.fail` marker and the work bounces back.
-
-A hook reads these markers mechanically — a task cannot be marked `completed` without a matching `docs/reviews/<id>.pass`. **HR** then counts the bounces: 3 → retune, 3 more → fire & re-hire; CEO plan-refutes are tracked and escalated to you.
-
----
-
-## Why it's different
-
-- **A CEO that orchestrates, not implements.** It decides *who does what, in what order*, holds the only cross-domain view, and stays out of the craft.
-- **A hard 2-layer review gate.** An independent Auditor must pass the *plan* (L1) before any work starts, and every *output* (L2) before it merges — enforced by a hook, not by vibes. No recorded pass, no "done".
-- **Independent HR oversight.** HR counts bounces, retunes or fires underperformers, and escalates chaos **straight to you** — including when the problem is the CEO.
-- **Founder-mode direct access.** Drop into any department's pane and work with it directly; it reports back to the CEO afterwards. You never lose control as it scales.
-- **Context-lean by design.** A tiny source-of-truth compass loads each session; the append-only history never auto-loads.
-- **Safety backstops.** A hook blocks genuinely irreversible shell ops (`rm -rf`, `git push --force`, `drop table`…); the Legal department owns the compliance red line.
-
----
-
-
-## Reference
-
-<details>
-<summary><strong>Departments</strong> — HR recruits only what the project needs</summary>
-
-| Department | Handle | What it does | Default owned files |
-|---|---|---|---|
-| 研发部 | `RnD` | Features, architecture, code | `src/` `lib/` `app/` |
-| 测试部 | `QA` | Tests, coverage, bug verification | `tests/` `**/*.test.*` |
-| 运维部 | `Ops` | CI/CD, deploy, infra, security | `.github/` `infra/` `Dockerfile` |
-| 数据部 | `Data` | Data analysis, stats, ETL | `data/` `notebooks/` |
-| 产品文档部 | `Docs` | Product docs, README, i18n | `README*` `docs/product/` |
-| 法务部 | `Legal` | Compliance, licensing, privacy | `LICENSE*` `PRIVACY*` |
-| 财务部 | `Fin` | Cost, ROI, investment analysis | `docs/财务/` |
-| 人事部 | `HR` | Independent oversight + HR (always recruited) | `.claude/agents/` |
-
-**Experts**, hired on demand by HR: `Prof_<domain>` (academic, e.g. `Prof_CompSci`) and `Spec_<domain>` (specialist, e.g. `Spec_Frontend`). Rule of thumb — a typical web app uses RnD + QA + Ops + Docs + HR.
-
-</details>
-
-<details>
-<summary><strong>Artifacts &amp; files</strong> — source of truth ≠ log</summary>
-
-| File | Role | Loaded |
-|---|---|---|
-| `docs/SoT.md` | Source of truth — the compass (goal · now · pointers) | **each session** (kept small) |
-| `docs/TaskBoard.md` | Live board — active cards + last ~5 shipped | while orchestrating |
-| `docs/BACKLOG.md` | Finished-task log — auto-appended by a hook | never (on-demand) |
-| `docs/DECISIONS.md` | Decision log — every significant call + why | on-demand |
-| `docs/reviews/` | Review markers — `.pass` / `.fail` / `.refute` | hooks read these |
-| `docs/<domain>/` | Department work products; canonical ones earn a SoT pointer | on-demand |
-| `.claude/orchestrate.json` | Activation marker + config + roster + thresholds | hooks check at start |
-
-</details>
-
-<details>
-<summary><strong>Model routing</strong></summary>
-
-| Model | Used for |
-|---|---|
-| **opus** | Auditor, Legal, HR, all experts, RnD when architecturally hard |
-| **sonnet** | RnD routine coding, QA, Ops, Data, Docs |
-| **haiku** | Only truly trivial grunt work (staff subagents) |
-
-When in doubt the system goes up a tier, not down.
-
-</details>
-
-<details>
-<summary><strong>Configuration</strong> — <code>.claude/orchestrate.json</code></summary>
-
-Written on first activation. Key fields:
-
-- `active` — hooks only act when `true`. Set `false` to disable without uninstalling.
-- `roster` — which departments are recruited.
-- `redlines` — signed legal/compliance boundaries (e.g. "GDPR applies").
-- `thresholds` — escalation points (bounces before retune, fails before firing, etc.).
-
-</details>
-
-<details>
-<summary><strong>What's in the box</strong></summary>
-
-```
-clock-in/                       ← the plugin (= repo root)
-├── .claude-plugin/             ← marketplace.json (mycompany) + plugin.json
-├── commands/                   ← /clock-in:brief
-├── skills/
-│   ├── orchestrate/            ← the CEO playbook (SKILL + templates + reference + scripts)
-│   └── recruit/                ← HR's roster builder
-├── hooks/                      ← auto-wired on enable
-│   ├── session_start.py            ← arms CEO mode + injects the SoT each session
-│   ├── pretool_review_gate.py      ← blocks an unreviewed task completion
-│   ├── pretool_accident_guard.py   ← blocks irreversible shell ops
-│   └── posttool_backlog_log.py     ← auto-logs a completed task
-└── bin/
-    └── orchestrate-brief       ← renders the morning brief (PDF/PNG/HTML)
-```
-
-</details>
-
----
-
-## Status &amp; caveats
+## Good to know
 
 > [!WARNING]
-> **Early sketch (v0.1.0).** It works — I use it daily — but expect rough edges.
+> **Actively evolving.** It works — I use it daily — but expect rough edges.
 >
-> - **The workflow is still being refined.** Structure and mechanics may change between versions.
-> - **Token usage isn't tracked or optimised yet.** I run this on a Max 20× plan and never hit the cap; on a lighter plan your mileage may vary. Token tracking comes once the core is stable.
-> - **Not yet battle-tested** on large, long-running projects.
+> - **The way it works is still being refined** (see the [CHANGELOG](CHANGELOG.md) for what's changed release to release).
+> - **Not yet tuned for cost.** I run it on a heavy plan and don't hit limits; on a lighter one, your mileage may vary.
+> - **Not yet battle-tested** on very large, long-running projects.
 
 ---
 
 ## Feedback
 
-This is a personal experiment, shared in the hope it helps someone and improves with other eyes. **Issues and PRs are very welcome** — especially concrete reports of where the orchestration breaks down on real work.
+A personal experiment, shared in the hope it helps someone and gets better with other eyes. **Issues and PRs are very welcome** — especially concrete reports of where it breaks down on real work.
 
 ## Credits
 
