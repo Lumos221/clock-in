@@ -162,5 +162,39 @@ class HookFlow(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(d, board.STORE_REL)))
 
 
+class SurfaceOpen(unittest.TestCase):
+    """Regression: a new ask must NOT pop a fresh browser window each time —
+    only when the server was just started. Explicit /board still opens."""
+    def _patch(self, ensure):
+        saved = (board.ensure_server, board.open_url, board._SKIP_SERVER)
+        opened = []
+        board._SKIP_SERVER = False
+        board.open_url = lambda url: opened.append(url)
+        board.ensure_server = ensure
+        return saved, opened
+
+    def _restore(self, saved):
+        board.ensure_server, board.open_url, board._SKIP_SERVER = saved
+
+    def test_add_opens_only_when_server_just_started(self):
+        state = {"started": True}
+        saved, opened = self._patch(lambda root: (7777, state["started"]))
+        try:
+            board._surface("/x")             # first add → server just started → opens
+            state["started"] = False
+            board._surface("/x"); board._surface("/x")   # already running → no reopen
+            self.assertEqual(len(opened), 1)
+        finally:
+            self._restore(saved)
+
+    def test_board_open_forces_open_even_when_running(self):
+        saved, opened = self._patch(lambda root: (7777, False))   # already running
+        try:
+            board.board_open("/x")           # explicit /board → surfaces anyway
+            self.assertEqual(len(opened), 1)
+        finally:
+            self._restore(saved)
+
+
 if __name__ == "__main__":
     unittest.main()

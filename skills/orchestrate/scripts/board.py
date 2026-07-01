@@ -198,9 +198,11 @@ def server_info(root):
 
 
 def ensure_server(root):
+    """Return (port, started) — `started` True only when THIS call spawned the server
+    (so the caller can open the browser once, not on every ask)."""
     port = server_info(root)
     if port:
-        return port
+        return port, False
     port = pick_port(root)
     with open(portfile(root), "w") as f:
         f.write(str(port))
@@ -214,7 +216,7 @@ def ensure_server(root):
         if not port_free(port):
             break
         time.sleep(0.05)
-    return port
+    return port, True
 
 
 def board_url(port):
@@ -340,11 +342,15 @@ def _store_path(root):
     return os.path.join(root, STORE_REL)
 
 
-def _surface(root):
+def _surface(root, force_open=False):
+    """Ensure the panel server is up. Open the browser only when we just started it
+    (an `add`), or when explicitly asked (`force_open`, e.g. bare /board) — never on
+    every ask, which would spawn a duplicate window each time."""
     if _SKIP_SERVER:
         return 0
-    port = ensure_server(root)
-    open_url(board_url(port))
+    port, started = ensure_server(root)
+    if started or force_open:
+        open_url(board_url(port))
     return port
 
 
@@ -398,7 +404,7 @@ def board_list(root, dept=None):
 
 
 def board_open(root):
-    return _surface(root)
+    return _surface(root, force_open=True)
 
 
 # ---------------------------------------------------------------- CLI
