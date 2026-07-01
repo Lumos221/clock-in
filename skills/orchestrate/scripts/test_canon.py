@@ -202,5 +202,27 @@ class DecisionResolve(unittest.TestCase):
             self.assertEqual(canon.decision_entry(d, "x"), (None, None))
 
 
+class RenderMirror(unittest.TestCase):
+    def test_decision_row_gets_mirrored_section(self):
+        rows = []
+        canon.apply_set(rows, "Fin", "monetization-model", "DECISIONS", "2026-06-30", ["Marketing"], "2026-07-01")
+        out = canon.render(rows, "demo", {"monetization-model": "Free=credits · Paid=packs"})
+        self.assertIn("## Key decisions (mirrored", out)
+        self.assertIn("- `monetization-model` · Fin — Free=credits · Paid=packs → `docs/DECISIONS.md`", out)
+        self.assertIn("| monetization-model | Fin | DECISIONS |", out)   # still in the table
+
+    def test_missing_gist_is_fail_visible(self):
+        rows = []
+        canon.apply_set(rows, "Fin", "monetization-model", "DECISIONS", "—", [], "2026-07-01")
+        out = canon.render(rows, "demo", {})
+        self.assertIn("(no [monetization-model] entry in DECISIONS.md", out)
+
+    def test_no_decision_rows_no_section(self):
+        rows = []
+        canon.apply_set(rows, "Fin", "pricing-tier", "docs/财务/pricing-tier.md", "a76", [], "2026-07-01")
+        out = canon.render(rows, "demo")
+        self.assertNotIn("Key decisions", out)
+
+
 if __name__ == "__main__":
     unittest.main()

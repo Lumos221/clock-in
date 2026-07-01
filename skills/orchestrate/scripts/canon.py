@@ -130,7 +130,7 @@ def load_rows(path):
     return rows
 
 
-def render(rows, project):
+def render(rows, project, decisions=None):
     flagged = [r for r in rows if r["needs_recheck"]]
     recheck = "\n".join("- `%s` → %s (updated %s)" % (r["topic"], ", ".join(r["needs_recheck"]), r["updated"])
                         for r in flagged) or "- none"
@@ -139,7 +139,15 @@ def render(rows, project):
         body.append("| %s |" % " | ".join([
             r["topic"], r["dept"], r["file"], r["version"], r["updated"],
             fmt_list(r["affects"]), fmt_list(r["needs_recheck"])]))
-    return (HEADER % project) + recheck + "\n\n## Registry\n" + "\n".join(body) + "\n"
+    out = (HEADER % project) + recheck + "\n\n## Registry\n" + "\n".join(body) + "\n"
+    dec_rows = [r for r in rows if r["file"] == "DECISIONS"]
+    if dec_rows:
+        lines = []
+        for r in dec_rows:
+            gist = (decisions or {}).get(r["topic"]) or "(no [%s] entry in DECISIONS.md — tag it)" % r["topic"]
+            lines.append("- `%s` · %s — %s → `docs/DECISIONS.md`" % (r["topic"], r["dept"], gist))
+        out += "\n## Key decisions (mirrored from DECISIONS.md · read-only)\n" + "\n".join(lines) + "\n"
+    return out
 
 
 def save_rows(path, rows, project):
