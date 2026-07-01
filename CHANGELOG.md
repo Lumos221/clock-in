@@ -4,12 +4,6 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
-## [0.4.1] — 2026-07-01
-### Fixed
-- **Boss Board no longer pops a duplicate window on every ask.** The panel now opens
-  once — when its server first starts — and every later ask just refreshes the
-  already-open panel (explicit `/board` still surfaces it on demand).
-
 ## [0.4.0] — 2026-07-01
 ### Added
 - **CANON now indexes key in-force _decisions_, not just files.** A registry row can
@@ -23,6 +17,9 @@ All notable changes to **clock-in** are recorded here. Format follows
 ### Changed
 - `SoT.md`'s hand-maintained **"Key decisions"** section folds into CANON (now a single
   read-first index of files **and** decisions).
+### Fixed
+- **Boss Board opens the panel once**, on server start — later asks refresh the
+  already-open window instead of popping a duplicate (explicit `/board` still opens on demand).
 
 ## [0.3.0] — 2026-07-01
 ### Added
