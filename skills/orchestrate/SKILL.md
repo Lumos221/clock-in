@@ -177,10 +177,11 @@ Independent of the CEO; manages everyone but the Boss (incl. you); reports **str
 **Spawn a teammate** — `Agent(subagent_type=<id>, name=<id>, run_in_background:true)`:
 - `<id>` = the 部门's **ASCII handle** (研发部→`RnD` · 测试部→`QA` · 运维部→`Ops` · 人事部→`HR` …), regex `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` (≤64 chars). A Chinese name fails spawn validation — keep the 部门名 as the in-file label.
 - the `name` is what makes it a teammate: a `<id>@session` identity, a `members` roster slot, its own pane, `SendMessage(to:"<id>")` addressability. `run_in_background:true` just keeps the lead non-blocking. The team forms on the first teammate; cleanup is automatic.
-- **Only the CEO (lead) spawns teammates.** A non-lead passing a `name` **orphans** (live but unmanaged — no pane, absent from the roster): no nested teams.
+- **every 部门 spawn MUST carry `name:<handle>`** — unnamed, the same agent file runs as an anonymous background subagent: no pane (founder-mode access broken), no roster slot, no by-name re-tasking.
+- **Only the CEO (lead) spawns teammates.** A non-lead passing a `name` **orphans** (live — possibly with a pane — but unmanaged: on nobody's roster, in nobody's member list): no nested teams. Dept briefs carry the matching prohibition.
 - **≤6 concurrent** — each teammate's idle ping costs a full CEO thinking-turn; beyond 6 they drown your context. More depts needed → **stagger** (finish one slice before spawning the next); **assign to an existing dept before recruiting**.
 
-**Spawn a subagent** — `Agent(subagent_type=<role>)` with **no `name`**: foreground returns its result once; add `run_in_background:true` for a **background subagent** (async, notifies on completion, final message auto-returns).
+**Spawn a subagent** — `Agent(subagent_type=<role>)` with **no `name`**: foreground returns its result once; add `run_in_background:true` for a **background subagent** (async, notifies on completion, final message auto-returns). **Never pass `name:` on a one-shot** (staff · expert · 审查官 · research burst) — naming converts it into a standing teammate (from a non-lead, an orphan).
 
 **审查官** = `Agent(subagent_type:"Auditor", …)` — a custom subagent in `<project>/.claude/agents/Auditor.md`, project-independent → one-shot, fresh instance per review, never on the team. Your call stays thin; the L1/L2 contract lives in the file (§2.3 · §2.6).
 

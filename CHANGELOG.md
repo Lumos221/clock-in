@@ -4,6 +4,17 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.4.2] — 2026-07-02
+### Changed
+- **Spawn-kind hard rules on both sides of the org** (from a live incident: a dept passed
+  `name:` when spawning its research staff, creating *orphaned* pane-agents — live,
+  unmanaged, on nobody's roster). Dept briefs (`templates/department.md`) now prohibit
+  `name:` outright — staff/experts are one-shot; `SKILL.md` §8 requires `name:<handle>`
+  on every 部门 spawn and bans `name:` on one-shots (staff · expert · 审查官 · research).
+### Fixed
+- §8's orphan description claimed a non-lead's named spawn gets "no pane" — orphans can
+  open panes; they're unmanaged, not invisible.
+
 ## [0.4.1] — 2026-07-02
 ### Changed
 - **`reference/model-routing.md`** is now the single source of truth for per-role model
@@ -66,6 +77,7 @@ All notable changes to **clock-in** are recorded here. Format follows
   session-start. Rendered morning brief (`orchestrate-brief`). Artifact model:
   `SoT.md` · `TaskBoard.md` · `BACKLOG.md` · `DECISIONS.md`.
 
+[0.4.2]: https://github.com/Lumos221/clock-in/releases/tag/v0.4.2
 [0.4.1]: https://github.com/Lumos221/clock-in/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Lumos221/clock-in/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Lumos221/clock-in/releases/tag/v0.3.0
