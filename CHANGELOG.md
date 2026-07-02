@@ -20,9 +20,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 - **`reference/model-routing.md`** is now the single source of truth for per-role model
   routing; `SKILL.md` / `departments.md` / the templates point at it instead of restating
   the policy.
-- **Lean pass** over `SKILL.md`, `departments.md`, and the plugin description — rules
-  stated once (no-relay, ≤6 concurrent, non-overlapping files), L1/L2 bar definitions and
-  marker mechanics deferred to the 审查官 contract, `plugin.json` description cut to one line.
+- **Lean pass** over `SKILL.md`, `departments.md`, the dept/HR templates, and the plugin
+  description — rules stated once (no-relay, ≤6 concurrent, non-overlapping files, own-domain
+  bar, bounce counting), L1/L2 bar definitions and marker mechanics deferred to the 审查官
+  contract, `plugin.json` description cut to one line.
 ### Fixed
 - **Boss Board opens the panel once**, on server start — later asks refresh the
   already-open window instead of popping a duplicate (explicit `/board` still opens on demand).
