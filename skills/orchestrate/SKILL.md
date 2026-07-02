@@ -1,8 +1,6 @@
 ---
 name: orchestrate
-description: Founder mode — run a multi-department Agent-Teams squad for the Boss (the user), functioning like a real company.
-Covers the 规划→审查→派发→执行→产出审查→汇总→报告 spine, the hard 2-layer 审查 gate, 例会/董事会 meetings, the 红线 (law-offense) boundary owned by 法务部, independent 人事部 oversight, and the authority matrix. Skip for single-file tweaks or ≤3-step tasks.
-Trigger: 「开始上班」, "clocking in".
+description: Founder mode — run a multi-department Agent-Teams squad for the Boss like a real company. 规划→审查→派发→执行→产出审查→汇总→报告 spine · hard 2-layer 审查 gate · 例会/董事会 · 红线 owned by 法务部 · independent 人事部 oversight. Trigger — 「开始上班」 / "clocking in". Skip for single-file tweaks or ≤3-step tasks.
 ---
 # Founder-mode orchestration
 
@@ -48,7 +46,7 @@ Boss (user) ─── reaches any 部门 directly (founder mode)
 └─ 人事部 (teammate) ──── independent oversight + HR; authors agent files; manages everyone incl. CEO; → Boss directly
 ```
 
-**Hard rules:** a senior may task a junior; **peers may NOT task each other**; dept A↔ dept B coordination goes through the CEO. The Boss never relays between depts(§3). Iterative domain work goes Boss-dept (the *Direct pane work* row), **never** relayed through CEO.
+**Hard rules:** a senior may task a junior; **peers may NOT task each other**; dept A↔dept B coordination goes through the CEO; nobody relays Boss↔dept — iterative domain work is direct pane work (§3).
 
 ---
 
@@ -66,15 +64,13 @@ The layout is consistent across projects/sessions, not improvised. Every domain 
 | `docs/<其领域>/` | dept work products; the **canonical** one earns a `CANON.md` row | the dept | on-demand |
 | `docs/reviews/` · `复盘-*` · `handover-*` | gate ledger · HR memory · handovers | 审查官 · 人事部 · departing dept | on-demand |
 
-- TaskBoard holds *live* work **+ the last ~5 shipped** (one-liners) — on an L2 pass the card is auto-logged to BACKLOG and moves to *Recently shipped*, trimmed to ~5 (older drop off; full history stays in BACKLOG). `SoT.md` stays tight: **pointers, not detail.**
-- **"Canonical file"** (which output earns a SoT pointer) = the dept's authoritative current answer to a question the project acts on, superseding its rounds — *one pointer per answered question*, dept-designated, CEO-pointed (`reference/departments.md`).
-- **Full decision + *why* → `DECISIONS.md` (once, never session memory); `SoT.md` keeps only a dated one-line gist of the important ones** (versioned, dept-visible, traceable).
+- **"Canonical file"** = a dept's current authoritative answer to a question the project acts on — *one pointer per answered question* (full definition → `reference/departments.md`). A decision's **why** lives **once** in `DECISIONS.md`, never in session memory.
 
 ---
 
 ## 1 · Activate (first time in a project)
 
-> **Precondition.** The mechanical gates are this plugin's hooks — `pretool_review_gate.py` (blocks `TaskUpdate→completed` without `docs/reviews/<id>.pass`), `pretool_accident_guard.py` (blocks `rm -rf` / force-push / drop-db), `posttool_backlog_log.py` (auto-logs a completed task) — **auto-wired when the plugin is enabled**; no `settings.json` setup. The project should be a **git repo** (depts commit each step; reports carry shas).
+> **Precondition.** The mechanical gates ship as this plugin's hooks (review gate — no `TaskUpdate→completed` without `docs/reviews/<id>.pass` · accident guard — blocks `rm -rf` / force-push / drop-db · backlog auto-log on task close) — **auto-wired when the plugin is enabled**; no `settings.json` setup. The project should be a **git repo** (depts commit each step; reports carry shas).
 
 1. **Marker first** → write `.claude/orchestrate.json` from `templates/orchestrate.json` (**hooks act only when this exists**): `active`, `project`, the file paths (`sot`/`taskboard`/`backlog`/`decisions`), empty `redlines` (§5) + `roster`, thresholds. Do this **before** recruiting, so recruit can register the roster into it.
 2. **Recruit** → call the `recruit` skill: pick the 部门 this project needs from `reference/departments.md`, generate `.claude/agents/<handle>.md`, upsert each into `roster`. **Only what's needed.** Always include **人事部** (teammate → in `roster`) and the **审查官** (`Auditor` — `templates/auditor.md` copied verbatim to `.claude/agents/Auditor.md`; a subagent, **not** in `roster`). The 审查官 must exist before the first 方案审查 (§2.3).
@@ -94,16 +90,16 @@ The layout is consistent across projects/sessions, not improvised. Every domain 
 0. **锁需求:** before planning anything non-trivial, interrogate the Boss — one question at a time, each with a recommended answer, walking the decision tree — to lock requirements + decisions. No approach specified? **new project → `brainstorming` skill · existing project → `grill-me` skill.** Then plan.
 1. **起草方案:** decompose the goal into per-部门 task cards on `docs/TaskBoard.md` (each: **谁来做 · 做什么 · 预期产出 (Done-when)**). Set the **project-level** goal + direction on `docs/SoT.md` — *not* dept/task goals (those are the cards); if there's a spec, SoT **points** to it. You own *cross-domain* priority + sequence — **not within-domain method** (craft is dept-owned, §0).
 2. **Boss过目:** brief the Boss on the plan *direction*. Boss can **驳回** → revise + re-brief. **2nd 驳回 → invoke `grill-me`** to clarify what's actually wanted, then re-draft from scratch. This gates the *direction* before the 审查官 gates the *decomposition*.
-3. **方案审查 (L1 — gate the plan, before any dispatch):** invoke the 审查官 one-shot — `Agent(subagent_type:"Auditor", …)` + the draft plan (fresh instance; contract in `.claude/agents/Auditor.md`). **Passes iff ALL:** 可行 (buildable with the resources/time at hand) · 完整 (whole goal, no silent gaps) · 拆解合理 (subtasks non-overlapping + dependency-ordered) · 风险已列 (real risks named, each mitigated) · 不越界 (scope / 法务). Else **封驳** → it writes `docs/reviews/plan.<n>.refute` (reasons, ≤3 bullets); CEO revises + re-submits. **3rd refute → CEO reports to the Boss** (approve as-is or reframe the direction; 人事部 counts `*.refute` for its CEO-failure metric; archive once resolved). **You may NOT skip 方案审查 or self-approve.**
+3. **方案审查 (L1 — gate the plan, before any dispatch):** invoke the 审查官 one-shot — `Agent(subagent_type:"Auditor", …)` + the draft plan (fresh instance; contract in `.claude/agents/Auditor.md`). **Passes iff ALL:** 可行 (buildable with the resources/time at hand) · 完整 (whole goal, no silent gaps) · 拆解合理 (subtasks non-overlapping + dependency-ordered) · 风险已列 (real risks named, each mitigated) · 不越界 (scope / 法务). Else **封驳** (a `.refute` marker, reasons ≤3 bullets — counted against the CEO by 人事部); revise + re-submit. **3rd refute → report to the Boss** (approve as-is or reframe the direction; archive once resolved). **You may NOT skip 方案审查 or self-approve.**
 4. **派发:**
    - spawn each 部门 as a **teammate** (§8) + a task prompt;
    - write task cards to `docs/TaskBoard.md`; register each via `TaskCreate` → it returns a **platform task id** (e.g. `3`); record it in that card's `task_id` field. **Every review file + the completion gate keys on this id, NOT the human `TASK-NNN` label** — the hook demands `docs/reviews/<task_id>.pass`;
    - parallel **committers each work in their own git worktree off `master`**; the CEO FF-merges each after L2 (read-only agents just return — no commit). Owned files stay non-overlapping; on overlap merge or re-cut;
    - **data dependency** → set B's `blocked_on`, dispatch A first;
-   - **≤6 concurrent teammates** (stagger if more needed); **assign to an existing dept before recruiting** (§8).
+   - **≤6 concurrent teammates**; **assign to an existing dept before recruiting** (why + stagger rule → §8).
 5. **部门 execute (not you):** each does its slice, spawns staff for grunt work via `Agent`, reports via `SendMessage` (mechanic in §8).
    > **Idle ping ≠ done ≠ reported.** A teammate pings you each turn it finishes — that's **liveness** (awaiting its next task, or awaiting the Boss in its pane). **Act only on an explicit `SendMessage` report.**
-6. **产出审查 (L2 — gate each output, before merge · 不过审查不准 merge):** when a 部门 reports, invoke the 审查官 one-shot — `Agent(subagent_type:"Auditor", …)` — with the reported output **plus the task's `task_id` (`<id>`) and 部门 handle (`<dept>`) — from the card on `docs/TaskBoard.md`** (it needs both to name the marker files). Fresh instance, **never the producing 部门, never CEO-rubber-stamped**; each dept's bounces counted separately. **Merges iff ALL:** 达标 (every "Done =" checkable-**true**, not "looks done") · 够格 (meets the 部门's 领域标杆, not just the ticket) · 正确 (tests green + regression clean) · 守界 (only owned files touched; no 法务 breach) · 可追溯 (committed, diff clear). **封驳** → returns the 返工 items + writes a per-dept `.fail` marker (one `.fail` = one bounce in 人事部's auto-counted ledger); **pass** → writes the `.pass` marker, sets the TaskBoard card `done`, calls `TaskUpdate→completed`. Marker names + counting live in the 审查官's contract, so your invocation stays thin (output + `<id>` + `<dept>` + any per-task emphasis). **Enforced mechanically:** the hook blocks `TaskUpdate→completed` without that `.pass`.
+6. **产出审查 (L2 — gate each output, before merge · 不过审查不准 merge):** when a 部门 reports, invoke the 审查官 one-shot — `Agent(subagent_type:"Auditor", …)` — with the reported output **plus the task's `task_id` (`<id>`) and 部门 handle (`<dept>`)** from the card on `docs/TaskBoard.md`. Fresh instance, **never the producing 部门, never CEO-rubber-stamped**. **Merges iff ALL:** 达标 · 够格 · 正确 · 守界 · 可追溯 (bar definitions + marker mechanics live in the 审查官's contract — your invocation stays thin: output + `<id>` + `<dept>` + any per-task emphasis). **封驳** → returns the 返工 items + writes the per-dept `.fail` (人事部's bounce ledger); **pass** → writes the `.pass`, sets the card `done`, calls `TaskUpdate→completed` — **the hook blocks completion without that `.pass`.**
 7. **汇总:** once outputs pass L2, collect each 4-line report (状态／改了什么／产物／待办·卡点), **merge-verify** the whole (tests + regression), reconcile conflicts. **Move passed cards to *Recently shipped* on `docs/TaskBoard.md`** (one line each, keep the last ~5;) and **refresh `docs/SoT.md`** — Now + the key-decision gists / canonical-file pointers. **Close out only when the entire TaskBoard is clear** — one 部门's report-and-stop never triggers it. To close: ask each 部门 to shut down (cleanup is automatic). **Before closeout, never shut a dept to cut noise** — re-task idle depts via `SendMessage` (lossless resume); a mid-project shutdown loses its session (§8).
 
 ---
@@ -124,7 +120,7 @@ The layout is consistent across projects/sessions, not improvised. Every domain 
 | **Direct pane work** | Iterative / domain-specific / high back-and-forth (e.g. design tweaks needing the domain expert, not a generalist relay) | Boss goes to the dept's iTerm2 pane, iterates directly; dept reports what changed when done |
 | **CEO-initiated connect** | Inflection point the Boss should weigh in on | CEO surfaces it + brings the dept's context to the Boss |
 
-**CEO's part when direct work starts:** (1) **spawn the dept teammate if it isn't up**; (2) tell the Boss **"go to `<dept>`'s pane."** That line marks the CEO's *own* expectation — Boss in pane → will receive many pings, meaning **liveness** (§2.5), and the CEO **awaits the dept's report** when Boss returns to main. (if not received, prompted the dept to report.)
+**CEO's part when direct work starts:** spawn the dept if it isn't up, then tell the Boss **"go to `<dept>`'s pane."** While the Boss is in-pane, pings = liveness (§2.5); when the Boss returns, await the dept's report (prompt for it if missing).
 
 **The CEO never gatekeeps** Boss↔dept access — never blocks, filters, or reframes it;
 
@@ -188,7 +184,7 @@ Independent of the CEO; manages everyone but the Boss (incl. you); reports **str
 
 **审查官** = `Agent(subagent_type:"Auditor", …)` — a custom subagent in `<project>/.claude/agents/Auditor.md`, project-independent → one-shot, fresh instance per review, never on the team. Your call stays thin; the L1/L2 contract lives in the file (§2.3 · §2.6).
 
-**Reports flow through `SendMessage`, not plain text:** a teammate's plain output is **invisible** to you — it **MUST `SendMessage(to:"team-lead", summary:"…", message:"…")`** (the lead's name is `team-lead`; **`summary` is required** when `message` is a string). An idle teammate that never `SendMessage`d is **silent** to you (verified live). `"main"` is the **background-subagent** channel — a subagent's final message auto-returns to you, but a teammate's does not.
+**Reports flow through `SendMessage`, not plain text:** a teammate's plain output is **invisible** to you — it **MUST `SendMessage(to:"team-lead", summary:"…", message:"…")`** (the lead's name is `team-lead`; **`summary` is required** when `message` is a string). `"main"` is the **background-subagent** channel — a subagent's final message auto-returns to you, but a teammate's does not.
 
 **Pick the kind — by *pane / visibility / noise*, NOT memory** (both kinds resume losslessly, see below): shares the board / needs a pane for founder-mode direct access / talked to by name → **teammate**; quiet bounded work you just collect → **subagent**.
 
@@ -200,9 +196,7 @@ Independent of the CEO; manages everyone but the Boss (incl. you); reports **str
 
 **Workflow = the CEO's burst engine** (not a worker kind): a *bounded* parallel fan-out that isn't department-shaped — review N files, research N questions, verify N findings (split → run → collect → verify). Teammates = standing domains re-tasked across rounds; Workflow = one-shot bursts. Agents that **write in parallel** pass `isolation:"worktree"` (own checkout each); read-only bursts don't.
 
-**Model 指定 — do the job well first; token-saving is the byproduct.** Match each role to the model that does *its* job **well** (under-powering just buys bounces + rework): quality/judgment → **`opus`** (e.g. 审查官 · 法务部 · 人事部 · hard 研发部); routine domain work → **`sonnet`**; truly-trivial bounded grunt → **`haiku`** (staff). **When in doubt, go up.** The CEO stays on the Boss's model. Full per-role table: `reference/departments.md` → "Model routing".
-
-Parallel teammates own **non-overlapping files** (§2.4).
+**Model routing → `reference/model-routing.md`** — the CEO sets each spawn's `model` from it.
 
 ---
 

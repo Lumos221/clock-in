@@ -40,8 +40,7 @@ A dept produces its outputs under its **own work-product folder**, `docs/<其领
 
 **Orchestration files are off-limits to every dept** (no carve-out list to forget): `docs/SoT.md`, `docs/TaskBoard.md`, `docs/BACKLOG.md`, `docs/DECISIONS.md`, `docs/CANON.md` (read-first, but **machine-written** — never hand-edit), `docs/reviews/`, `docs/复盘-*.md`, `docs/handover-*.md`. These are owned by the **CEO / 审查官 / 人事部** per their roles — a 部门 only edits **its own task card's `status`** on `TaskBoard.md`, nothing else there.
 
-**Canonical file — which output "matters" (earns a `docs/CANON.md` row):** a dept often produces several rounds (Law: 3 research passes; Marketing: 5 competitor studies). The **canonical** one = the current authoritative answer to a question the project acts on, superseding the rounds. Test: *would an outsider redo work, or lose a depended-on conclusion, if it vanished?* → yes.
-**How it's tracked:** registered mechanically (a `@CANON` marker → a Stop hook writes the read-first `docs/CANON.md` registry), so the pointer can't be lost in a relay; auto-registered as current (when the output already passed L2 审查), CEO-correctable. The dept-facing how-to and the full mechanism live in `reference/canon.md`. One row per answered question; re-points in place as the dept supersedes (old path archived); not every dept has one. A **key binding decision** (no file) earns a row the same way — pointer `DECISIONS`, headline mirrored from `DECISIONS.md` (see `reference/canon.md`).
+**Canonical file — which output "matters" (earns a `docs/CANON.md` row):** the current authoritative answer to a question the project acts on, superseding the dept's rounds. Test: *would an outsider redo work, or lose a depended-on conclusion, if it vanished?* One row per answered question; not every dept has one; a **key binding decision** (no file) earns a row the same way (pointer `DECISIONS`). Mechanism + dept-facing how-to → `reference/canon.md`.
 ## 专家 (experts — reusable subagents)
 
 Experts are the company's **outside consultants** — brought in for a question, they answer and leave; no standing seat. Mechanically they're **subagents** (one-shot, no owned files, no board entry), invoked by a department when it hits a field outside its own.
@@ -71,12 +70,8 @@ Two types:
 - **Experts:** don't pre-create. When a dept needs one, CEO routes to 人事部 to create the agent file. Give each a **real job title** (e.g. "计算机科学教授", "前端专员"), never an invented name.
 - Overlapping boundaries → merge into one 部门, or re-cut file ownership.
 
-## Model routing (do the job well; saving tokens is the byproduct)
-**Match each role to the cheapest model that does *its own* job well — never under-power a worker to save money** (a too-cheap worker just generates bounces + rework: worse output *and* not actually cheaper). The 审查 gate is a safety net, not a license to downshift. Each agent file carries a `model:`.
-- **opus** — 审查官 (L1 refute / L2 bounce review), Legal (legal judgment), HR (oversight + judgment calls), Prof_*, Spec_*, **and RnD when the work is architecturally hard / high-stakes**. Quality-critical → don't economize.
-- **sonnet** (default) — RnD routine coding, QA, Ops, Data, Docs. Genuinely strong for normal work.
-- **haiku** — only **truly trivial bounded grunt** (staff: search / format / boilerplate) and pure math (Fin token→$). Use it where there is *no* quality to lose.
-- **When in doubt, go up, not down.** The CEO (main session) runs on the Boss's model.
+## Model routing
+→ **`reference/model-routing.md`** (single source of truth).
 
 ## 财务部 — honest limit
 Cost (token→$) is auto-estimable; **investment / revenue is not** — the Boss must enter it in `docs/财务/FINANCE.md` for Fin to compute ROI / burn rate.

@@ -15,7 +15,7 @@ Build or extend a project's company department roster. Generate each agent file 
 2. **Always include two standing roles:**
    - **人事部** (HR — independent oversight + HR; see `orchestrate/reference/hr-oversight.md`) — a **teammate**; generate from `orchestrate/templates/hr.md` and add to `roster`.
    - **审查官** (Auditor — the independent review gate; see `orchestrate/SKILL.md` §2.3/§6) — a **subagent**: copy `orchestrate/templates/auditor.md` → `.claude/agents/Auditor.md` **verbatim** (project-independent: no owned files, no customization, **not** in `roster`).
-3. **Generate each agent file** from `department.md` — fill every `<placeholder>` (handle · owned files · 领域标杆 · `model` per `departments.md` → "Model routing"). SOP / 报告即停 / tools are template-fixed. Write it in whatever **language** reads clearest to the teammate; keep it short.
+3. **Generate each agent file** from `department.md` — fill every `<placeholder>` (handle · owned files · 领域标杆 · `model` per `orchestrate/reference/model-routing.md`). SOP / 报告即停 / tools are template-fixed. Write it in whatever **language** reads clearest to the teammate; keep it short.
 4. **Upsert the roster** into `.claude/orchestrate.json` `roster` (orchestrate writes the marker first; if you're running **standalone** and it's missing, create it from `orchestrate/templates/orchestrate.json`).
 5. **Boundary check:** if owned files overlap — **including against the existing roster's owned files, not just the new 部门s** — merge into one 部门 or re-cut.
 

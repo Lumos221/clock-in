@@ -1,7 +1,7 @@
 ---
 name: <ASCII handle — 研发部→RnD · 测试部→QA …; per departments.md "Naming convention". Chinese 部门名 = the label below.>
 description: <中文部门名 (e.g. 研发部) — one-line role + when to dispatch to it>. owns <files>.
-model: <opus | sonnet | haiku — set by what the role needs to do its job WELL (when in doubt, go up); default sonnet. 法务部 → opus; only truly-trivial grunt → haiku. See departments.md "Model routing".>
+model: <set per reference/model-routing.md — omit this line for a sonnet-default dept>
 ---
 
 # <部门名>

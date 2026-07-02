@@ -65,7 +65,7 @@ When a dept needs an expert that doesn't exist, the CEO routes the request to yo
 
 1. Create `.claude/agents/Prof_<X>.md` or `.claude/agents/Spec_<X>.md` from `templates/expert.md` — fill in the domain, knowledge points, and a good `description` (the auto-discovery key: Claude matches tasks to experts by reading this).
 2. Use a **real job title** (e.g. "计算机科学教授", "前端专员"), never invented.
-3. Default model is **opus** (see template); use sonnet only for single-step factual lookups.
+3. Model: keep the template's `model: opus`
 4. If an expert underperforms, retune its agent file (same as dept retune, lighter touch).
 
 ## Your tools (action space)

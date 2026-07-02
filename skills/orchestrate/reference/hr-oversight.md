@@ -4,7 +4,7 @@
 
 ## Standing
 - Independent of CEO and all 部门. Manages everyone incl. CEO. Reports **directly to the Boss** (inline in their chat — CEO may not filter).
-- Always present from activation. Model: **opus**.
+- Always present from activation.
 
 ## What triggers a Boss escalation
 
