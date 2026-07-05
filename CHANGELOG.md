@@ -4,6 +4,41 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.5.0] — 2026-07-05
+### Added
+- **Token-saving two-stage execution.** A 部门 now runs its **head** (the teammate/pane) on **opus**
+  — plan + precise per-piece specs + review — and delegates the *typing* to cheap **staff** (one-shot
+  subagents it spawns; `sonnet` default, `haiku` **only when a deterministic script could do the
+  piece** — and a bounced `haiku` piece is redone on `sonnet`, never retried). Most output tokens move
+  to cheap tiers while opus stays the thin planning/review layer. Smart model plans, cheap model
+  implements.
+- **`hooks/stop_refute_tally.py`** — auto-tallies the 审查 ledger (`docs/reviews/*.refute` / `*.fail`)
+  each turn and raises **one** Boss-Board item when a documented `orchestrate.json` threshold is first
+  crossed (flag-once via a sentinel). `orchestrate.json` stays thresholds-only; the marker files stay
+  the ledger — no counter to drift.
+- Hook tests: `hooks/test_review_gate.py` (incl. a worktree-shadow case) · `hooks/test_refute_tally.py`.
+### Changed
+- **`reference/model-routing.md` rewritten** (SSOT): the head/staff split; the only per-spawn model
+  decision is a head choosing each staff spawn's tier; standing roles (部门 heads · 审查官 · experts)
+  are opus, pinned in frontmatter; a dated, refreshable model menu (alias-first, so a stale price never
+  breaks routing); `fable` documented as **non-routable** (a Boss hand-switch only).
+- **Corrected L2 flow.** The **部门 invokes the 审查官 itself**; a FAIL bounces straight back to the
+  dept (CEO uninvolved); a PASS goes up, and the **CEO** makes the final merge call and owns
+  `TaskUpdate`. The Auditor now writes only the review marker + verdict — it never mutates task state.
+  Fixes a subagent-completes-the-CEO's-task bug and the duplicated report/ping. `SKILL.md`
+  §2.5/§2.6/§8 · `templates/auditor.md` · `templates/department.md`.
+- **CEO orchestrates only** — removed the "CEO may *suggest* a method" carve-out from `SKILL.md`
+  §0/§7 and `department.md`; craft is wholly dept-owned (the CEO and every dept head are both opus, so
+  there's no craft asymmetry to justify it).
+- `templates/department.md` frontmatter now pins `model: opus`.
+### Fixed
+- **Review-marker anchor is worktree-invariant.** `hooks/pretool_review_gate.py` and the 审查官 resolve
+  the project root via `git rev-parse --git-common-dir` → its parent (the main worktree), so a `.pass`
+  written from a linked worktree under `.claude/worktrees/` lands where the completion-gate hook (in
+  the main tree) looks. Previously the marker could be written where the check never found it —
+  silently blocking completion — the moment `orchestrate.json` became git-tracked. Falls back to the
+  ancestor walk for non-git projects.
+
 ## [0.4.2] — 2026-07-02
 ### Changed
 - **Spawn-kind hard rules on both sides of the org** (from a live incident: a dept passed

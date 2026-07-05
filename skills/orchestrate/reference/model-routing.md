@@ -4,48 +4,66 @@ pointers don't move. -->
 
 # Model routing
 
-**The CEO decides each spawn's model and passes it on the spawn call** (`model:` per-invocation — the
-documented, highest-precedence lever below the env var). Do the job well first; token-saving is the
-byproduct — under-powering a role just buys bounces + rework (worse output *and* not actually cheaper).
+Route each model to what it's best at: **the smart model plans, the cheap model implements.** Do the
+job well first — token-saving is the byproduct; under-powering a role just buys 审查 bounces + rework
+(worse output *and* not actually cheaper).
 
-## Default sonnet; escalate to opus for a reason
+## Two-stage inside each 部门: the head plans, staff implement
 
-Start every **producing** role on **sonnet**. Escalate to **opus** when the work is architecturally
-hard / high-stakes up front, or a **competence bounce** shows sonnet hit its ceiling. The 审查 gate is
-what makes starting cheap safe — a weak result is caught and reworked, never shipped. Producing roles
-are gated; the opus seats below are not.
+A **部门 is a unit of two parts** — its **head** (the teammate/pane, on **opus**) and the **staff** it
+spawns (one-shot subagents, cheap). The head plans its slice, writes a **precise per-piece spec**,
+delegates the *typing* to staff, reviews their output, then reports up. The low-volume judgment
+(planning + review) stays opus; the high-volume typing goes cheap. **Most output tokens should land on
+staff** — if a head's own opus share stays high, the split isn't paying off. (Floor: a one-line edit
+isn't worth a subagent round-trip — the head types it inline.)
 
-## Per role
+## Who runs on what
 
-| Role | Model | Why |
-|------|-------|-----|
-| **CEO** (main session) | Boss's model | not spawned — runs on whatever the Boss has set |
-| **审查官** — L1 refute + L2 bounce | **opus** | *is* the gate; nothing reviews it. Weak here → bad work ships silently |
-| **法务部 (Legal)** | **opus** | rigorous, zero-mistake, often irreversible; no seat overrules it |
-| **人事部 (HR)** | **opus** | authors agents + oversight — a weak author compounds across the roster |
-| **Experts — Prof_ / Spec_** | **opus** | consulted *for* judgment / synthesis — the brain by definition |
-| **staff grunt** | **haiku** | truly trivial bounded work (search / format / token→$) — no quality to lose |
+| Role | Model | Where it's pinned |
+|------|-------|-------------------|
+| **CEO** (main session) | the Boss's model | not spawned |
+| **部门 head** — the teammate/pane; every dept incl. 法务部 + 人事部 | **opus** | frontmatter — `department.md` (人事部 uses `hr.md`) |
+| **审查官 · experts** — subagents, not 部门 | **opus** | frontmatter — `auditor.md` · `expert.md` |
+| **staff** — subagents the head spawns; the typing | **sonnet** / **haiku** (tiering below) | the **head** sets `model:` per one-shot `Agent` call |
 
-**Worker or brain, when unsure:** could a competent person answer by *finding and applying* the right
-source? → sonnet. Must they *judge*, with no definitive source, where being wrong is costly? → opus.
+**The only per-spawn model decision in the whole org is a head choosing each staff spawn's tier.**
+Every standing role is opus, pinned once at recruit; the CEO orchestrates and makes no model call.
+
+## The staff tier — per piece (the head's call)
+
+| The piece | Tier |
+|---|---|
+| A **deterministic script could do it** in principle — codemod/regex rename at named sites · apply a literal diff the head wrote · fill a template field-for-field · expand an explicit input→expected table | **`haiku`** — the model stands in for the script; cheapest, denser tokenizer |
+| Needs a **model to decide** anything the spec left open | **`sonnet`** — the workhorse tier |
+| **Too novel to spec precisely** | the head does it **inline on opus** |
+
+**The haiku test is "could a script do this?"** If it needs a *model* to judge, it's
+sonnet; **any doubt → sonnet.** **A haiku bounce → redo the piece on sonnet, never retry haiku** — one
+cheap wasted attempt is the cap; don't re-gamble a bounced piece (the head's review + L2 are the
+catches). Routable tiers top out at **opus**; a truly un-opus-able task is a **Boss call** — **`fable`
+is not routable** (a Boss hand-switch only).
+
+## The menu — what each alias is (verify · volatile · as of 2026-07-04)
+
+Route by **tier alias**; it resolves to the current best-in-tier snapshot, so routing doesn't rot when
+snapshots move. $/MTok input / output.
+
+| Alias | Snapshot | $ in / out | Character |
+|---|---|---|---|
+| `haiku` | Haiku 4.5 | 1 / 5 | fastest, no adaptive thinking, 200k ctx, denser tokenizer |
+| `sonnet` | Sonnet 5 | 3 / 15 (intro **2 / 10 through 31 Aug 2026**) | adaptive thinking, 1M ctx |
+| `opus` | Opus 4.8 | 5 / 25 | deepest judgment, adaptive thinking, 1M ctx — the top routable tier |
+| `fable` | Fable 5 | 10 / 50 | most capable — **Boss hand-switch only, not routable**; rarely available (weekly limit) |
+
+The frontmatter `model:` *can* pin a full snapshot ID (e.g. `claude-sonnet-4-6`), but there's **no
+reason to** for our defaults: Opus 4.8 dominates 4.6 at equal price; Sonnet 5 (cheaper on intro, more
+capable) beats pinning Sonnet 4.6. **Refresh this table when snapshots / prices move — one edit, here.**
 
 ## Escalation — how, not just when
 
-A running teammate's model **cannot be changed** by the CEO: 
-`/model` is human-operator-only. Model is fixed at spawn. So to move
-a task sonnet → opus, you make sure teammate's handover's complete -> stop the teammate -> **spawn a fresh agent with `model: opus`** — **never a resume** (a resume keeps the original model).
-
-- **Fixable miss** — sonnet is capable, just missed something → keep.
-- **Competence bounce** — sonnet keeps hitting the ceiling → **fresh opus spawn** (re-derives from commits + handover file + the `.fail` bounce report).
-
-**Never route by a worker's self-reported confidence.** Escalation is judged
-**externally**: the CEO at spawn, or the 审查 bounce. Never the worker grading itself.
-
-## Where the `model:` value lives (mechanics)
-
-- **opus seats** (审查官 · 法务部 · 人事部 · experts) — pinned `model: opus` in the agent's own
-  frontmatter: a guarantee that survives a CEO slip. (审查官 → `templates/auditor.md`; HR →
-  `templates/hr.md`; Legal + experts → `templates/department.md` / `templates/expert.md`, pinned at recruit time.)
-- **sonnet-default depts** — **no `model:` in the def**. The CEO passes
-  `model: ` at spawn. Clean defs; the model decision lives here + with the CEO, never
-  scattered across each file.
+A running teammate's model **cannot be changed** by the CEO (`/model` is human-operator-only; model is
+fixed at spawn). To move a task up a tier: finish its handover → stop the agent → **spawn fresh at the
+higher tier** — **never a resume** (a resume keeps the original model). A **competence bounce** (keeps
+hitting the ceiling; re-derives from commits + handover + the `.fail`) warrants this; a **fixable
+miss** (capable, just slipped) does not. **Never route by a worker's self-reported confidence** —
+escalation is judged externally: the CEO at spawn, or the 审查 bounce.
