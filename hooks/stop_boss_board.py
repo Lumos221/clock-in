@@ -67,6 +67,9 @@ def main():
     root = find_root(data.get("cwd") or os.getcwd())
     if not root:
         return
+    # A linked worktree carries its own checked-out orchestrate.json; without this its
+    # asks land on a private board+server+tab the Boss never watches (board.py has why).
+    root = board.main_checkout(root)
     try:
         cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
     except Exception:

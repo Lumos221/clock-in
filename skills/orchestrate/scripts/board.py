@@ -97,6 +97,63 @@ def save_store(path, store):
     os.replace(tmp, path)
 
 
+# ---------------------------------------------------------------- cross-process lock
+LOCK_REL = STORE_REL + ".lock"
+LOCK_WAIT_TIMEOUT = 2.0   # give up and proceed unlocked past this — a hook must never hang a turn
+LOCK_STALE_AGE = 5.0      # a lock older than this is presumed abandoned by a crashed hook
+
+
+class _StoreLock:
+    """Cross-process mutex for the store's load-modify-save window. Two Stop hooks
+    (stop_boss_board.py, stop_refute_tally.py) can both react to the same turn and both
+    call board_add/board_done/etc — without this, whichever finishes saving last silently
+    overwrites the other's just-written entry (lost update, no error, nothing in any log).
+    Built from os.O_CREAT|O_EXCL (atomic create on POSIX and Windows) to stay stdlib-only.
+    Fails open: on timeout or a lock we don't own, proceed without it rather than hang."""
+
+    def __init__(self, root):
+        self.path = os.path.join(root, LOCK_REL)
+        self.fd = None
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        deadline = time.time() + LOCK_WAIT_TIMEOUT
+        while True:
+            try:
+                self.fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(self.fd, str(os.getpid()).encode())
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - os.path.getmtime(self.path) > LOCK_STALE_AGE:
+                        os.remove(self.path)  # reap a lock abandoned by a crashed hook
+                        continue
+                except OSError:
+                    continue  # lock vanished between the check and the remove — retry
+                if time.time() > deadline:
+                    return self  # fail-open: proceed unlocked rather than hang the turn
+                time.sleep(0.02)
+
+    def __exit__(self, *exc_info):
+        if self.fd is not None:
+            os.close(self.fd)
+            try:
+                os.remove(self.path)
+            except OSError:
+                pass
+
+
+def _locked_mutate(root, mutator):
+    """Load the store, apply `mutator(store) -> result` under `_StoreLock`, save, return
+    result. Every write path goes through this so no two hooks can race on the file."""
+    p = _store_path(root)
+    with _StoreLock(root):
+        store = load_store(p)
+        result = mutator(store)
+        save_store(p, store)
+    return result
+
+
 # ---------------------------------------------------------------- markers
 RAISE_RE = re.compile(r"@BOSS\[([^\]\s]+)\]:\s*(.+)")
 DONE_RE = re.compile(r"@BOSS-DONE\[([^\]\s]+)\]")
@@ -116,6 +173,28 @@ def parse_markers(text):
 
 
 # ---------------------------------------------------------------- project root
+def main_checkout(d):
+    """Linked git worktrees check out their own copy of .claude/orchestrate.json, so a
+    pane running inside one would get a PRIVATE board — its own store, server, port and
+    auto-opened tab — that the Boss never watches (asks vanish; the tab freezes when the
+    worktree is reaped). A linked worktree's `.git` is a pointer FILE
+    (`gitdir: <main>/.git/worktrees/<name>`), so resolve to the main checkout whenever
+    that is itself a board project. Fail-open: on any doubt, keep `d`."""
+    try:
+        gitfile = os.path.join(d, ".git")
+        if os.path.isfile(gitfile):
+            with open(gitfile, encoding="utf-8") as f:
+                target = f.read().strip()
+            if target.startswith("gitdir:"):
+                gitdir = target.split(":", 1)[1].strip().replace("\\", "/")
+                m = re.match(r"(.*)/\.git/worktrees/[^/]+/?$", gitdir)
+                if m and os.path.exists(os.path.join(m.group(1), ".claude", "orchestrate.json")):
+                    return m.group(1)
+    except Exception:
+        pass
+    return d
+
+
 def project_root(start=None):
     d = os.path.abspath(start or os.getcwd())
     if os.path.isfile(d):
@@ -123,7 +202,7 @@ def project_root(start=None):
     cur = d
     while True:
         if os.path.exists(os.path.join(cur, ".claude", "orchestrate.json")):
-            return cur
+            return main_checkout(cur)
         parent = os.path.dirname(cur)
         if parent == cur:
             return d  # no marker -> original dir
@@ -159,6 +238,11 @@ def derive_port(root):
 
 def port_free(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # SO_REUSEADDR so a just-killed server's TIME_WAIT socket doesn't read as busy —
+    # without it a restart drifts off the derived port (+1) and orphans every open tab.
+    # A LIVE listener still fails the bind, so "busy" stays truthful. The server side
+    # already matches (ThreadingHTTPServer sets allow_reuse_address).
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.bind(("127.0.0.1", port))
         return True
@@ -272,6 +356,7 @@ function section(title, items){
   if(!items.length) return "";
   return `<h2>${title}</h2>` + items.map(card).join("");
 }
+let fails = 0;
 async function tick(){
   try{
     const r = await fetch('/state.json', {cache:'no-store'});
@@ -285,9 +370,19 @@ async function tick(){
                      : "<p class='empty'>Nothing waiting on you. 🎉</p>";
     if(parked.length) h += `<div class='parked'>${section('Parked', parked)}</div>`;
     root.innerHTML = h;
+    root.style.opacity = "";
+    fails = 0;
     document.getElementById('stamp').textContent =
       open.length + " open · updated " + new Date().toLocaleTimeString();
-  }catch(e){ /* server reaped or restarting; keep last view */ }
+  }catch(e){
+    // A restarting/reaped server recovers within a poll or two — keep the view.
+    // Past that the server is gone: a frozen tab must not impersonate a live board.
+    if(++fails >= 4){
+      document.getElementById('root').style.opacity = ".4";
+      document.getElementById('stamp').textContent =
+        "⚠ disconnected — this panel is no longer live; run /board to reopen";
+    }
+  }
 }
 tick(); setInterval(tick, POLL);
 </script></body></html>""" % POLL_MS
@@ -355,44 +450,25 @@ def _surface(root, force_open=False):
 
 
 def board_add(root, dept, kind, text):
-    p = _store_path(root)
-    store = load_store(p)
-    e, _created = add_entry(store, dept, kind, text, _now())
-    save_store(p, store)
+    e = _locked_mutate(root, lambda store: add_entry(store, dept, kind, text, _now())[0])
     _surface(root)
     return e
 
 
 def board_resolve_dept(root, dept):
-    p = _store_path(root)
-    store = load_store(p)
-    e, opens = resolve_by_dept(store, dept, _now())
-    save_store(p, store)
-    return e, opens
+    return _locked_mutate(root, lambda store: resolve_by_dept(store, dept, _now()))
 
 
 def board_done(root, eid):
-    p = _store_path(root)
-    store = load_store(p)
-    e = set_status(store, eid, "resolved", _now())
-    save_store(p, store)
-    return e
+    return _locked_mutate(root, lambda store: set_status(store, eid, "resolved", _now()))
 
 
 def board_park(root, eid):
-    p = _store_path(root)
-    store = load_store(p)
-    e = set_status(store, eid, "parked", _now())
-    save_store(p, store)
-    return e
+    return _locked_mutate(root, lambda store: set_status(store, eid, "parked", _now()))
 
 
 def board_reopen(root, eid):
-    p = _store_path(root)
-    store = load_store(p)
-    e = set_status(store, eid, "open", _now())
-    save_store(p, store)
-    return e
+    return _locked_mutate(root, lambda store: set_status(store, eid, "open", _now()))
 
 
 def board_get(root, eid):

@@ -1,4 +1,4 @@
-import os, sys, json, tempfile, unittest
+import os, sys, json, tempfile, time, subprocess, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import board
 
@@ -102,6 +102,23 @@ class Runtime(unittest.TestCase):
             self.assertEqual(os.path.realpath(board.project_root(sub)),
                              os.path.realpath(d))
 
+    def test_project_root_pierces_linked_worktree_to_main_checkout(self):
+        # Regression: a linked worktree checks out its own orchestrate.json, so panes
+        # inside it used to get a private board+server+tab the Boss never watches.
+        with tempfile.TemporaryDirectory() as d:
+            main = os.path.join(d, "main")
+            wt = os.path.join(main, ".claude", "worktrees", "agent-x")
+            for root in (main, wt):
+                os.makedirs(os.path.join(root, ".claude"), exist_ok=True)
+                open(os.path.join(root, ".claude", "orchestrate.json"), "w").write("{}")
+            os.makedirs(os.path.join(main, ".git", "worktrees", "agent-x"))
+            open(os.path.join(wt, ".git"), "w").write(
+                "gitdir: %s\n" % os.path.join(main, ".git", "worktrees", "agent-x"))
+            sub = os.path.join(wt, "src")
+            os.makedirs(sub)
+            self.assertEqual(os.path.realpath(board.project_root(sub)),
+                             os.path.realpath(main))
+
     def test_derive_port_is_deterministic_and_in_range(self):
         with tempfile.TemporaryDirectory() as d:
             p1 = board.derive_port(d)
@@ -120,6 +137,55 @@ class Runtime(unittest.TestCase):
             self.assertEqual(e2["id"], "QA-1")
             store = board.load_store(os.path.join(d, board.STORE_REL))
             self.assertEqual(len(store["entries"]), 1)
+
+
+class ConcurrencySafety(unittest.TestCase):
+    """Regression for the lost-update bug: stop_boss_board.py and stop_refute_tally.py
+    both call board_add on the same Stop event. Without a lock around the store's
+    load-modify-save window, whichever finishes saving last silently wipes out the
+    other's entry. Runs two real OS processes (not threads) so it exercises the same
+    cross-process race the two hook subprocesses hit in production."""
+
+    def _spawn(self, root, delay_before_save, dept, text):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        code = (
+            "import sys, time\n"
+            "sys.path.insert(0, %r)\n"
+            "import board\n"
+            "board._SKIP_SERVER = True\n"
+            "orig_save = board.save_store\n"
+            "def slow_save(path, store):\n"
+            "    time.sleep(%r)\n"
+            "    orig_save(path, store)\n"
+            "board.save_store = slow_save\n"
+            "board.board_add(%r, %r, 'needs', %r)\n"
+        ) % (script_dir, delay_before_save, root, dept, text)
+        return subprocess.Popen([sys.executable, "-c", code])
+
+    def test_two_processes_racing_on_the_same_store_both_persist(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            # A holds the lock through a slow save; B starts mid-A and must wait, not clobber.
+            pA = self._spawn(d, 0.2, "CEO", "storyboard sign-off")
+            time.sleep(0.05)
+            pB = self._spawn(d, 0.0, "HR", "unrelated tally item")
+            self.assertEqual(pA.wait(timeout=20), 0)
+            self.assertEqual(pB.wait(timeout=20), 0)
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            self.assertEqual(sorted(e["dept"] for e in store["entries"]), ["CEO", "HR"])
+
+    def test_stale_lock_from_a_crashed_hook_is_reaped_not_deadlocked(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            board._SKIP_SERVER = True   # test hook: don't spawn the server/open browser
+            lock_path = os.path.join(d, board.LOCK_REL)
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            old = time.time() - board.LOCK_STALE_AGE - 1
+            os.utime(lock_path, (old, old))
+            e = board.board_add(d, "QA", "needs", "should not hang")
+            self.assertEqual(e["id"], "QA-1")
 
 
 class HookFlow(unittest.TestCase):
