@@ -4,6 +4,16 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.5] — 2026-07-10
+### Changed
+- **Readability pass on the panel (ADHD-friendly).** Asks cap at a ~78ch reading line (full-width
+  cards were ~180ch); the queue sorts **oldest-first** with a "waiting 4h" age chip per card, so
+  what's waited longest never sinks; every state gets a coloured undershade — needs = red wash,
+  discuss = blue, columns tinted green/amber/violet, blocked cards red, review cards purple;
+  *Recently shipped* lines render markdown, clamp to 2 lines and expand on click (they were an
+  unrendered wall of paragraphs); a leading `** ` (pane bullet convention, not bold) no longer
+  bleeds bold across the whole ask. PAGE is a raw string now (kills the `\*` SyntaxWarning).
+
 ## [0.7.4] — 2026-07-10
 ### Fixed
 - **Panel readability.** `**bold**` and `` `code` `` in asks and cards now render (minimal

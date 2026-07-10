@@ -433,7 +433,7 @@ def open_url(url):
         pass
 
 
-PAGE = """<!doctype html><html><head><meta charset='utf-8'>
+PAGE = r"""<!doctype html><html><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <title>Boss Board · Needs you</title>
 <style>
@@ -447,11 +447,13 @@ h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: 
      margin: 1.4em 0 .5em; }
 .count { display: inline-block; background: #e3e3e8; border-radius: 10px; padding: 0 8px;
          font-size: .72rem; color: #48484a; vertical-align: 2px; }
+#asks { max-width: 78ch; }   /* cap the reading line — full-width asks were ~180ch */
 .card { border: 1px solid #e3e3e8; border-left: 3px solid #b3261e; border-radius: 8px;
-        padding: 10px 13px; margin: .45em 0; }
-.card.discuss { border-left-color: #0a84ff; }
+        padding: 10px 13px; margin: .45em 0; background: rgba(179,38,30,.045); }
+.card.discuss { border-left-color: #0a84ff; background: rgba(10,132,255,.05); }
 .card .meta { font-size: .72rem; color: #8e8e93; margin-bottom: .15em; }
 .card .id { font-variant-numeric: tabular-nums; font-weight: 600; color: #636366; }
+.age { float: right; color: #8e8e93; }
 .chip { display: inline-block; font-size: .72rem; border: 1px solid #d1d1d6; border-radius: 10px;
         padding: 1px 8px; margin: .35em .3em 0 0; color: #48484a; }
 .chip b { font-variant-numeric: tabular-nums; }
@@ -468,19 +470,35 @@ b { font-weight: 600; }
 .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
 @media (max-width: 760px) { .board { grid-template-columns: 1fr; } }
 .col { border: 1px solid #e3e3e8; border-radius: 8px; padding: 8px 10px; }
+.col.c-todo { background: rgba(87,171,90,.05); }
+.col.c-prog { background: rgba(198,144,38,.06); }
+.col.c-done { background: rgba(152,110,226,.05); }
 .col h3 { font-size: .82rem; margin: .1em 0 .4em; display: flex; align-items: center; gap: 7px; }
 .dot { width: 9px; height: 9px; border-radius: 50%%; display: inline-block; border: 2px solid; }
-.t { border: 1px solid #e3e3e8; border-radius: 6px; padding: 6px 9px; margin: .35em 0; }
+.t { border: 1px solid #e3e3e8; border-radius: 6px; padding: 6px 9px; margin: .35em 0; background: #fff; }
+.t.s-blocked { background: rgba(179,38,30,.07); }
+.t.s-review { background: rgba(111,66,193,.07); }
 .t .tid { font-size: .72rem; font-weight: 600; color: #636366; font-variant-numeric: tabular-nums; }
 .t .nm { font-size: .84rem; }
 .t .sub { font-size: .7rem; color: #8e8e93; }
 .badge { font-size: .66rem; border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
 .badge.blocked { background: #fdecea; color: #b3261e; }
 .badge.review { background: #efe7fd; color: #6f42c1; }
-.done-line { font-size: .76rem; color: #6e6e73; margin: .35em 0; }
+.done-line { font-size: .76rem; color: #6e6e73; margin: .35em 0; padding: 4px 7px;
+             border-radius: 6px; display: -webkit-box; -webkit-box-orient: vertical;
+             -webkit-line-clamp: 2; overflow: hidden; cursor: pointer; }
+.done-line.x { -webkit-line-clamp: unset; }
 @media (prefers-color-scheme: dark) {
   body { color: #e3e3e8; background: #1c1c1e; }
   .card, .col, .t { border-color: #3a3a3c; }
+  .card { background: rgba(255,105,97,.07); }
+  .card.discuss { background: rgba(10,132,255,.10); }
+  .col.c-todo { background: rgba(87,171,90,.08); }
+  .col.c-prog { background: rgba(198,144,38,.09); }
+  .col.c-done { background: rgba(152,110,226,.08); }
+  .t { background: #2c2c2e; }
+  .t.s-blocked { background: rgba(255,105,97,.10); }
+  .t.s-review { background: rgba(195,155,245,.10); }
   .count { background: #3a3a3c; color: #c7c7cc; }
   .chip { border-color: #48484a; color: #c7c7cc; }
   .badge.blocked { background: #3a1210; color: #ff6961; }
@@ -498,9 +516,22 @@ const VER = %s;  // page generation — a version change from the server hot-rel
 // unescaped they'd be an HTML injection straight into the Boss's panel.
 function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // Minimal markdown AFTER escaping (order matters — esc first keeps the XSS guarantee):
-// **bold** and `code` are what markers/cards actually use.
+// **bold** and `code` are what markers/cards actually use. A leftover unpaired ** —
+// panes use "** " as a bullet — is stripped rather than shown literally.
 function md(s){
-  return esc(s).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  return esc(s).replace(/^\*\*\s+/,'')                       // "** " used as a bullet, not bold
+               .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+               .replace(/`([^`]+)`/g,'<code>$1</code>')
+               .replace(/\*\*/g,'');
+}
+function age(ts){
+  if(!ts) return '';
+  const d = (Date.now() - new Date(ts).getTime())/1000;
+  if(!isFinite(d) || d < 0) return '';
+  if(d < 90) return 'now';
+  if(d < 5400) return Math.round(d/60)+'m';
+  if(d < 129600) return Math.round(d/3600)+'h';
+  return Math.round(d/86400)+'d';
 }
 function chip(t){
   return `<span class="chip"><b>${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</b> · ${esc(t.name)} · ${esc(t.status||'?')}</span>`;
@@ -510,21 +541,23 @@ function askCard(e, T){
   // in-flight cards (its ask is almost always about one of them).
   let linked = (e.task && T.byId[e.task]) ? [T.byId[e.task]]
     : T.list.filter(t=>t.dept===e.dept && ['doing','review','blocked'].includes(t.status)).slice(0,2);
+  const a = age(e.created);
   return `<div class="card ${esc(e.kind)}">
-    <div class="meta"><span class="id">${esc(e.id)}</span> · ${esc(e.dept)}${e.task?` · task #${esc(e.task)}`:''} · ${esc(e.kind)}</div>
+    <div class="meta"><span class="id">${esc(e.id)}</span> · ${esc(e.dept)}${e.task?` · task #${esc(e.task)}`:''} · ${esc(e.kind)}${a?`<span class="age">waiting ${a}</span>`:''}</div>
     <div>${md(e.text)}</div><div>${linked.map(chip).join('')}</div></div>`;
 }
 function tCard(t){
   const badge = t.status==='blocked'
       ? `<span class="badge blocked">blocked${t.blocked_on?': '+esc(t.blocked_on):''}</span>`
       : t.status==='review' ? `<span class="badge review">review</span>` : '';
-  // Long card bodies clamp to a few lines; click a card to expand it.
-  return `<div class="t" onclick="this.classList.toggle('x')"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
+  // Long card bodies clamp to a few lines; click a card to expand it. The s-<status>
+  // class gives blocked/review cards their coloured undershade.
+  return `<div class="t s-${esc(t.status||'none')}" onclick="this.classList.toggle('x')"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
     <div class="nm">${md(t.name)}</div>
     <div class="sub">${esc(t.dept)}${t.what?` · `+md(t.what):''}</div></div>`;
 }
-function col(title, color, inner, n){
-  return `<div class="col"><h3><span class="dot" style="border-color:${color}"></span>${title}
+function col(title, color, cls, inner, n){
+  return `<div class="col ${cls}"><h3><span class="dot" style="border-color:${color}"></span>${title}
     <span class="count">${n}</span></h3>${inner||"<p class='empty'>—</p>"}</div>`;
 }
 let fails = 0;
@@ -537,8 +570,10 @@ async function tick(){
     const tb = s.taskboard || {tasks:[], shipped:[]};
     const T = {list: tb.tasks, byId: {}};
     tb.tasks.forEach(t=>{ if(t.task_id) T.byId[t.task_id]=t; });
-    const open = es.filter(e=>e.status==='open');
-    const parked = es.filter(e=>e.status==='parked');
+    // Oldest first — the queue drains top-down, and what's waited longest never sinks.
+    const bywait = (a,b)=>(a.created||'').localeCompare(b.created||'');
+    const open = es.filter(e=>e.status==='open').sort(bywait);
+    const parked = es.filter(e=>e.status==='parked').sort(bywait);
     document.getElementById('askn').textContent = open.length;
     document.getElementById('asks').innerHTML =
       (open.length ? open.map(e=>askCard(e,T)).join('') : "<p class='empty'>Nothing waiting on you. 🎉</p>")
@@ -548,10 +583,10 @@ async function tick(){
     const doneT = tb.tasks.filter(t=>t.status==='done');
     const shipped = tb.shipped||[];
     document.getElementById('board').innerHTML =
-        col('Todo', '#57ab5a', todo.map(tCard).join(''), todo.length)
-      + col('In progress', '#c69026', prog.map(tCard).join(''), prog.length)
-      + col('Done', '#986ee2', doneT.map(tCard).join('') +
-            shipped.map(x=>`<div class='done-line'>${esc(x)}</div>`).join(''), doneT.length+shipped.length);
+        col('Todo', '#57ab5a', 'c-todo', todo.map(tCard).join(''), todo.length)
+      + col('In progress', '#c69026', 'c-prog', prog.map(tCard).join(''), prog.length)
+      + col('Done', '#986ee2', 'c-done', doneT.map(tCard).join('') +
+            shipped.map(x=>`<div class='done-line' onclick="this.classList.toggle('x')">${md(x)}</div>`).join(''), doneT.length+shipped.length);
     document.body.style.opacity = "";
     fails = 0;
     document.getElementById('stamp').textContent =
