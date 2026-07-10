@@ -4,6 +4,14 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.6] — 2026-07-10
+### Changed
+- **Ask cards join the kanban's design system.** They were full-size paragraphs on heavy colour
+  slabs next to the tight GitHub-style task cards — now: same compact type scale and radius,
+  washes pulled back to faint tints (state still reads via left border + tint), and ask bodies
+  clamp to 4 lines with click-to-expand, so the two halves of the panel finally look like one
+  page and an essay-length ask can't dominate the queue.
+
 ## [0.7.5] — 2026-07-10
 ### Changed
 - **Readability pass on the panel (ADHD-friendly).** Asks cap at a ~78ch reading line (full-width

@@ -448,11 +448,15 @@ h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: 
 .count { display: inline-block; background: #e3e3e8; border-radius: 10px; padding: 0 8px;
          font-size: .72rem; color: #48484a; vertical-align: 2px; }
 #asks { max-width: 78ch; }   /* cap the reading line — full-width asks were ~180ch */
-.card { border: 1px solid #e3e3e8; border-left: 3px solid #b3261e; border-radius: 8px;
-        padding: 10px 13px; margin: .45em 0; background: rgba(179,38,30,.045); }
-.card.discuss { border-left-color: #0a84ff; background: rgba(10,132,255,.05); }
-.card .meta { font-size: .72rem; color: #8e8e93; margin-bottom: .15em; }
+.card { border: 1px solid #e3e3e8; border-left: 3px solid #b3261e; border-radius: 6px;
+        padding: 7px 10px; margin: .35em 0; background: rgba(179,38,30,.03);
+        font-size: .84rem; line-height: 1.45; cursor: pointer; }
+.card.discuss { border-left-color: #0a84ff; background: rgba(10,132,255,.035); }
+.card .meta { font-size: .7rem; color: #8e8e93; margin-bottom: .1em; }
 .card .id { font-variant-numeric: tabular-nums; font-weight: 600; color: #636366; }
+.card .txt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4;
+             overflow: hidden; }
+.card.x .txt { -webkit-line-clamp: unset; }
 .age { float: right; color: #8e8e93; }
 .chip { display: inline-block; font-size: .72rem; border: 1px solid #d1d1d6; border-radius: 10px;
         padding: 1px 8px; margin: .35em .3em 0 0; color: #48484a; }
@@ -491,8 +495,8 @@ b { font-weight: 600; }
 @media (prefers-color-scheme: dark) {
   body { color: #e3e3e8; background: #1c1c1e; }
   .card, .col, .t { border-color: #3a3a3c; }
-  .card { background: rgba(255,105,97,.07); }
-  .card.discuss { background: rgba(10,132,255,.10); }
+  .card { background: rgba(255,105,97,.05); }
+  .card.discuss { background: rgba(10,132,255,.07); }
   .col.c-todo { background: rgba(87,171,90,.08); }
   .col.c-prog { background: rgba(198,144,38,.09); }
   .col.c-done { background: rgba(152,110,226,.08); }
@@ -542,9 +546,9 @@ function askCard(e, T){
   let linked = (e.task && T.byId[e.task]) ? [T.byId[e.task]]
     : T.list.filter(t=>t.dept===e.dept && ['doing','review','blocked'].includes(t.status)).slice(0,2);
   const a = age(e.created);
-  return `<div class="card ${esc(e.kind)}">
+  return `<div class="card ${esc(e.kind)}" onclick="this.classList.toggle('x')">
     <div class="meta"><span class="id">${esc(e.id)}</span> · ${esc(e.dept)}${e.task?` · task #${esc(e.task)}`:''} · ${esc(e.kind)}${a?`<span class="age">waiting ${a}</span>`:''}</div>
-    <div>${md(e.text)}</div><div>${linked.map(chip).join('')}</div></div>`;
+    <div class="txt">${md(e.text)}</div><div>${linked.map(chip).join('')}</div></div>`;
 }
 function tCard(t){
   const badge = t.status==='blocked'
