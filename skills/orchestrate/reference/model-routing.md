@@ -67,3 +67,9 @@ higher tier** — **never a resume** (a resume keeps the original model). A **co
 hitting the ceiling; re-derives from commits + handover + the `.fail`) warrants this; a **fixable
 miss** (capable, just slipped) does not. **Never route by a worker's self-reported confidence** —
 escalation is judged externally: the CEO at spawn, or the 审查 bounce.
+
+**Boss-ordered override (the fable hand-switch, executed):** when the Boss explicitly names a tier
+for a specific invocation ("run the 督察 on fable for task N"), the CEO **executes it** — pass
+`model:` on that one `Agent` call (it overrides the frontmatter pin). The ban above is on the CEO's
+*own initiative*, never on the Boss's order. If fable is unavailable (weekly limit — the spawn
+fails), report it and fall back to opus; don't silently substitute.
