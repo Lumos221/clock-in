@@ -4,6 +4,12 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.4] — 2026-07-10
+### Fixed
+- **Panel readability.** `**bold**` and `` `code` `` in asks and cards now render (minimal
+  markdown applied AFTER escaping — the XSS guarantee holds); long card bodies clamp to a few
+  lines and expand on click, so a wall-of-text card no longer swallows the column.
+
 ## [0.7.3] — 2026-07-10
 ### Fixed
 - **The panel daemon now survives plugin updates by replacing itself — not by serving the old

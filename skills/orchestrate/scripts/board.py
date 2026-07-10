@@ -455,6 +455,14 @@ h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: 
 .chip { display: inline-block; font-size: .72rem; border: 1px solid #d1d1d6; border-radius: 10px;
         padding: 1px 8px; margin: .35em .3em 0 0; color: #48484a; }
 .chip b { font-variant-numeric: tabular-nums; }
+code { font: .85em ui-monospace, "SF Mono", Menlo, monospace;
+       background: rgba(127,127,127,.14); border-radius: 4px; padding: 0 4px; }
+b { font-weight: 600; }
+.t .nm, .t .sub { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.t .nm { -webkit-line-clamp: 2; }
+.t .sub { -webkit-line-clamp: 3; }
+.t.x .nm, .t.x .sub { -webkit-line-clamp: unset; }
+.t { cursor: pointer; }
 .parked .card { opacity: .5; border-left-color: #c7c7cc; }
 .empty { color: #8e8e93; font-style: italic; margin: .3em 0; }
 .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
@@ -489,6 +497,11 @@ const VER = %s;  // page generation — a version change from the server hot-rel
 // Escape EVERY field: dept/kind/task text come from markers/files any pane can write —
 // unescaped they'd be an HTML injection straight into the Boss's panel.
 function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+// Minimal markdown AFTER escaping (order matters — esc first keeps the XSS guarantee):
+// **bold** and `code` are what markers/cards actually use.
+function md(s){
+  return esc(s).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+}
 function chip(t){
   return `<span class="chip"><b>${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</b> · ${esc(t.name)} · ${esc(t.status||'?')}</span>`;
 }
@@ -499,15 +512,16 @@ function askCard(e, T){
     : T.list.filter(t=>t.dept===e.dept && ['doing','review','blocked'].includes(t.status)).slice(0,2);
   return `<div class="card ${esc(e.kind)}">
     <div class="meta"><span class="id">${esc(e.id)}</span> · ${esc(e.dept)}${e.task?` · task #${esc(e.task)}`:''} · ${esc(e.kind)}</div>
-    <div>${esc(e.text)}</div><div>${linked.map(chip).join('')}</div></div>`;
+    <div>${md(e.text)}</div><div>${linked.map(chip).join('')}</div></div>`;
 }
 function tCard(t){
   const badge = t.status==='blocked'
       ? `<span class="badge blocked">blocked${t.blocked_on?': '+esc(t.blocked_on):''}</span>`
       : t.status==='review' ? `<span class="badge review">review</span>` : '';
-  return `<div class="t"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
-    <div class="nm">${esc(t.name)}</div>
-    <div class="sub">${esc(t.dept)}${t.what?` · `+esc(t.what):''}</div></div>`;
+  // Long card bodies clamp to a few lines; click a card to expand it.
+  return `<div class="t" onclick="this.classList.toggle('x')"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
+    <div class="nm">${md(t.name)}</div>
+    <div class="sub">${esc(t.dept)}${t.what?` · `+md(t.what):''}</div></div>`;
 }
 function col(title, color, inner, n){
   return `<div class="col"><h3><span class="dot" style="border-color:${color}"></span>${title}
