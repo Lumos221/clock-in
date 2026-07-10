@@ -591,11 +591,17 @@ async function tick(){
     const prog = tb.tasks.filter(t=>['doing','review'].includes(t.status));
     const doneT = tb.tasks.filter(t=>t.status==='done');
     const shipped = tb.shipped||[];
+    // Done shows the 6 most recent entries only — it's a glance at momentum, not the
+    // archive (that's BACKLOG.md). done-status cards first (still on the live board),
+    // then the shipped tail (already newest-first).
+    const doneAll = doneT.map(tCard).concat(
+        shipped.map(x=>`<div class='done-line' onclick="this.classList.toggle('x')"><div class='dl'>${md(x)}</div></div>`));
+    const more = doneAll.length - 6;
     document.getElementById('board').innerHTML =
         col('Todo', '#57ab5a', 'c-todo', todo.map(tCard).join(''), todo.length)
       + col('In progress', '#c69026', 'c-prog', prog.map(tCard).join(''), prog.length)
-      + col('Done', '#986ee2', 'c-done', doneT.map(tCard).join('') +
-            shipped.map(x=>`<div class='done-line' onclick="this.classList.toggle('x')"><div class='dl'>${md(x)}</div></div>`).join(''), doneT.length+shipped.length);
+      + col('Done', '#986ee2', 'c-done', doneAll.slice(0,6).join('') +
+            (more>0?`<p class='empty'>+${more} more → BACKLOG.md</p>`:''), doneT.length+shipped.length);
     document.body.style.opacity = "";
     fails = 0;
     document.getElementById('stamp').textContent =

@@ -4,6 +4,12 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.8] — 2026-07-10
+### Changed
+- **Done column caps at the 6 most recent entries** (+N-more pointer to BACKLOG.md) — it's a
+  glance at momentum, not the archive; legacy boards with 20+ lingering done cards no longer
+  pile up there.
+
 ## [0.7.7] — 2026-07-10
 ### Fixed
 - **Shipped entries become real cards.** The *Recently shipped* lines in the Done column were
