@@ -41,6 +41,18 @@ class TableModel(unittest.TestCase):
         self.assertEqual(res["action"], "changed")
         self.assertIsNone(res["old_file"])     # same path -> nothing to archive
 
+    def test_widened_affects_on_unchanged_answer_is_kept_and_flags_only_new_deps(self):
+        # Re-registering the same file+version with MORE dependants used to be dropped
+        # entirely ("unchanged" returned before affects was applied).
+        rows = []
+        canon.apply_set(rows, "Fin", "pricing-tier", "f.md", "v1", ["Marketing"], NOW)
+        canon.apply_ack(rows, "pricing-tier", "Marketing")
+        res = canon.apply_set(rows, "Fin", "pricing-tier", "f.md", "v1", ["Marketing", "Docs"], NOW)
+        self.assertEqual(res["action"], "affects-updated")
+        r = canon.find_row(rows, "pricing-tier")
+        self.assertEqual(r["affects"], ["Marketing", "Docs"])
+        self.assertEqual(r["needs_recheck"], ["Docs"])   # new dep flagged; acked one not re-flagged
+
     def test_ack_supersede_get_list(self):
         rows = []
         canon.apply_set(rows, "Fin", "pricing-tier", "f.md", "v1", ["Marketing"], NOW)
@@ -95,7 +107,20 @@ class MarkerParse(unittest.TestCase):
         self.assertEqual(out["registers"], [])
 
     def test_no_marker(self):
-        self.assertEqual(canon.parse_canon_markers("nothing here"), {"registers": [], "acks": []})
+        self.assertEqual(canon.parse_canon_markers("nothing here"),
+                         {"registers": [], "acks": [], "misses": []})
+
+    def test_trailing_sentence_punctuation_still_parses(self):
+        # A dept ending the marker line with a full stop used to void the registration.
+        out = canon.parse_canon_markers("@CANON[Fin] pricing-tier → docs/财务/pricing-tier.md (affects: Marketing).")
+        self.assertEqual(out["registers"], [("Fin", "pricing-tier", "docs/财务/pricing-tier.md", ["Marketing"])])
+        out = canon.parse_canon_markers("@CANON[Legal] redline -> docs/合规/红线.md。")
+        self.assertEqual(out["registers"], [("Legal", "redline", "docs/合规/红线.md", [])])
+
+    def test_malformed_marker_is_reported_as_miss(self):
+        out = canon.parse_canon_markers("@CANON[Fin] pricing-tier docs/x.md (no arrow)\nplain")
+        self.assertEqual(out["registers"], [])
+        self.assertEqual(len(out["misses"]), 1)
 
 
 class Commands(unittest.TestCase):
@@ -134,6 +159,19 @@ class Commands(unittest.TestCase):
             canon.cmd_set(d, "Fin", "pricing-tier", "f.md", ["Marketing"])
             self.assertTrue(canon.cmd_ack(d, "pricing-tier", "Marketing"))
             self.assertEqual(canon.cmd_list(d, "Fin")[0]["needs_recheck"], [])
+
+    def test_archive_collision_suffixes_instead_of_clobbering(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            fin = os.path.join(d, "docs", "财务"); os.makedirs(fin)
+            arch = os.path.join(fin, "archive"); os.makedirs(arch)
+            open(os.path.join(arch, "old.md"), "w").write("first archive")
+            open(os.path.join(fin, "old.md"), "w").write("second")
+            dst = canon.archive_file(d, "docs/财务/old.md")
+            self.assertTrue(os.path.exists(dst))
+            # the earlier archive survives untouched
+            self.assertEqual(open(os.path.join(arch, "old.md")).read(), "first archive")
+            self.assertNotEqual(dst, os.path.join(arch, "old.md"))
 
 
 class HookFlow(unittest.TestCase):

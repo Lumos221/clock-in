@@ -7,9 +7,9 @@
 
 # 🕘 clock-in
 
-**Your AI agents keep dropping the thread. Give them a company.**
+**Smart models are the brains; cheap models are the hands.**
 
-One agent forgets what another already settled. Context bloats until quality slips. "Done" turns out to mean "looks done." clock-in fixes that with **structure, not bigger prompts** — it runs your Claude Code session like a small company, where quality and memory come from *how the work is organised*, not from hoping the model gets it right.
+A strong model plans and decides; cheap, fast ones carry the work out. That's the split clock-in is built on — the **CEO and department heads run on Opus** (the brains: they plan, decide, and review), while the **staff they spawn run on Sonnet, or Haiku for pure grunt work** (the hands: they do the actual typing). You spend Opus on judgment, not on boilerplate.
 
 [![version](https://img.shields.io/github/v/tag/Lumos221/clock-in?label=version&color=3b82f6)](CHANGELOG.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://docs.claude.com/en/docs/claude-code)
@@ -122,7 +122,7 @@ Open a project and just say **"clocking in"** (or 「开始上班」). The first
 > **Actively evolving.** It works — I use it daily — but expect rough edges.
 >
 > - **The way it works is still being refined** (see the [CHANGELOG](CHANGELOG.md) for what's changed release to release).
-> - **Not yet tuned for cost.** I run it on a heavy plan and don't hit limits; on a lighter one, your mileage may vary.
+> - **Not yet cost-measured.** The brains/hands split keeps Opus on judgment and cheap models on the legwork, but I haven't yet measured the actual saving, your mileage may vary on different plans.
 > - **Not yet battle-tested** on very large, long-running projects.
 
 ---

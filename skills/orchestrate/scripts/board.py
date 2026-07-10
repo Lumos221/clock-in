@@ -160,7 +160,9 @@ DONE_RE = re.compile(r"@BOSS-DONE\[([^\]\s]+)\]")
 
 
 def parse_markers(text):
-    raises, dones = [], []
+    """`misses` = lines that mention @BOSS but match neither regex — the hook logs
+    them (marker-misses.log) so a malformed marker doesn't vanish without a trace."""
+    raises, dones, misses = [], [], []
     for line in (text or "").splitlines():
         m = DONE_RE.search(line)
         if m:
@@ -169,7 +171,10 @@ def parse_markers(text):
         m = RAISE_RE.search(line)
         if m:
             raises.append((m.group(1), m.group(2).strip()))
-    return {"raises": raises, "dones": dones}
+            continue
+        if "@BOSS" in line:
+            misses.append(line)
+    return {"raises": raises, "dones": dones, "misses": misses}
 
 
 # ---------------------------------------------------------------- project root
@@ -283,19 +288,23 @@ def server_info(root):
 
 def ensure_server(root):
     """Return (port, started) — `started` True only when THIS call spawned the server
-    (so the caller can open the browser once, not on every ask)."""
-    port = server_info(root)
-    if port:
-        return port, False
-    port = pick_port(root)
-    with open(portfile(root), "w") as f:
-        f.write(str(port))
-    proc = subprocess.Popen(
-        [sys.executable, os.path.abspath(__file__), "serve", "--root", root, "--port", str(port)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL, start_new_session=True)
-    with open(pidfile(root), "w") as f:
-        f.write(str(proc.pid))
+    (so the caller can open the browser once, not on every ask). The check+spawn window
+    runs under the store lock: two hooks reacting to the same Stop event could otherwise
+    both see "no server" and spawn twice — the loser's pidfile then points at a dead
+    process, which reads as "no server" and drifts the port on the next check."""
+    with _StoreLock(root):
+        port = server_info(root)
+        if port:
+            return port, False
+        port = pick_port(root)
+        with open(portfile(root), "w") as f:
+            f.write(str(port))
+        proc = subprocess.Popen(
+            [sys.executable, os.path.abspath(__file__), "serve", "--root", root, "--port", str(port)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, start_new_session=True)
+        with open(pidfile(root), "w") as f:
+            f.write(str(proc.pid))
     for _ in range(60):
         if not port_free(port):
             break
@@ -348,10 +357,12 @@ h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: 
 <script>
 const POLL = %d;
 function card(e){
-  return `<div class="card ${e.kind}"><div class="meta"><span class="id">${e.id}</span>
-    · ${e.dept} · ${e.kind}</div><div>${esc(e.text)}</div></div>`;
+  // Escape EVERY field: dept/kind come from marker text any pane can write —
+  // unescaped they'd be an HTML injection straight into the Boss's panel.
+  return `<div class="card ${esc(e.kind)}"><div class="meta"><span class="id">${esc(e.id)}</span>
+    · ${esc(e.dept)} · ${esc(e.kind)}</div><div>${esc(e.text)}</div></div>`;
 }
-function esc(s){return (s||"").replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function section(title, items){
   if(!items.length) return "";
   return `<h2>${title}</h2>` + items.map(card).join("");

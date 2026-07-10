@@ -1,9 +1,9 @@
 ---
 name: recruit
-description: 人事部 recruiting — build or extend a project's department roster, picking from the 部门 menu or hiring a domain 专家, and generate agent files. Triggers — 组建花名册, 盘点花名册, 部门审计, 部门改组/重组.
+description: 督察 recruiting — build or extend a project's department roster, picking from the 部门 menu or hiring a domain 专家, and generate agent files. Triggers — 组建花名册, 盘点花名册, 部门审计, 部门改组/重组.
 ---
 
-# Recruiting (a 人事部 function)
+# Recruiting (a 督察 function)
 
 Build or extend a project's company department roster. Generate each agent file (`<project>/.claude/agents/<id>.md`) from `department.md` (`orchestrate/templates/department.md`), one self-contained identity per 部门.
 
@@ -11,22 +11,30 @@ Build or extend a project's company department roster. Generate each agent file 
 
 ## Steps
 
-1. **Read the menu:** `orchestrate/reference/departments.md`. Pick the 部门 this project actually needs. **Recruit only what's needed** (e.g., a typical web app: 研发部 + 测试部 + 运维部 + 产品文档部 + 人事部).
-2. **Always include two standing roles:**
-   - **人事部** (HR — independent oversight + HR; see `orchestrate/reference/hr-oversight.md`) — a **teammate**; generate from `orchestrate/templates/hr.md` and add to `roster`.
-   - **审查官** (Auditor — the independent review gate; see `orchestrate/SKILL.md` §2.3/§6) — a **subagent**: copy `orchestrate/templates/auditor.md` → `.claude/agents/Auditor.md` **verbatim** (project-independent: no owned files, no customization, **not** in `roster`).
+1. **Read the menu:** `orchestrate/reference/departments.md`. Pick the 部门 this project actually needs. **Recruit only what's needed** (e.g., a typical web app: 研发部 + 测试部 + 运维部 + 产品文档部).
+2. **Always include two standing-file subagents** — copied **verbatim** (project-independent: no owned files, no customization, **not** in `roster`):
+   - **审查官** (Auditor — the independent review gate; see `orchestrate/SKILL.md` §2.3/§2.6): `orchestrate/templates/auditor.md` → `.claude/agents/Auditor.md`.
+   - **督察** (Inspector — independent org inspector: 复盘 · roster audits · expert files; see `orchestrate/reference/inspector.md`): `orchestrate/templates/inspector.md` → `.claude/agents/Inspector.md`.
 3. **Generate each agent file** from `department.md` — fill every `<placeholder>` (handle · owned files · 领域标杆 · `model` per `orchestrate/reference/model-routing.md`). SOP / 报告即停 / tools are template-fixed. Write it in whatever **language** reads clearest to the teammate; keep it short.
 4. **Upsert the roster** into `.claude/orchestrate.json` `roster` (orchestrate writes the marker first; if you're running **standalone** and it's missing, create it from `orchestrate/templates/orchestrate.json`).
 5. **Boundary check:** if owned files overlap — **including against the existing roster's owned files, not just the new 部门s** — merge into one 部门 or re-cut.
+
+## Upgrading an existing project (run after a plugin update)
+`/recruit` in a project that already has a roster **reconciles it to the current templates** — an upgrade pass, not a re-interview:
+1. **Standing files:** re-copy `orchestrate/templates/auditor.md` → `.claude/agents/Auditor.md` and `orchestrate/templates/inspector.md` → `.claude/agents/Inspector.md` **verbatim, overwriting** — they're project-independent by design, so the template is always the current correct version.
+2. **Dept files:** regenerate each roster 部门's `.claude/agents/<handle>.md` from the current `department.md`, carrying over **only** its project-specific fields (handle · description · role · 领域标杆 · owned files). Everything template-fixed (tools · SOP · L2 flow · report format) comes fresh from the template — that's how running depts pick up design changes.
+3. **Retired roles:** a pre-0.6.0 `.claude/agents/HR.md` (人事部 teammate) is superseded by the Inspector — archive it (`.claude/agents/archive/`) and remove `HR` from `roster`.
+4. **Thresholds:** reconcile `.claude/orchestrate.json` `thresholds` to the current template's keys — add missing keys at their defaults, drop keys the template no longer has, keep the Boss's tuned values for keys that survive.
+5. **Restart + resume** (`claude -c`) — regenerated agent files load only next session.
 
 ## Hiring a domain 专家 (not on the menu)
 When a project needs a specialty (e.g., cryptography, a specific legal regime, medicine, a framework), hire a 领域专家 with a **real job title** (e.g. "密码学专家", "欧盟数据法高级律师") — never an invented name. Same `department.md` template; owned files per the project.
 
 ## Who runs this
-HR owns `<project>/.claude/agents/` → **HR authors the agent files; the CEO only spawns/disbands.** Exception — **activation**: HR doesn't exist yet, so the **CEO** runs this skill to author the initial roster (incl. HR's own file). After that, **HR** authors every change (add 部门 · hire 专家 · re-hire · 改组); a single re-hire is just regenerating one file from `department.md`.
+The 督察 owns `.claude/agents/` authorship → **the 督察 authors the agent files; the CEO only spawns/disbands.** Exception — **activation**: the Inspector file doesn't exist yet, so the **CEO** runs this skill to author the initial roster (incl. the Inspector's own file). After that, every change (add 部门 · hire 专家 · re-hire after a 复盘 · 改组) goes through a one-shot **督察** invocation; a single re-hire is just regenerating one file from `department.md`.
 
-## 改组 / re-scope (人事部 roster audit) — **scan first, restructure only on go**
-Run when the roster drifts from the actual work: a domain keeps failing with no owner, two 部门 fight over files, or a 部门 has gone idle. Triggered by 人事部 at activation, on the `chaos_unowned_domain_fails` signal (see `orchestrate/reference/hr-oversight.md`), or on demand ("scan the roster").
+## 改组 / re-scope (督察 roster audit) — **scan first, restructure only on go**
+Run when the roster drifts from the actual work: a domain keeps failing with no owner, two 部门 fight over files, or a 部门 has gone idle. Run by a one-shot 督察 at activation, on the `chaos_unowned_domain_fails` signal (see `orchestrate/reference/inspector.md`), or on demand ("scan the roster").
 
 **Default to scan. Never restructure before the Boss has seen the scan and said go** — re-cutting moves 权责 and is high-risk.
 
@@ -47,4 +55,4 @@ Run when the roster drifts from the actual work: a domain keeps failing with no 
    - re-assign **owned files**, not work-in-progress;
    - a departing / re-scoped 部门 writes `docs/handover-<部门>.md`;
    - re-point BACKLOG tasks to new owners **only at task boundaries**.
-7. **Register** the new roster in `.claude/orchestrate.json` `roster` + regenerate the affected `.claude/agents/*.md`. (recruit **authors the files**; the **CEO executes** the actual teammate spawn / disband — only the lead manages the team.)
+7. **Register** the new roster in `.claude/orchestrate.json` `roster` + regenerate the affected `.claude/agents/*.md`. (the 督察 **authors the files**; the **CEO executes** the actual teammate spawn / disband — only the lead manages the team.)

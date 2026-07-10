@@ -1,6 +1,7 @@
 ---
 name: <Prof_CompSci | Spec_Frontend — see naming convention in departments.md>
 description: <中文专家名> — <when to invoke: specific domains, question types, symptoms that signal this expert is needed. This field is the auto-discovery key — Claude matches tasks to experts by reading this.>
+tools: Read, Glob, Grep, Bash, WebSearch, WebFetch  # read-and-research only — an expert answers, it never edits the project
 model: opus  # per reference/model-routing.md
 ---
 

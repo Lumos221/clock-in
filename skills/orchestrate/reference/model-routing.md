@@ -22,8 +22,8 @@ isn't worth a subagent round-trip — the head types it inline.)
 | Role | Model | Where it's pinned |
 |------|-------|-------------------|
 | **CEO** (main session) | the Boss's model | not spawned |
-| **部门 head** — the teammate/pane; every dept incl. 法务部 + 人事部 | **opus** | frontmatter — `department.md` (人事部 uses `hr.md`) |
-| **审查官 · experts** — subagents, not 部门 | **opus** | frontmatter — `auditor.md` · `expert.md` |
+| **部门 head** — the teammate/pane; every dept incl. 法务部 | **opus** | frontmatter — `department.md` |
+| **审查官 · 督察 · experts** — subagents, not 部门 | **opus** | frontmatter — `auditor.md` · `inspector.md` · `expert.md` |
 | **staff** — subagents the head spawns; the typing | **sonnet** / **haiku** (tiering below) | the **head** sets `model:` per one-shot `Agent` call |
 
 **The only per-spawn model decision in the whole org is a head choosing each staff spawn's tier.**

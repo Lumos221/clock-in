@@ -11,78 +11,97 @@ Only acts when an active .claude/orchestrate.json marker exists (path-based look
 cwd-independent, so it covers teammates)."""
 import sys, json, os, re
 
-RM_RF = r"\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r"   # rm -rf / -fr
-IRREVERSIBLE = [
-    RM_RF,
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+try:
+    import hooklib
+except Exception:
+    hooklib = None
+
+# All case-insensitive: shell flags come in both cases (`rm -Rf` — BSD rm treats -R
+# like -r) and SQL is conventionally uppercase (`DROP TABLE`) — case-sensitive
+# patterns silently missed both.
+IRREVERSIBLE = [re.compile(p, re.IGNORECASE) for p in (
     r"\bgit\s+reset\s+--hard\b",
     r"\bgit\s+clean\s+-[a-z]*f",
-    r"\bgit\s+push\b.*--force",
+    r"\bgit\s+push\b.*\s(--force\S*|-f)\b",   # covers the short `-f` spelling too
     r"\bdrop\s+(database|table)\b",
     r"\bmkfs\b",
     r"\bdd\s+if=",
     r">\s*/dev/sd",
-]
+)]
+
+# `rm -rf <one .next dir>` is whitelisted — the regenerable Next.js build cache
+# (safe to delete; the standard dev-restart step). Boss-approved 2026-06-30.
+NEXT_DIR = re.compile(r"(?:\./|[\w./@+-]+/)?\.next/?")
 
 
-def rm_rf_only_dotnext(cmd):
-    """Whitelist `rm -rf .next` — the regenerable Next.js build cache (safe to delete; the
-    standard dev-restart step). Boss-approved 2026-06-30. True ONLY if EVERY rm -rf in the
-    command targets exactly one `.next` dir; any non-.next / extra target → False (stays blocked)."""
-    saw = False
-    for seg in re.split(r"[;&|]+|\n", cmd):
-        if re.search(RM_RF, seg):
-            saw = True
-            m = re.search(r"\brm\s+-\S+\s+(.+)$", seg.strip())
-            if not m or not re.fullmatch(r"(?:\./|[\w./@+-]+/)?\.next/?", m.group(1).strip()):
-                return False
-    return saw
-
-
-def find_marker(start):
-    """Walk up from a file or dir path to the nearest .claude/orchestrate.json."""
-    if not start:
+def rm_rf_targets(seg):
+    """If this command segment invokes `rm` with both recursive and force in effect,
+    return its target list (possibly empty); else None. Handles the flag spellings a
+    single regex missed: combined vs separate (`-rf` / `-r -f`), long
+    (`--recursive --force`) and uppercase (`-Rf`)."""
+    toks = seg.split()
+    if "rm" not in toks:
         return None
-    d = os.path.abspath(start)
-    if os.path.isfile(d):
-        d = os.path.dirname(d)
-    while True:
-        m = os.path.join(d, ".claude", "orchestrate.json")
-        if os.path.exists(m):
-            return m
-        parent = os.path.dirname(d)
-        if parent == d:
-            return None
-        d = parent
+    flags, targets = set(), []
+    rest = toks[toks.index("rm") + 1:]
+    for i, t in enumerate(rest):
+        if t == "--":
+            targets.extend(rest[i + 1:])
+            break
+        if t in ("--recursive", "--force"):
+            flags.add(t[2])          # 'r' / 'f'
+        elif t.startswith("-") and not t.startswith("--") and len(t) > 1:
+            flags.update(c.lower() for c in t[1:])
+        elif not t.startswith("--"):
+            targets.append(t)
+    return targets if {"r", "f"} <= flags else None
 
 
-def active(marker):
-    if not marker:
+def guard_verdict(cmd):
+    """None = allow; else a short reason to block with."""
+    for seg in re.split(r"[;&|]+|\n", cmd):
+        targets = rm_rf_targets(seg)
+        if targets is None:
+            continue
+        if len(targets) == 1 and NEXT_DIR.fullmatch(targets[0]):
+            continue  # whitelisted: rm -rf of the regenerable .next build cache
+        return "`%s` is an IRREVERSIBLE op (recursive force-remove)" % seg.strip()
+    for pat in IRREVERSIBLE:
+        if pat.search(cmd):
+            return "`%s` is an IRREVERSIBLE op" % cmd
+    return None
+
+
+def active(root):
+    if not root:
         return False
     try:
-        cfg = json.load(open(marker, encoding="utf-8"))
+        cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
     except Exception:
         return False
     return bool(cfg.get("active"))
 
 
 def main():
+    if hooklib is None:
+        return
     try:
         data = json.load(sys.stdin)
     except Exception:
         return
     if data.get("tool_name", "") != "Bash":
         return
-    if not active(find_marker(data.get("cwd") or os.getcwd())):
+    if not active(hooklib.find_root(data.get("cwd") or os.getcwd())):
         return
     cmd = (data.get("tool_input", {}) or {}).get("command", "")
-    for pat in IRREVERSIBLE:
-        if re.search(pat, cmd):
-            if pat == RM_RF and rm_rf_only_dotnext(cmd):
-                continue  # whitelisted: rm -rf of the regenerable .next build cache
-            sys.stderr.write(
-                "🛑 accident-guard: `%s` is an IRREVERSIBLE op. SOP is archive-over-remove — "
-                "archive instead, or get the Boss's explicit approval to run it." % cmd)
-            sys.exit(2)
+    reason = guard_verdict(cmd)
+    if reason:
+        sys.stderr.write(
+            "🛑 accident-guard: %s. SOP is archive-over-remove — archive instead, "
+            "or get the Boss's explicit approval to run it." % reason)
+        sys.exit(2)
     return  # allow
 
 

@@ -3,68 +3,29 @@
 message for Boss-Board markers and apply them: `@BOSS[<dept>]: <ask>` raises an
 ask; `@BOSS-DONE[<dept>]` / `@BOSS-DONE[<id>]` resolves one. The model writes one
 cheap line of intent; this hook does the board mechanics (single-sourced in
-board.py). Fail-open: any error -> no-op. Acts only inside an active
-.claude/orchestrate.json project. Never blocks a turn (always exit 0)."""
+board.py). Lines that look like a marker but don't parse land in
+.claude/marker-misses.log (the channel is otherwise fail-open end to end).
+Normally invoked via stop_dispatch.py; runs standalone too. Fail-open: any
+error -> no-op. Acts only inside an active .claude/orchestrate.json project.
+Never blocks a turn (always exit 0)."""
 import sys, os, json
 
-SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "..", "skills", "orchestrate", "scripts")
-sys.path.insert(0, SCRIPTS)
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "..", "skills", "orchestrate", "scripts"))
 try:
     import board
+    import hooklib
 except Exception:
-    board = None
+    board = hooklib = None
 
 
-def find_root(start):
-    d = os.path.abspath(start or os.getcwd())
-    if os.path.isfile(d):
-        d = os.path.dirname(d)
-    while True:
-        if os.path.exists(os.path.join(d, ".claude", "orchestrate.json")):
-            return d
-        parent = os.path.dirname(d)
-        if parent == d:
-            return None
-        d = parent
-
-
-def last_assistant_text(transcript_path):
-    """Defensive: scan JSONL from the end for the last assistant message; return
-    its concatenated text. Tolerates content as a string or a list of blocks."""
-    try:
-        with open(transcript_path, encoding="utf-8") as f:
-            lines = f.readlines()
-    except Exception:
-        return ""
-    for line in reversed(lines):
-        try:
-            obj = json.loads(line)
-        except Exception:
-            continue
-        msg = obj.get("message", obj)
-        if msg.get("role") != "assistant" and obj.get("type") != "assistant":
-            continue
-        content = msg.get("content", "")
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
-            if parts:
-                return "\n".join(parts)
-    return ""
-
-
-def main():
-    if board is None:
+def run(data, text=None):
+    if board is None or hooklib is None:
         return
     if os.environ.get("BOSS_BOARD_SKIP_SERVER"):
         board._SKIP_SERVER = True
-    try:
-        data = json.load(sys.stdin)
-    except Exception:
-        return
-    root = find_root(data.get("cwd") or os.getcwd())
+    root = hooklib.find_root(data.get("cwd") or os.getcwd())
     if not root:
         return
     # A linked worktree carries its own checked-out orchestrate.json; without this its
@@ -76,10 +37,12 @@ def main():
         return
     if not cfg.get("active"):
         return
-    text = last_assistant_text(data.get("transcript_path", ""))
+    if text is None:
+        text = hooklib.last_assistant_text(data.get("transcript_path", ""))
     if not text:
         return
     markers = board.parse_markers(text)
+    hooklib.log_marker_misses(root, "boss-board", markers.get("misses"))
     for dept, ask in markers["raises"]:
         try:
             board.board_add(root, dept, "needs", ask)
@@ -90,9 +53,25 @@ def main():
             if "-" in token and board.board_get(root, token):
                 board.board_done(root, token)
             else:
-                board.board_resolve_dept(root, token)
+                e, opens = board.board_resolve_dept(root, token)
+                if not e and len(opens) > 1:
+                    # An ambiguous @BOSS-DONE[<dept>] used to be swallowed silently — the
+                    # dept believes it resolved while its asks stay open forever. Which ask
+                    # the Boss actually answered is unknowable here, so surface the
+                    # ambiguity on the board itself (board_add dedups re-raises).
+                    board.board_add(root, token, "discuss",
+                                    "⚠ @BOSS-DONE[%s] was ambiguous — %d asks open (%s); /board done <id> the answered one"
+                                    % (token, len(opens), ", ".join(o["id"] for o in opens)))
         except Exception:
             pass
+
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        return
+    run(data)
 
 
 if __name__ == "__main__":

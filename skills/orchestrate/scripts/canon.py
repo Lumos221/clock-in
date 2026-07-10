@@ -7,6 +7,12 @@ See docs/superpowers/specs/2026-06-30-canonical-answers-design.md."""
 import sys, os, re, subprocess
 from datetime import datetime
 
+try:
+    from board import main_checkout  # single source of the worktree-piercing logic
+except Exception:
+    def main_checkout(d):
+        return d
+
 COLS = ["topic", "dept", "file", "version", "updated", "affects", "needs-recheck"]
 CANON_REL = os.path.join("docs", "CANON.md")
 DECISIONS_REL = os.path.join("docs", "DECISIONS.md")
@@ -33,11 +39,15 @@ def fmt_list(lst):
 
 # ---------------------------------------------------------------- markers
 CANON_ACK_RE = re.compile(r"@CANON-ACK\[([^\]\s]+)\]\s+(\S+)")
-CANON_RE = re.compile(r"@CANON\[([^\]\s]+)\]\s+(\S+)\s*(?:→|->)\s*(\S+?)\s*(?:\(affects:\s*([^)]*)\))?\s*$")
+# Trailing sentence punctuation is tolerated — a dept ending the marker line with a
+# full stop used to silently void the registration.
+CANON_RE = re.compile(r"@CANON\[([^\]\s]+)\]\s+(\S+)\s*(?:→|->)\s*(\S+?)\s*(?:\(affects:\s*([^)]*)\))?\s*[.。!！]?\s*$")
 
 
 def parse_canon_markers(text):
-    registers, acks = [], []
+    """`misses` = lines that mention @CANON but match neither regex — the hook logs
+    them (marker-misses.log) so a malformed marker doesn't vanish without a trace."""
+    registers, acks, misses = [], [], []
     for line in (text or "").splitlines():
         m = CANON_ACK_RE.search(line)
         if m:
@@ -46,7 +56,10 @@ def parse_canon_markers(text):
         m = CANON_RE.search(line)
         if m:
             registers.append((m.group(1), m.group(2), m.group(3), parse_cell_list(m.group(4))))
-    return {"registers": registers, "acks": acks}
+            continue
+        if "@CANON" in line:
+            misses.append(line)
+    return {"registers": registers, "acks": acks, "misses": misses}
 
 
 # ---------------------------------------------------------------- table model
@@ -65,6 +78,16 @@ def apply_set(rows, dept, topic, file, version, affects, now):
         return {"action": "created", "old_file": None}
     real_change = (row["file"] != file) or (row["version"] != version)
     if not real_change:
+        # Same answer, but the dependant list may still have widened — losing that
+        # silently would leave a new dependant never flagged. New depts get the same
+        # first-read flag they'd have received at creation; the answer itself didn't
+        # change, so existing (acked) depts are not re-flagged.
+        if affects and set(affects) != set(row["affects"]):
+            new_deps = set(affects) - set(row["affects"])
+            row["affects"] = list(affects)
+            row["needs_recheck"] = sorted(set(row["needs_recheck"]) | new_deps)
+            row["updated"] = now
+            return {"action": "affects-updated", "old_file": None}
         return {"action": "unchanged", "old_file": None}
     old_file = row["file"] if row["file"] != file else None
     row["dept"] = dept
@@ -169,7 +192,10 @@ def project_root(start=None):
     cur = d
     while True:
         if os.path.exists(os.path.join(cur, ".claude", "orchestrate.json")):
-            return cur
+            # Pierce a linked worktree to the main checkout — a dept running
+            # `orchestrate-canon` from its worktree must hit the shared registry,
+            # not a private copy that vanishes when the worktree is reaped.
+            return main_checkout(cur)
         parent = os.path.dirname(cur)
         if parent == cur:
             return d
@@ -228,6 +254,11 @@ def archive_file(root, file):
     arch = os.path.join(os.path.dirname(src), "archive")
     os.makedirs(arch, exist_ok=True)
     dst = os.path.join(arch, os.path.basename(src))
+    if os.path.exists(dst):
+        # A same-named archive already exists — suffix instead of clobbering it
+        # (archive-over-remove means the OLD archive is history too).
+        base, ext = os.path.splitext(dst)
+        dst = "%s-%s%s" % (base, datetime.now().strftime("%Y%m%d-%H%M%S"), ext)
     os.replace(src, dst)
     return dst
 

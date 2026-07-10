@@ -32,34 +32,14 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_boss_board.py" }
-        ]
-      },
-      {
-        "hooks": [
-          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_canon.py" }
-        ]
-      },
-      {
-        "hooks": [
-          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_refute_tally.py" }
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_dispatch.py" }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_boss_board.py" }
-        ]
-      },
-      {
-        "hooks": [
-          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_canon.py" }
-        ]
-      },
-      {
-        "hooks": [
-          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_refute_tally.py" }
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/stop_dispatch.py" }
         ]
       }
     ]

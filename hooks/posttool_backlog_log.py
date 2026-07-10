@@ -1,35 +1,39 @@
 #!/usr/bin/env python3
-"""PostToolUse hook — auto-append a finished task to docs/BACKLOG.md the moment it's
-marked `completed`. Mechanical task-logging: no agent has to remember to run a script.
+"""PostToolUse hook — on a task's `completed` transition: (1) retire its 审查-pass
+marker, (2) auto-append the finished task to docs/BACKLOG.md. Mechanical
+task-logging: no agent has to remember to run a script.
 
-It reads the task's card from TaskBoard.md (by task_id) for the dept + name, stamps the
-short git sha, and appends via the SHARED `log.py` formatter (so the row format has one
-source of truth). Fail-open and only acts inside an active orchestrate project — a hook
-that errors must never disrupt the run. Pairs with pretool_review_gate.py: that one
-blocks a completion without a 审查-pass; this one records the completion once it happens."""
+The pass retirement closes a gate hole: platform task ids are small integers that
+restart with each session, while docs/reviews/ persists — an unconsumed `<id>.pass`
+would satisfy the review gate for a DIFFERENT future task that recycles the id,
+silently voiding the hard gate. Consuming it on completion (archive, never delete)
+keeps the record traceable and the gate honest.
+
+The backlog row reads the task's card from TaskBoard.md (by task_id) for the dept +
+name, stamps the short git sha, and appends via the SHARED `log.py` formatter (so the
+row format has one source of truth). Fail-open and only acts inside an active
+orchestrate project — a hook that errors must never disrupt the run. Pairs with
+pretool_review_gate.py: that one blocks a completion without a 审查-pass; this one
+records the completion once it happens."""
 import sys, json, os, re, subprocess
 from datetime import datetime
 
 # plugin layout: this hook is at <plugin>/hooks/, log.py at <plugin>/skills/orchestrate/scripts/
-SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "skills", "orchestrate", "scripts")
-sys.path.insert(0, SCRIPTS)
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "..", "skills", "orchestrate", "scripts"))
+try:
+    import hooklib
+except Exception:
+    hooklib = None
 try:
     import log as tasklog  # shared HEADER + row(); single source of the row format
 except Exception:
     tasklog = None
-
-
-def find_root(start):
-    d = os.path.abspath(start or os.getcwd())
-    if os.path.isfile(d):
-        d = os.path.dirname(d)
-    while True:
-        if os.path.exists(os.path.join(d, ".claude", "orchestrate.json")):
-            return d
-        parent = os.path.dirname(d)
-        if parent == d:
-            return None
-        d = parent
+try:
+    import board  # only for main_checkout (worktree piercing)
+except Exception:
+    board = None
 
 
 def card_for(taskboard_text, task_id):
@@ -44,8 +48,42 @@ def card_for(taskboard_text, task_id):
     return None, None
 
 
+def _archive(src, arch):
+    os.makedirs(arch, exist_ok=True)
+    dst = os.path.join(arch, os.path.basename(src))
+    if os.path.exists(dst):
+        base, ext = os.path.splitext(dst)
+        dst = "%s-%s%s" % (base, datetime.now().strftime("%Y%m%d-%H%M%S"), ext)
+    os.replace(src, dst)
+    return dst
+
+
+def consume_pass(root, task_id):
+    """Retire the task's whole review trail once it completes: the `.pass` (a recycled
+    id in a later session must not reuse it against the review gate), its `.fail`
+    markers (the per-task bounce count must not bleed into a future task with the same
+    id), and its tally sentinels (runtime state — deleted, not archived). Archives are
+    collision-safe; the 复盘 log keeps the lessons."""
+    import glob
+    rev = os.path.join(root, "docs", "reviews")
+    arch = os.path.join(rev, "archive")
+    moved = None
+    src = os.path.join(rev, "%s.pass" % task_id)
+    if os.path.exists(src):
+        moved = _archive(src, arch)
+    for f in glob.glob(os.path.join(rev, "*.%s.*.fail" % task_id)):
+        if os.path.basename(f).split(".")[0] != "plan":
+            _archive(f, arch)
+    for s in glob.glob(os.path.join(rev, ".tally", "*.%s.*" % task_id)):
+        try:
+            os.remove(s)
+        except OSError:
+            pass
+    return moved
+
+
 def main():
-    if tasklog is None:
+    if hooklib is None:
         return
     try:
         data = json.load(sys.stdin)
@@ -56,9 +94,11 @@ def main():
     ti = data.get("tool_input", {}) or {}
     if ti.get("status") != "completed":
         return
-    root = find_root(data.get("cwd"))
+    root = hooklib.find_root(data.get("cwd"))
     if not root:
         return
+    if board is not None:
+        root = board.main_checkout(root)  # ledger + backlog live in the MAIN checkout
     try:
         cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
     except Exception:
@@ -67,6 +107,12 @@ def main():
         return
     task_id = str(ti.get("taskId", ""))
     if not task_id:
+        return
+    try:
+        consume_pass(root, task_id)
+    except Exception:
+        pass
+    if tasklog is None:
         return
     backlog = os.path.join(root, cfg.get("backlog", "docs/BACKLOG.md"))
     tb = os.path.join(root, cfg.get("taskboard", "docs/TaskBoard.md"))

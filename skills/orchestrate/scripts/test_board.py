@@ -84,12 +84,18 @@ class MarkerParse(unittest.TestCase):
 
     def test_no_marker_is_empty(self):
         out = board.parse_markers("just a normal message, discuss this later")
-        self.assertEqual(out, {"raises": [], "dones": []})
+        self.assertEqual(out, {"raises": [], "dones": [], "misses": []})
 
     def test_done_line_is_not_also_a_raise(self):
         out = board.parse_markers("@BOSS-DONE[QA]")
         self.assertEqual(out["raises"], [])
         self.assertEqual(out["dones"], ["QA"])
+
+    def test_malformed_marker_is_reported_as_miss(self):
+        # Marker-shaped but unparseable lines must surface, not vanish silently.
+        out = board.parse_markers("@BOSS(QA): wrong brackets\n@BOSS[QA missing close\nplain line")
+        self.assertEqual(out["raises"], [])
+        self.assertEqual(len(out["misses"]), 2)
 
 
 class Runtime(unittest.TestCase):
@@ -169,11 +175,11 @@ class ConcurrencySafety(unittest.TestCase):
             # A holds the lock through a slow save; B starts mid-A and must wait, not clobber.
             pA = self._spawn(d, 0.2, "CEO", "storyboard sign-off")
             time.sleep(0.05)
-            pB = self._spawn(d, 0.0, "HR", "unrelated tally item")
+            pB = self._spawn(d, 0.0, "Fin", "unrelated tally item")
             self.assertEqual(pA.wait(timeout=20), 0)
             self.assertEqual(pB.wait(timeout=20), 0)
             store = board.load_store(os.path.join(d, board.STORE_REL))
-            self.assertEqual(sorted(e["dept"] for e in store["entries"]), ["CEO", "HR"])
+            self.assertEqual(sorted(e["dept"] for e in store["entries"]), ["CEO", "Fin"])
 
     def test_stale_lock_from_a_crashed_hook_is_reaped_not_deadlocked(self):
         with tempfile.TemporaryDirectory() as d:
@@ -226,6 +232,29 @@ class HookFlow(unittest.TestCase):
             # no .claude/orchestrate.json -> hook must do nothing
             self._run_hook(d, "@BOSS[QA]: ignored?")
             self.assertFalse(os.path.exists(os.path.join(d, board.STORE_REL)))
+
+    def test_ambiguous_done_is_surfaced_not_swallowed(self):
+        # Two open asks + @BOSS-DONE[<dept>]: which one the Boss answered is unknowable,
+        # so neither is resolved — but the ambiguity must land on the board, not vanish.
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@BOSS[QA]: ask one?\n@BOSS[QA]: ask two?")
+            self._run_hook(d, "@BOSS-DONE[QA]")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            opens = [e for e in store["entries"] if e["status"] == "open"]
+            self.assertEqual(len([e for e in opens if e["kind"] == "needs"]), 2)  # both still open
+            flags = [e for e in opens if e["kind"] == "discuss" and "ambiguous" in e["text"]]
+            self.assertEqual(len(flags), 1)
+
+    def test_malformed_marker_lands_in_miss_log(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@BOSS(QA): wrong brackets")
+            log = os.path.join(d, ".claude", "marker-misses.log")
+            self.assertTrue(os.path.exists(log))
+            self.assertIn("wrong brackets", open(log, encoding="utf-8").read())
 
 
 class SurfaceOpen(unittest.TestCase):

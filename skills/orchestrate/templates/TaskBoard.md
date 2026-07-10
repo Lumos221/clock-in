@@ -2,7 +2,7 @@
 
 > **What** — the live work board: the current workline.
 > **Holds** — active tasks (`todo`/`doing`/`review`/`blocked`) **plus** the last ~5 under *Recently shipped* (so recent progress shows here without opening BACKLOG).
-> **Writers** — the **CEO** writes cards + fills `task_id`; each **dept** updates **only its own card's** `status`; the **审查官** marks `done`; the **CEO** then moves the card to *Recently shipped* (trimming to ~5).
+> **Writers** — the **CEO** writes cards + fills `task_id`; each **dept** updates **only its own card's** `status`; on an L2 pass the **CEO** marks `done` and moves the card to *Recently shipped* (trimming to ~5) — the 审查官 never touches this board.
 > **Not** the source of truth (`SoT.md`) or the full history (`BACKLOG.md` — auto-logged on completion). `<id>` = the platform `task_id`, **not** the `TASK-NNN` label.
 
 Status: `todo` → `doing` → `review` → `blocked` → `done`
