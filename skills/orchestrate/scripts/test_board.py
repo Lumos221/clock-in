@@ -133,6 +133,20 @@ class Runtime(unittest.TestCase):
             self.assertEqual(os.path.realpath(board.project_root(sub)),
                              os.path.realpath(main))
 
+    def test_server_version_stamp_gates_reuse(self):
+        """A live daemon from a previous plugin version must NOT be reused — it holds
+        the old panel in memory forever (the 'board still looks old after an update'
+        trap, seen in the field 2026-07-10 with two 25-hour-old servers)."""
+        with tempfile.TemporaryDirectory() as d:
+            self.assertFalse(board._server_is_current(d))          # no stamp recorded
+            with open(board.versionfile(d), "w") as f:
+                f.write("0.0.1")
+            self.assertFalse(board._server_is_current(d))          # stale stamp
+            self.assertTrue(board._plugin_version())               # resolvable from repo
+            with open(board.versionfile(d), "w") as f:
+                f.write(board._plugin_version())
+            self.assertTrue(board._server_is_current(d))
+
     def test_derive_port_is_deterministic_and_in_range(self):
         with tempfile.TemporaryDirectory() as d:
             p1 = board.derive_port(d)
@@ -196,6 +210,33 @@ prose line, not a row
     def test_missing_file_is_empty(self):
         self.assertEqual(board.parse_taskboard("/nonexistent/TaskBoard.md"),
                          {"tasks": [], "shipped": []})
+
+    def test_field_layout_shipped_first_and_prose_statuses(self):
+        """Regression against a real board (refcheck): Recently-shipped ABOVE Active
+        (positional split returned 0 tasks), prose status lines, and non-card bullets
+        in the shipped section that must not flood the Done column."""
+        BOARD = ("# real · TaskBoard\n\n"
+                 "## Recently shipped (newest first; detail in BACKLOG)\n"
+                 "- #82 · QA · smoke suite green\n"
+                 "prose note, not a row\n\n"
+                 "## Parked → v0.2\n"
+                 "### OLD-01 · parked thing\n- **status:** todo\n\n"
+                 "## Active\n\n"
+                 "### QA1-FIX · nickname read-path  (task#2 · SESSION-HANDOFF)\n"
+                 "- **task_id:** 2\n"
+                 "- **status:** doing — L1 PASS 3rd round (refutes 1–2 were real catches)\n\n"
+                 "### TASK-020 · records rebuild\n"
+                 "- **task_id:** —\n"
+                 "- **status:** ✅ DONE + L2-passed (`docs/reviews/x.pass`)\n")
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "TaskBoard.md")
+            open(p, "w", encoding="utf-8").write(BOARD)
+            tb = board.parse_taskboard(p)
+            self.assertEqual([t["label"] for t in tb["tasks"]], ["QA1-FIX", "TASK-020"])  # parked excluded
+            self.assertEqual([t["status"] for t in tb["tasks"]], ["doing", "done"])
+            self.assertEqual(tb["tasks"][0]["task_id"], "2")
+            self.assertEqual(tb["tasks"][1]["task_id"], "")          # "—" normalised
+            self.assertEqual(tb["shipped"], ["#82 · QA · smoke suite green"])  # bounded to its section
 
 
 class ConcurrencySafety(unittest.TestCase):

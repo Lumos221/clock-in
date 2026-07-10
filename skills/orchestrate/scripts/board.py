@@ -184,10 +184,23 @@ def parse_markers(text):
 
 
 # ---------------------------------------------------------------- taskboard view
+def _section(text, title):
+    """Body of the `## <title>…` section (any suffix on the heading line), up to the
+    next `## ` heading or EOF; "" if absent. Real boards order sections freely —
+    refcheck keeps *Recently shipped* ABOVE *Active* — so never split positionally."""
+    m = re.search(r"(?m)^##\s+%s[^\n]*\n(.*?)(?=^##\s|\Z)" % re.escape(title), text, re.S | re.M)
+    return m.group(1) if m else ""
+
+
+STATUS_RE = re.compile(r"\b(todo|doing|review|blocked|done)\b", re.I)
+
+
 def parse_taskboard(path):
-    """Read TaskBoard.md into the panel's iteration view: active cards (label · name ·
-    dept · task_id · status · blocked_on · what) + the Recently-shipped lines. Tolerant:
-    missing file / fields → empty; placeholder values (`<...>`) → blank."""
+    """Read TaskBoard.md into the panel's iteration view: the `## Active` section's
+    cards (label · name · dept · task_id · status · blocked_on · what) + the
+    Recently-shipped lines. Tolerant of field reality: sections in any order, prose
+    status lines ("doing — L1 PASS 3rd round…", "✅ DONE + L2-passed" → first status
+    keyword wins), placeholder values (`<...>`, `—`) → blank; missing file → empty."""
     try:
         text = open(path, encoding="utf-8").read()
     except Exception:
@@ -198,8 +211,7 @@ def parse_taskboard(path):
         return "" if (not v or v.startswith("<") or v == "—") else v
 
     tasks = []
-    active = text.split("## Recently shipped")[0]
-    for block in re.split(r"(?m)^###\s+", active)[1:]:
+    for block in re.split(r"(?m)^###\s+", _section(text, "Active"))[1:]:
         head = (block.splitlines() or [""])[0].strip()
         label, _, name = head.partition("·")
 
@@ -207,13 +219,14 @@ def parse_taskboard(path):
             m = re.search(r"\*\*%s:\*\*\s*([^\n]+)" % key, block)
             return clean(m.group(1)) if m else ""
 
+        sm = STATUS_RE.search(field("status"))
         tasks.append({"label": clean(label) or head, "name": clean(name) or clean(label),
                       "dept": field("dept"), "task_id": field("task_id"),
-                      "status": field("status").lower(), "blocked_on": field("blocked_on"),
-                      "what": field("what")})
+                      "status": sm.group(1).lower() if sm else "",
+                      "blocked_on": field("blocked_on"), "what": field("what")})
     shipped = []
     m = re.search(r"<!-- SHIPPED:START -->(.*?)<!-- SHIPPED:END -->", text, re.S)
-    seg = m.group(1) if m else text.split("## Recently shipped", 1)[-1] if "## Recently shipped" in text else ""
+    seg = m.group(1) if m else _section(text, "Recently shipped")
     for line in seg.splitlines():
         if line.strip().startswith("- ") and not line.strip().startswith("- <"):
             shipped.append(line.strip()[2:])
@@ -289,6 +302,31 @@ def portfile(root):
     return os.path.join(runtime_dir(root), "port")
 
 
+def versionfile(root):
+    return os.path.join(runtime_dir(root), "version")
+
+
+def _plugin_version():
+    """This script's plugin version (scripts/ is 3 dirs below the plugin root)."""
+    try:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "..", "..", "..", ".claude-plugin", "plugin.json")
+        return json.load(open(p, encoding="utf-8")).get("version", "")
+    except Exception:
+        return ""
+
+
+def _server_is_current(root):
+    """True iff the recorded server was spawned from THIS plugin version. A live
+    daemon holds its page + logic in memory indefinitely, so after a plugin update a
+    stale server keeps serving the old panel while every hook politely reuses it —
+    the 'board still looks old after an update' trap."""
+    try:
+        return open(versionfile(root), encoding="utf-8").read().strip() == _plugin_version()
+    except Exception:
+        return False
+
+
 def derive_port(root):
     h = int(hashlib.sha1(("port:" + os.path.abspath(root)).encode()).hexdigest(), 16)
     return 49152 + (h % (65535 - 49152))
@@ -347,11 +385,25 @@ def ensure_server(root):
     process, which reads as "no server" and drifts the port on the next check."""
     with _StoreLock(root):
         port = server_info(root)
-        if port:
+        if port and _server_is_current(root):
             return port, False
+        if port:
+            # Live but stale (spawned by a previous plugin version) — replace it so an
+            # updated plugin never keeps serving the old panel. The page self-reloads
+            # once the new server answers with a different version (see PAGE JS).
+            try:
+                os.kill(int(open(pidfile(root)).read().strip()), 15)
+            except Exception:
+                pass
+            for _ in range(40):
+                if port_free(port):
+                    break
+                time.sleep(0.05)
         port = pick_port(root)
         with open(portfile(root), "w") as f:
             f.write(str(port))
+        with open(versionfile(root), "w") as f:
+            f.write(_plugin_version())
         proc = subprocess.Popen(
             [sys.executable, os.path.abspath(__file__), "serve", "--root", root, "--port", str(port)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -433,6 +485,7 @@ h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: 
 <div class='board' id='board'></div>
 <script>
 const POLL = %d;
+const VER = %s;  // page generation — a version change from the server hot-reloads the tab
 // Escape EVERY field: dept/kind/task text come from markers/files any pane can write —
 // unescaped they'd be an HTML injection straight into the Boss's panel.
 function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -465,6 +518,7 @@ async function tick(){
   try{
     const r = await fetch('/state.json', {cache:'no-store'});
     const s = await r.json();
+    if (s.version !== undefined && s.version !== VER) { location.reload(); return; }
     const es = s.entries || [];
     const tb = s.taskboard || {tasks:[], shipped:[]};
     const T = {list: tb.tasks, byId: {}};
@@ -499,7 +553,7 @@ async function tick(){
   }
 }
 tick(); setInterval(tick, POLL);
-</script></body></html>""" % POLL_MS
+</script></body></html>""" % (POLL_MS, json.dumps(_plugin_version()))
 
 
 def serve(root, port):
@@ -517,6 +571,7 @@ def serve(root, port):
                 state["last_poll"] = time.time()
                 payload = load_store(store_path)
                 payload["taskboard"] = load_taskboard(root)  # live iteration view
+                payload["version"] = _plugin_version()       # tab hot-reloads on change
                 body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

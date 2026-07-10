@@ -4,6 +4,22 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.3] — 2026-07-10
+### Fixed
+- **The panel daemon now survives plugin updates by replacing itself — not by serving the old
+  board forever.** The server is a detached long-lived process holding its page in memory; after
+  an update every hook found it alive and politely reused it, so the Boss kept seeing the
+  pre-update panel no matter how many sessions restarted (field case: two 25-hour-old daemons
+  still serving the pre-kanban board). The spawn now stamps the plugin version into the runtime
+  dir; `ensure_server` kills-and-respawns a live-but-stale server, and `/state.json` carries the
+  version so an open tab **hot-reloads itself** the moment a newer server answers. One-time cost:
+  tabs opened before 0.7.3 must be closed by hand once.
+- **Kanban parser hardened against real boards.** Field data (refcheck) broke three template
+  assumptions: *Recently shipped* can sit ABOVE *Active* (the positional split returned 0 tasks),
+  status lines are prose ("doing — L1 PASS 3rd round…", "✅ DONE + L2-passed" — first status
+  keyword now wins), and the shipped fallback swept every bullet in the file into the Done column
+  (now bounded to its own section; parked sections excluded).
+
 ## [0.7.2] — 2026-07-10
 ### Fixed
 - **Alias detector false-positive on legitimate non-roster workers — caught in the field.**
