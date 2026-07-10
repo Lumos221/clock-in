@@ -4,6 +4,15 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.2] — 2026-07-10
+### Fixed
+- **Alias detector false-positive on legitimate non-roster workers — caught in the field.**
+  Projects run workers outside `roster` (on-demand depts, experts under a project-local key);
+  a legitimate bounce from one would have flagged its canonical handle as an alias. The
+  detector now arms with **roster ∪ `.claude/agents/` filenames** — the design-native registry
+  of every legitimate handle (each spawnable worker has an agent file) — instead of adopting
+  any project-local config key.
+
 ## [0.7.1] — 2026-07-10
 ### Fixed
 - **Legacy-alias evasion of the circuit breaker — caught in the field.** A downstream project's

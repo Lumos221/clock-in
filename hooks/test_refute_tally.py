@@ -140,6 +140,22 @@ class L2PerTask(unittest.TestCase):
             tally_mod.tally(d, TH, roster=["Frontend", "QA"])   # no duplicate
             self.assertEqual(len(_open_items(d, "督察")), 1)
 
+    def test_agent_file_handles_count_as_known(self):
+        """Field report (refcheck): on-demand workers (Fin, Prof_/Spec_) live outside
+        `roster` but each has an agent file — their legitimate markers must not
+        false-flag, while a true alias still does."""
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude", "agents"))
+            for a in ("Fin.md", "Prof_Academic.md", "Frontend.md"):
+                open(os.path.join(d, ".claude", "agents", a), "w").close()
+            _touch(os.path.join(_reviews(d), "Fin.5.1.fail"))
+            _touch(os.path.join(_reviews(d), "Prof_Academic.6.1.fail"))
+            _touch(os.path.join(_reviews(d), "web.40.1.fail"))     # still an alias
+            tally_mod.tally(d, TH, roster=["Frontend"])
+            flags = [e for e in _open_items(d, "督察") if "alias" in e["text"]]
+            self.assertEqual(len(flags), 1)
+            self.assertIn("'web'", flags[0]["text"])
+
     def test_canonical_handles_and_no_roster_stay_silent(self):
         with tempfile.TemporaryDirectory() as d:
             _touch(os.path.join(_reviews(d), "frontend.8.1.fail"))   # casing ≠ alias

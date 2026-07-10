@@ -72,6 +72,22 @@ def _roster_handles(roster):
     return hs
 
 
+def _known_handles(root, roster):
+    """Every legitimate marker handle, lower-cased: the roster (standing teammates)
+    PLUS the filenames under .claude/agents/ — the design-native registry that also
+    covers project-local patterns (on-demand depts, experts) without inventing a new
+    config key. Field report 2026-07-10: Fin/Prof_/Spec_ lived outside `roster` and
+    would have false-flagged as aliases on a legitimate bounce."""
+    hs = _roster_handles(roster)
+    try:
+        for f in os.listdir(os.path.join(root, ".claude", "agents")):
+            if f.endswith(".md"):
+                hs.add(f[:-3].lower())
+    except OSError:
+        pass
+    return hs
+
+
 def tally(root, thresholds, roster=None):
     """Count the ledger and flag threshold crossings. Pure of stdin/plumbing so it's
     directly testable. thresholds = orchestrate.json's `thresholds` dict; roster (its
@@ -124,12 +140,12 @@ def tally(root, thresholds, roster=None):
         if n < escalate_t:
             _unflag(root, esc_key)
 
-    # Alias detector — a marker written under a non-roster handle (legacy alias like
+    # Alias detector — a marker written under an unknown handle (legacy alias like
     # "web" for "Frontend") splits one task's count across buckets and silently evades
     # the circuit breaker (real incident: web.40.1.fail, 2026-07-07). The Auditor's
     # contract says to normalize, but this catch must not depend on an agent obeying
-    # prose — surface any non-roster prefix the moment it appears in the ledger.
-    known = _roster_handles(roster)
+    # prose — surface any unknown prefix the moment it appears in the ledger.
+    known = _known_handles(root, roster)
     if known:
         for dkey, (raw, n) in prefixes.items():
             key = "alias-%s" % dkey
