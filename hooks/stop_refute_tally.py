@@ -56,9 +56,26 @@ def _unflag(root, key):
         pass
 
 
-def tally(root, thresholds):
+def _roster_handles(roster):
+    """Lower-cased canonical handles from orchestrate.json's `roster` — entries may be
+    plain strings or dicts (recruit has used both shapes)."""
+    hs = set()
+    for r in roster or []:
+        if isinstance(r, str):
+            h = r
+        elif isinstance(r, dict):
+            h = r.get("handle") or r.get("name") or r.get("id") or ""
+        else:
+            h = ""
+        if h:
+            hs.add(str(h).lower())
+    return hs
+
+
+def tally(root, thresholds, roster=None):
     """Count the ledger and flag threshold crossings. Pure of stdin/plumbing so it's
-    directly testable. thresholds = orchestrate.json's `thresholds` dict."""
+    directly testable. thresholds = orchestrate.json's `thresholds` dict; roster (its
+    `roster` list, optional) arms the alias detector."""
     rev = os.path.join(root, "docs", "reviews")
     if not os.path.isdir(rev):
         return
@@ -81,6 +98,7 @@ def tally(root, thresholds):
     escalate_t = int(th.get("bounce_escalate", 3))
     counts = {}
     display = {}
+    prefixes = {}  # dkey -> (raw, total file count) — for the alias detector below
     for f in sorted(glob.glob(os.path.join(rev, "*.fail"))):
         parts = os.path.basename(f).split(".")
         if len(parts) != 4 or parts[0] == "plan" or not parts[0]:
@@ -89,6 +107,8 @@ def tally(root, thresholds):
         k = (dept_raw.lower(), task_id)
         counts[k] = counts.get(k, 0) + 1
         display.setdefault(k, dept_raw)
+        raw, n = prefixes.get(k[0], (dept_raw, 0))
+        prefixes[k[0]] = (raw, n + 1)
     for (dkey, tid), n in counts.items():
         dept = display[(dkey, tid)]
         esc_key = "%s.%s.escalate" % (dkey, tid)
@@ -103,6 +123,24 @@ def tally(root, thresholds):
             _unflag(root, diag_key)
         if n < escalate_t:
             _unflag(root, esc_key)
+
+    # Alias detector — a marker written under a non-roster handle (legacy alias like
+    # "web" for "Frontend") splits one task's count across buckets and silently evades
+    # the circuit breaker (real incident: web.40.1.fail, 2026-07-07). The Auditor's
+    # contract says to normalize, but this catch must not depend on an agent obeying
+    # prose — surface any non-roster prefix the moment it appears in the ledger.
+    known = _roster_handles(roster)
+    if known:
+        for dkey, (raw, n) in prefixes.items():
+            key = "alias-%s" % dkey
+            if dkey not in known:
+                _flag_once(root, key, "督察",
+                           "⚠ 审查 ledger holds a non-roster handle '%s' (%d file(s)) — markers under an alias split per-task counts and evade the circuit breaker; normalize to the roster handle" % (raw, n))
+            else:
+                _unflag(root, key)
+        for s in glob.glob(os.path.join(rev, ".tally", "alias-*")):
+            if os.path.basename(s)[len("alias-"):] not in prefixes:
+                _unflag(root, os.path.basename(s))  # alias gone (renamed/archived) → re-arm
 
 
 def run(data, text=None):
@@ -125,7 +163,7 @@ def run(data, text=None):
         return
     if not cfg.get("active"):
         return
-    tally(root, cfg.get("thresholds", {}))
+    tally(root, cfg.get("thresholds", {}), cfg.get("roster"))
 
 
 def main():

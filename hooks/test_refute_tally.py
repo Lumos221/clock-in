@@ -125,6 +125,31 @@ class L2PerTask(unittest.TestCase):
             tally_mod.tally(d, TH)
             self.assertEqual(len(_open_items(d, "RnD")), 1)    # 2nd → flags again
 
+    def test_alias_handle_is_surfaced_not_silently_bucketed(self):
+        """Regression (refcheck, web.40.1.fail): a legacy alias splits one task's
+        bounces across buckets — neither reaches the diagnose threshold, the breaker
+        never fires. With a roster, the hook must surface the alias itself."""
+        with tempfile.TemporaryDirectory() as d:
+            _touch(os.path.join(_reviews(d), "web.40.1.fail"))
+            _touch(os.path.join(_reviews(d), "Frontend.40.2.fail"))
+            tally_mod.tally(d, TH, roster=["Frontend", "QA"])
+            items = _open_items(d, "督察")
+            self.assertEqual(len(items), 1)
+            self.assertIn("'web'", items[0]["text"])
+            self.assertIn("alias", items[0]["text"])
+            tally_mod.tally(d, TH, roster=["Frontend", "QA"])   # no duplicate
+            self.assertEqual(len(_open_items(d, "督察")), 1)
+
+    def test_canonical_handles_and_no_roster_stay_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            _touch(os.path.join(_reviews(d), "frontend.8.1.fail"))   # casing ≠ alias
+            tally_mod.tally(d, TH, roster=[{"handle": "Frontend"}])
+            self.assertEqual(_open_items(d), [])
+        with tempfile.TemporaryDirectory() as d:
+            _touch(os.path.join(_reviews(d), "web.40.1.fail"))
+            tally_mod.tally(d, TH)                # no roster → detector off
+            self.assertEqual(_open_items(d), [])
+
     def test_pass_refute_and_malformed_files_are_not_counted(self):
         with tempfile.TemporaryDirectory() as d:
             _touch(os.path.join(_reviews(d), "3.pass"))

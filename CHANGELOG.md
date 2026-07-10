@@ -4,6 +4,22 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.1] — 2026-07-10
+### Fixed
+- **Legacy-alias evasion of the circuit breaker — caught in the field.** A downstream project's
+  Auditor.md carried a Boss-signed local rule ("`<dept>` must be the canonical roster handle" —
+  born from a real `web.40.1.fail` incident); `/recruit`'s verbatim standing-file overwrite
+  silently dropped it, re-opening the hole: `web.40.1.fail` + `Frontend.40.2.fail` on the same
+  task are two buckets of one — neither trips `bounce_diagnose`. Three-layer fix:
+  - the normalization rule now lives **in the plugin's `auditor.md` template** (project-independent
+    wording), so every project gets it and no local fork is needed;
+  - the tally hook grew an **alias detector**: any `.fail` prefix not in orchestrate.json's
+    `roster` raises a Boss-Board flag naming the alias — protection no longer depends on an
+    agent obeying prose;
+  - `/recruit`'s upgrade pass now **diffs before overwriting** a standing file: project-local
+    drift (e.g. a signed amendment) is reported to the Boss — folded upstream or relocated —
+    never silently dropped. (That silent drop is exactly what happened.)
+
 ## [0.7.0] — 2026-07-10
 ### Added
 - **Boss Board v2 — a decision panel, not an ask list.** The Boss's complaint: items said
