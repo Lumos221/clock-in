@@ -7,7 +7,7 @@
 
 ## Why one-shot, not a standing dept
 Every 督察 job is a bounded single-context judgment — diagnose one stuck task, write one
-agent file, one audit report. Its cross-generation memory is `docs/复盘-*.md` on disk, so
+agent file, one audit report. Its cross-generation memory is `docs/复盘.md` on disk, so
 no session needs to persist. Independence comes from fresh instances plus an unfilterable
 channel: its verdicts end with `@BOSS[Inspector]: …`, which the Stop hook lands on the
 Boss Board — the CEO relays nothing and can suppress nothing.

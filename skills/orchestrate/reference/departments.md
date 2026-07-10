@@ -29,7 +29,7 @@ Handles are ASCII-only (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`, ≤64 chars; Chinese
 | 法务部 | Legal | Compliance / licensing / privacy / terms | `LICENSE*` `PRIVACY*` `TERMS*` `docs/合规/` |
 | 财务部 | Fin | Cost (token→$) / investment·revenue ledger / ROI | `docs/财务/` |
 
-(Oversight/HR is **not** a 部门: the **督察** — a one-shot subagent — authors `.claude/agents/` files and owns `docs/复盘-*.md`; see the bullet above.)
+(Oversight/HR is **not** a 部门: the **督察** — a one-shot subagent — authors `.claude/agents/` files and owns `docs/复盘.md`; see the bullet above.)
 
 Departments are **teammates** (persistent, addressable, re-taskable). They own files and have a task on the board.
 
@@ -39,7 +39,7 @@ Departments are **teammates** (persistent, addressable, re-taskable). They own f
 
 A dept produces its outputs under its **own work-product folder**, `docs/<其领域>/` (e.g. 法务部 → `docs/合规/`, 财务部 → `docs/财务/`, 数据部 → `docs/数据/`). That folder is part of the dept's boundary — peers don't touch it. Code-producing depts (RnD/QA/Ops) work in code dirs; any notes/specs they write go in their `docs/<领域>/`.
 
-**Orchestration files are off-limits to every dept** (no carve-out list to forget): `docs/SoT.md`, `docs/TaskBoard.md`, `docs/BACKLOG.md`, `docs/DECISIONS.md`, `docs/CANON.md` (read-first, but **machine-written** — never hand-edit), `docs/reviews/`, `docs/复盘-*.md`, `docs/handover-*.md`. These are owned by the **CEO / 审查官 / 督察** per their roles — a 部门 only edits **its own task card's `status`** on `TaskBoard.md`, nothing else there.
+**Orchestration files are off-limits to every dept** (no carve-out list to forget): `docs/SoT.md`, `docs/TaskBoard.md`, `docs/BACKLOG.md`, `docs/DECISIONS.md`, `docs/CANON.md` (read-first, but **machine-written** — never hand-edit), `docs/reviews/`, `docs/复盘.md`, `docs/handover-*.md`. These are owned by the **CEO / 审查官 / 督察** per their roles — a 部门 only edits **its own task card's `status`** on `TaskBoard.md`, nothing else there.
 
 **Canonical file — which output "matters" (earns a `docs/CANON.md` row):** the current authoritative answer to a question the project acts on, superseding the dept's rounds. Test: *would an outsider redo work, or lose a depended-on conclusion, if it vanished?* One row per answered question; not every dept has one; a **key binding decision** (no file) earns a row the same way (pointer `DECISIONS`). Mechanism + dept-facing how-to → `reference/canon.md`.
 ## 专家 (experts — reusable subagents)

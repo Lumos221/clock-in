@@ -25,7 +25,8 @@ Build or extend a project's company department roster. Generate each agent file 
 2. **Dept files:** regenerate each roster 部门's `.claude/agents/<handle>.md` from the current `department.md`, carrying over **only** its project-specific fields (handle · description · role · 领域标杆 · owned files). Everything template-fixed (tools · SOP · L2 flow · report format) comes fresh from the template — that's how running depts pick up design changes.
 3. **Retired roles:** a pre-0.6.0 `.claude/agents/HR.md` (人事部 teammate) is superseded by the Inspector — archive it (`.claude/agents/archive/`) and remove `HR` from `roster`.
 4. **Thresholds:** reconcile `.claude/orchestrate.json` `thresholds` to the current template's keys — add missing keys at their defaults, drop keys the template no longer has, keep the Boss's tuned values for keys that survive.
-5. **Restart + resume** (`claude -c`) — regenerated agent files load only next session.
+5. **Docs:** if `docs/TaskBoard.md` lacks the `<!-- SHIPPED:START -->`/`<!-- SHIPPED:END -->` markers, add the machine-owned *Recently shipped* block (move any existing shipped lines inside) — the completion hook maintains it from then on. Merge any per-dept `docs/复盘-<dept>.md` into one `docs/复盘.md` (add the dept to each row; archive the originals). If `docs/SoT.md` exceeds its ~15-line cap or restates decisions, flag it to the Boss — **don't rewrite the CEO's SoT content yourself**.
+6. **Restart + resume** (`claude -c`) — regenerated agent files load only next session.
 
 ## Hiring a domain 专家 (not on the menu)
 When a project needs a specialty (e.g., cryptography, a specific legal regime, medicine, a framework), hire a 领域专家 with a **real job title** (e.g. "密码学专家", "欧盟数据法高级律师") — never an invented name. Same `department.md` template; owned files per the project.

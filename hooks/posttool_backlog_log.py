@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """PostToolUse hook — on a task's `completed` transition: (1) retire its 审查-pass
-marker, (2) auto-append the finished task to docs/BACKLOG.md. Mechanical
-task-logging: no agent has to remember to run a script.
+marker, (2) auto-append the finished task to docs/BACKLOG.md, (3) refresh the
+machine-owned *Recently shipped* block on docs/TaskBoard.md. Mechanical
+task-logging: no agent has to remember to run a script, and the CEO no longer
+hand-copies shipped lines between the two files.
 
 The pass retirement closes a gate hole: platform task ids are small integers that
 restart with each session, while docs/reviews/ persists — an unconsumed `<id>.pass`
@@ -82,6 +84,34 @@ def consume_pass(root, task_id):
     return moved
 
 
+SHIPPED_START = "<!-- SHIPPED:START -->"
+SHIPPED_END = "<!-- SHIPPED:END -->"
+
+
+def update_shipped(tb_path, line, keep=5):
+    """Insert the freshly shipped one-liner at the top of TaskBoard's machine-owned
+    *Recently shipped* block (between the SHIPPED markers), trimming to `keep`.
+    No markers (a pre-0.6.1 board, or a hand-restructured one) → no-op: the CEO
+    curates that section by hand there. Atomic write; returns True on update."""
+    try:
+        text = open(tb_path, encoding="utf-8").read()
+    except Exception:
+        return False
+    a = text.find(SHIPPED_START)
+    b = text.find(SHIPPED_END)
+    if a == -1 or b == -1 or b < a:
+        return False
+    inner = [l for l in text[a + len(SHIPPED_START):b].splitlines() if l.strip().startswith("-")]
+    inner.insert(0, line)
+    block = SHIPPED_START + "\n" + "\n".join(inner[:keep]) + "\n" + SHIPPED_END
+    out = text[:a] + block + text[b + len(SHIPPED_END):]
+    tmp = tb_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(out)
+    os.replace(tmp, tb_path)
+    return True
+
+
 def main():
     if hooklib is None:
         return
@@ -129,15 +159,21 @@ def main():
     except Exception:
         pass
     d = {"task_id": task_id, "dept": dept, "task": name, "status": "done", "sha": sha}
+    today = datetime.now().strftime("%Y-%m-%d")
     try:
         os.makedirs(os.path.dirname(backlog) or ".", exist_ok=True)
         fresh = not os.path.exists(backlog) or os.path.getsize(backlog) == 0
         with open(backlog, "a", encoding="utf-8") as f:
             if fresh:
                 f.write(tasklog.HEADER)
-            f.write(tasklog.row(d, datetime.now().strftime("%Y-%m-%d")))
+            f.write(tasklog.row(d, today))
     except Exception:
-        return
+        pass
+    try:
+        update_shipped(tb, "- %s · #%s · %s · %s · %s"
+                       % (today, task_id, dept or "—", name or "—", sha or "—"))
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

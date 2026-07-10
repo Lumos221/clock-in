@@ -16,6 +16,10 @@ TASKBOARD = """# demo · TaskBoard
 - **dept:** RnD
 - **task_id:** 3
 - **status:** review
+
+## Recently shipped
+<!-- SHIPPED:START -->
+<!-- SHIPPED:END -->
 """
 
 
@@ -85,6 +89,35 @@ class ConsumePass(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(rev, ".tally", "rnd.3.diagnose")))
 
 
+class RecentlyShipped(unittest.TestCase):
+    def _board(self, d, text=TASKBOARD):
+        os.makedirs(os.path.join(d, "docs"), exist_ok=True)
+        p = os.path.join(d, "docs", "TaskBoard.md")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(text)
+        return p
+
+    def test_inserts_newest_first_and_trims_to_keep(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._board(d)
+            for i in range(1, 8):
+                self.assertTrue(bl.update_shipped(p, "- line %d" % i, keep=5))
+            text = open(p, encoding="utf-8").read()
+            block = text.split(bl.SHIPPED_START)[1].split(bl.SHIPPED_END)[0]
+            lines = [l for l in block.splitlines() if l.strip()]
+            self.assertEqual(lines[0], "- line 7")     # newest on top
+            self.assertEqual(len(lines), 5)            # trimmed
+            self.assertNotIn("- line 1", block)
+            self.assertIn("### TASK-001", text)        # rest of the board untouched
+
+    def test_board_without_markers_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self._board(d, "# old board, hand-curated\n## Recently shipped\n- old line\n")
+            before = open(p, encoding="utf-8").read()
+            self.assertFalse(bl.update_shipped(p, "- new"))
+            self.assertEqual(open(p, encoding="utf-8").read(), before)
+
+
 class EndToEnd(unittest.TestCase):
     def test_completion_appends_backlog_row_and_retires_pass(self):
         with tempfile.TemporaryDirectory() as d:
@@ -98,6 +131,8 @@ class EndToEnd(unittest.TestCase):
             self.assertIn("| 3 | RnD | login form | done |", backlog)
             self.assertFalse(os.path.exists(os.path.join(d, "docs", "reviews", "3.pass")))
             self.assertTrue(os.path.exists(os.path.join(d, "docs", "reviews", "archive", "3.pass")))
+            board = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
+            self.assertIn("· #3 · RnD · login form ·", board)   # shipped line hook-written
 
     def test_non_completed_and_inactive_are_noops(self):
         with tempfile.TemporaryDirectory() as d:

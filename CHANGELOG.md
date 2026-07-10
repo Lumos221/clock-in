@@ -4,6 +4,27 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.6.1] — 2026-07-10
+### Changed
+- **The artifact model slims to two hand-curated surfaces.** Nine docs artifacts existed, four
+  hand-maintained, three overlapping. Now the CEO curates exactly two — a hard-capped `SoT.md`
+  and TaskBoard *cards* — everything else is machine- or event-written:
+  - **`SoT.md` = the project's CLAUDE.md** (Boss's framing): a lean curated index — Goal ·
+    Now (three one-line slots: live/blocked/next) · fixed + curated pointers. **Hard cap ~15
+    lines** — it's hook-injected into every session, so bloat was a recurring token tax. The
+    hand-written "Decisions" section is gone: it predated CANON, whose machine-maintained
+    key-decisions mirror now does that gathering (SoT keeps one pointer).
+  - **TaskBoard's *Recently shipped* is hook-maintained.** The completion hook (which already
+    writes the BACKLOG row) now also inserts the shipped one-liner between
+    `<!-- SHIPPED:START/END -->` markers, newest first, trimmed to ~5 — the CEO just deletes
+    the finished card, no hand-copying between files. Boards without the markers are left alone.
+  - **`复盘-<dept>.md` merged into one `docs/复盘.md`** (dept moves into the row) — fewer
+    files, same one-line records; the 督察 greps its dept.
+  - CANON/DECISIONS deliberately untouched (machine registry vs why-log — the load-bearing
+    pair), BACKLOG/reviews are free (machine-written, never loaded).
+- `/recruit`'s upgrade pass now also migrates docs: adds the SHIPPED markers to an existing
+  TaskBoard, merges per-dept 复盘 files, and flags (never rewrites) an over-cap SoT.
+
 ## [0.6.0] — 2026-07-10
 ### Changed
 - **The HR discipline ladder is gone; a per-task circuit breaker replaces it.** The
