@@ -43,9 +43,9 @@ def run(data, text=None):
         return
     markers = board.parse_markers(text)
     hooklib.log_marker_misses(root, "boss-board", markers.get("misses"))
-    for dept, ask in markers["raises"]:
+    for dept, task, ask in markers["raises"]:
         try:
-            board.board_add(root, dept, "needs", ask)
+            board.board_add(root, dept, "needs", ask, task=task)
         except Exception:
             pass
     for token in markers["dones"]:

@@ -1,13 +1,13 @@
 # Boss Board — `scripts/board.py`
 
-> A live **"Needs-You" panel**: every pending ask *for the Boss*, across all panes, in one always-open window. Separate from `TaskBoard.md` (dept work) — it does not touch the task system or its gates. Design: `docs/superpowers/specs/2026-06-30-boss-board-design.md`.
+> A live **decision panel for the Boss**: every pending ask on top — each linked to its task for context — with a read-only *current iteration* kanban (from `TaskBoard.md`) underneath. It never touches the task system or its gates. Design: `docs/superpowers/specs/2026-06-30-boss-board-design.md`.
 
 ## What it is
-The Boss works solo and multi-pane; the one message that needs the Boss gets buried. The Boss Board surfaces those asks into a single self-refreshing panel on the Boss's laptop. Mostly mechanical — the model writes a one-line marker; a Stop hook does the panel work.
+The Boss works solo and multi-pane; the one message that needs the Boss gets buried — and a bare "need input" line isn't decidable anyway. The panel fixes both: asks are pinned in the upper **⚠ Needs you** section with the ask's task card shown as a chip (id · name · status), and the lower section renders the iteration board (Todo / In progress / Done — Done includes the hook-maintained *Recently shipped* tail), so the Boss can locate the task that needs them and glance at the related ones. Mostly mechanical — the model writes a one-line marker; a Stop hook does the panel work; the server re-reads `TaskBoard.md` per poll.
 
 ## How an ask is raised / resolved
-- **A pane needs the Boss:** end the turn with `@BOSS[<dept>]: <one-line ask>`. The `Stop`/`SubagentStop` hook (`hooks/stop_boss_board.py`) captures it → `orchestrate-board add`. The panel opens (or refreshes) on the Boss's screen.
-- **The Boss answered, pane moves on:** end with `@BOSS-DONE[<dept>]` (its one open ask) or `@BOSS-DONE[<id>]` (a specific one).
+- **A pane needs the Boss:** end the turn with `@BOSS[<dept>#<task_id>]: <ask>` — the `#<task_id>` (the platform id on the card) links the ask to its task on the panel; omit it only for non-task asks. **The ask must be decidable from the board alone**: question · options · recommendation, 1–2 lines. The `Stop`/`SubagentStop` hook (`hooks/stop_boss_board.py`) captures it. An unlinked ask falls back to showing the dept's in-flight cards.
+- **The Boss answered, pane moves on:** end with `@BOSS-DONE[<dept>]` (its one open ask) or `@BOSS-DONE[<id>]` (a specific one). Ambiguous dept-level DONE with several asks open → a discuss item surfaces the ambiguity instead of silently resolving nothing.
 - **The Boss's own items:** the `/board` command — `/board <text>` adds a discuss item; bare `/board` opens the panel; `/board park <id>` / `done <id>` / `reopen <id>` change status.
 
 ## States & ownership

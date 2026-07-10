@@ -37,12 +37,14 @@ def find_open_dup(store, dept, text):
     return None
 
 
-def add_entry(store, dept, kind, text, now):
+def add_entry(store, dept, kind, text, now, task=None):
     dup = find_open_dup(store, dept, text)
     if dup:
         return dup, False
     e = {"id": next_id(store, dept), "dept": dept, "text": (text or "").strip(),
          "kind": kind, "status": "open", "created": now, "updated": now}
+    if task:
+        e["task"] = str(task)  # platform task_id — lets the panel show the ask's task card
     store["entries"].append(e)
     return e, True
 
@@ -155,26 +157,77 @@ def _locked_mutate(root, mutator):
 
 
 # ---------------------------------------------------------------- markers
-RAISE_RE = re.compile(r"@BOSS\[([^\]\s]+)\]:\s*(.+)")
+# `@BOSS[<dept>#<task_id>]: <ask>` — the optional #task links the ask to its TaskBoard
+# card so the panel can show the task's context next to the ask. Bare `@BOSS[<dept>]:`
+# stays valid (non-task asks, and every pre-0.7.0 dept brief).
+RAISE_RE = re.compile(r"@BOSS\[([^\]\s#]+)(?:#([A-Za-z0-9_-]+))?\]:\s*(.+)")
 DONE_RE = re.compile(r"@BOSS-DONE\[([^\]\s]+)\]")
 
 
 def parse_markers(text):
-    """`misses` = lines that mention @BOSS but match neither regex — the hook logs
-    them (marker-misses.log) so a malformed marker doesn't vanish without a trace."""
+    """raises = (dept, task_id-or-None, ask). `misses` = lines that mention @BOSS but
+    match neither regex — the hook logs them (marker-misses.log) so a malformed marker
+    doesn't vanish without a trace."""
     raises, dones, misses = [], [], []
     for line in (text or "").splitlines():
         m = DONE_RE.search(line)
         if m:
-            dones.append(m.group(1))
+            dones.append(m.group(1).split("#")[0])  # tolerate a symmetric #task suffix
             continue
         m = RAISE_RE.search(line)
         if m:
-            raises.append((m.group(1), m.group(2).strip()))
+            raises.append((m.group(1), m.group(2), m.group(3).strip()))
             continue
         if "@BOSS" in line:
             misses.append(line)
     return {"raises": raises, "dones": dones, "misses": misses}
+
+
+# ---------------------------------------------------------------- taskboard view
+def parse_taskboard(path):
+    """Read TaskBoard.md into the panel's iteration view: active cards (label · name ·
+    dept · task_id · status · blocked_on · what) + the Recently-shipped lines. Tolerant:
+    missing file / fields → empty; placeholder values (`<...>`) → blank."""
+    try:
+        text = open(path, encoding="utf-8").read()
+    except Exception:
+        return {"tasks": [], "shipped": []}
+
+    def clean(v):
+        v = (v or "").strip().strip("`").strip()
+        return "" if (not v or v.startswith("<") or v == "—") else v
+
+    tasks = []
+    active = text.split("## Recently shipped")[0]
+    for block in re.split(r"(?m)^###\s+", active)[1:]:
+        head = (block.splitlines() or [""])[0].strip()
+        label, _, name = head.partition("·")
+
+        def field(key):
+            m = re.search(r"\*\*%s:\*\*\s*([^\n]+)" % key, block)
+            return clean(m.group(1)) if m else ""
+
+        tasks.append({"label": clean(label) or head, "name": clean(name) or clean(label),
+                      "dept": field("dept"), "task_id": field("task_id"),
+                      "status": field("status").lower(), "blocked_on": field("blocked_on"),
+                      "what": field("what")})
+    shipped = []
+    m = re.search(r"<!-- SHIPPED:START -->(.*?)<!-- SHIPPED:END -->", text, re.S)
+    seg = m.group(1) if m else text.split("## Recently shipped", 1)[-1] if "## Recently shipped" in text else ""
+    for line in seg.splitlines():
+        if line.strip().startswith("- ") and not line.strip().startswith("- <"):
+            shipped.append(line.strip()[2:])
+    return {"tasks": tasks, "shipped": shipped}
+
+
+def load_taskboard(root):
+    rel = "docs/TaskBoard.md"
+    try:
+        rel = json.load(open(os.path.join(root, ".claude", "orchestrate.json"),
+                             encoding="utf-8")).get("taskboard", rel)
+    except Exception:
+        pass
+    return parse_taskboard(os.path.join(root, rel))
 
 
 # ---------------------------------------------------------------- project root
@@ -334,38 +387,78 @@ PAGE = """<!doctype html><html><head><meta charset='utf-8'>
 <style>
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
-body { font: 15px/1.5 -apple-system, "SF Pro Text", Helvetica, "PingFang SC", Arial, sans-serif;
-       max-width: 640px; margin: 28px auto; padding: 0 20px; color: #1c1c1e; }
-h1 { font-size: 1.4rem; margin: 0 0 .1em; }
-.stamp { color: #8e8e93; font-size: .8rem; margin-bottom: 1.4em; }
+body { font: 14px/1.5 -apple-system, "SF Pro Text", Helvetica, "PingFang SC", Arial, sans-serif;
+       max-width: 1060px; margin: 24px auto; padding: 0 20px; color: #1c1c1e; }
+h1 { font-size: 1.3rem; margin: 0 0 .1em; }
+.stamp { color: #8e8e93; font-size: .8rem; margin-bottom: 1.1em; }
 h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: #8e8e93;
      margin: 1.4em 0 .5em; }
+.count { display: inline-block; background: #e3e3e8; border-radius: 10px; padding: 0 8px;
+         font-size: .72rem; color: #48484a; vertical-align: 2px; }
 .card { border: 1px solid #e3e3e8; border-left: 3px solid #b3261e; border-radius: 8px;
         padding: 10px 13px; margin: .45em 0; }
 .card.discuss { border-left-color: #0a84ff; }
 .card .meta { font-size: .72rem; color: #8e8e93; margin-bottom: .15em; }
 .card .id { font-variant-numeric: tabular-nums; font-weight: 600; color: #636366; }
+.chip { display: inline-block; font-size: .72rem; border: 1px solid #d1d1d6; border-radius: 10px;
+        padding: 1px 8px; margin: .35em .3em 0 0; color: #48484a; }
+.chip b { font-variant-numeric: tabular-nums; }
 .parked .card { opacity: .5; border-left-color: #c7c7cc; }
-.empty { color: #8e8e93; font-style: italic; }
+.empty { color: #8e8e93; font-style: italic; margin: .3em 0; }
+.board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 760px) { .board { grid-template-columns: 1fr; } }
+.col { border: 1px solid #e3e3e8; border-radius: 8px; padding: 8px 10px; }
+.col h3 { font-size: .82rem; margin: .1em 0 .4em; display: flex; align-items: center; gap: 7px; }
+.dot { width: 9px; height: 9px; border-radius: 50%%; display: inline-block; border: 2px solid; }
+.t { border: 1px solid #e3e3e8; border-radius: 6px; padding: 6px 9px; margin: .35em 0; }
+.t .tid { font-size: .72rem; font-weight: 600; color: #636366; font-variant-numeric: tabular-nums; }
+.t .nm { font-size: .84rem; }
+.t .sub { font-size: .7rem; color: #8e8e93; }
+.badge { font-size: .66rem; border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
+.badge.blocked { background: #fdecea; color: #b3261e; }
+.badge.review { background: #efe7fd; color: #6f42c1; }
+.done-line { font-size: .76rem; color: #6e6e73; margin: .35em 0; }
 @media (prefers-color-scheme: dark) {
   body { color: #e3e3e8; background: #1c1c1e; }
-  .card { border-color: #3a3a3c; }
+  .card, .col, .t { border-color: #3a3a3c; }
+  .count { background: #3a3a3c; color: #c7c7cc; }
+  .chip { border-color: #48484a; color: #c7c7cc; }
+  .badge.blocked { background: #3a1210; color: #ff6961; }
+  .badge.review { background: #2a1e3f; color: #c39bf5; }
 }
 </style></head><body>
-<h1>⚠ Needs you</h1><div class='stamp' id='stamp'>—</div>
-<div id='root'></div>
+<h1>⚠ Needs you <span class='count' id='askn'>0</span></h1><div class='stamp' id='stamp'>—</div>
+<div id='asks'></div>
+<h2>Current iteration</h2>
+<div class='board' id='board'></div>
 <script>
 const POLL = %d;
-function card(e){
-  // Escape EVERY field: dept/kind come from marker text any pane can write —
-  // unescaped they'd be an HTML injection straight into the Boss's panel.
-  return `<div class="card ${esc(e.kind)}"><div class="meta"><span class="id">${esc(e.id)}</span>
-    · ${esc(e.dept)} · ${esc(e.kind)}</div><div>${esc(e.text)}</div></div>`;
-}
+// Escape EVERY field: dept/kind/task text come from markers/files any pane can write —
+// unescaped they'd be an HTML injection straight into the Boss's panel.
 function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function section(title, items){
-  if(!items.length) return "";
-  return `<h2>${title}</h2>` + items.map(card).join("");
+function chip(t){
+  return `<span class="chip"><b>${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</b> · ${esc(t.name)} · ${esc(t.status||'?')}</span>`;
+}
+function askCard(e, T){
+  // Context for the decision: the explicitly linked task first; else the dept's
+  // in-flight cards (its ask is almost always about one of them).
+  let linked = (e.task && T.byId[e.task]) ? [T.byId[e.task]]
+    : T.list.filter(t=>t.dept===e.dept && ['doing','review','blocked'].includes(t.status)).slice(0,2);
+  return `<div class="card ${esc(e.kind)}">
+    <div class="meta"><span class="id">${esc(e.id)}</span> · ${esc(e.dept)}${e.task?` · task #${esc(e.task)}`:''} · ${esc(e.kind)}</div>
+    <div>${esc(e.text)}</div><div>${linked.map(chip).join('')}</div></div>`;
+}
+function tCard(t){
+  const badge = t.status==='blocked'
+      ? `<span class="badge blocked">blocked${t.blocked_on?': '+esc(t.blocked_on):''}</span>`
+      : t.status==='review' ? `<span class="badge review">review</span>` : '';
+  return `<div class="t"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
+    <div class="nm">${esc(t.name)}</div>
+    <div class="sub">${esc(t.dept)}${t.what?` · `+esc(t.what):''}</div></div>`;
+}
+function col(title, color, inner, n){
+  return `<div class="col"><h3><span class="dot" style="border-color:${color}"></span>${title}
+    <span class="count">${n}</span></h3>${inner||"<p class='empty'>—</p>"}</div>`;
 }
 let fails = 0;
 async function tick(){
@@ -373,15 +466,25 @@ async function tick(){
     const r = await fetch('/state.json', {cache:'no-store'});
     const s = await r.json();
     const es = s.entries || [];
+    const tb = s.taskboard || {tasks:[], shipped:[]};
+    const T = {list: tb.tasks, byId: {}};
+    tb.tasks.forEach(t=>{ if(t.task_id) T.byId[t.task_id]=t; });
     const open = es.filter(e=>e.status==='open');
     const parked = es.filter(e=>e.status==='parked');
-    const root = document.getElementById('root');
-    let h = "";
-    h += open.length ? section('Open', open)
-                     : "<p class='empty'>Nothing waiting on you. 🎉</p>";
-    if(parked.length) h += `<div class='parked'>${section('Parked', parked)}</div>`;
-    root.innerHTML = h;
-    root.style.opacity = "";
+    document.getElementById('askn').textContent = open.length;
+    document.getElementById('asks').innerHTML =
+      (open.length ? open.map(e=>askCard(e,T)).join('') : "<p class='empty'>Nothing waiting on you. 🎉</p>")
+      + (parked.length ? `<div class='parked'><h2>Parked</h2>${parked.map(e=>askCard(e,T)).join('')}</div>` : '');
+    const todo = tb.tasks.filter(t=>['todo','blocked'].includes(t.status)||!t.status);
+    const prog = tb.tasks.filter(t=>['doing','review'].includes(t.status));
+    const doneT = tb.tasks.filter(t=>t.status==='done');
+    const shipped = tb.shipped||[];
+    document.getElementById('board').innerHTML =
+        col('Todo', '#57ab5a', todo.map(tCard).join(''), todo.length)
+      + col('In progress', '#c69026', prog.map(tCard).join(''), prog.length)
+      + col('Done', '#986ee2', doneT.map(tCard).join('') +
+            shipped.map(x=>`<div class='done-line'>${esc(x)}</div>`).join(''), doneT.length+shipped.length);
+    document.body.style.opacity = "";
     fails = 0;
     document.getElementById('stamp').textContent =
       open.length + " open · updated " + new Date().toLocaleTimeString();
@@ -389,7 +492,7 @@ async function tick(){
     // A restarting/reaped server recovers within a poll or two — keep the view.
     // Past that the server is gone: a frozen tab must not impersonate a live board.
     if(++fails >= 4){
-      document.getElementById('root').style.opacity = ".4";
+      document.body.style.opacity = ".4";
       document.getElementById('stamp').textContent =
         "⚠ disconnected — this panel is no longer live; run /board to reopen";
     }
@@ -412,7 +515,9 @@ def serve(root, port):
         def do_GET(self):
             if self.path.startswith("/state.json"):
                 state["last_poll"] = time.time()
-                body = json.dumps(load_store(store_path)).encode("utf-8")
+                payload = load_store(store_path)
+                payload["taskboard"] = load_taskboard(root)  # live iteration view
+                body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Cache-Control", "no-store")
@@ -460,8 +565,8 @@ def _surface(root, force_open=False):
     return port
 
 
-def board_add(root, dept, kind, text):
-    e = _locked_mutate(root, lambda store: add_entry(store, dept, kind, text, _now())[0])
+def board_add(root, dept, kind, text, task=None):
+    e = _locked_mutate(root, lambda store: add_entry(store, dept, kind, text, _now(), task)[0])
     _surface(root)
     return e
 
@@ -508,7 +613,8 @@ def main():
     root = project_root()
     if cmd == "add":
         e = board_add(root, _opt(argv, "--dept", "Boss"),
-                      _opt(argv, "--kind", "needs"), _opt(argv, "--text", ""))
+                      _opt(argv, "--kind", "needs"), _opt(argv, "--text", ""),
+                      _opt(argv, "--task"))
         print(e["id"])
     elif cmd == "done":
         e = board_done(root, argv[1]); print(e["id"] if e else "not found")

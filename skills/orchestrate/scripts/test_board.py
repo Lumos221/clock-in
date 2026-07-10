@@ -74,8 +74,16 @@ class StoreCore(unittest.TestCase):
 class MarkerParse(unittest.TestCase):
     def test_raise_marker_extracts_dept_and_one_line_ask(self):
         out = board.parse_markers("blah\n@BOSS[QA]: Postgres or SQLite?\nmore")
-        self.assertEqual(out["raises"], [("QA", "Postgres or SQLite?")])
+        self.assertEqual(out["raises"], [("QA", None, "Postgres or SQLite?")])
         self.assertEqual(out["dones"], [])
+
+    def test_raise_marker_with_task_link(self):
+        out = board.parse_markers("@BOSS[RnD#5]: bcrypt or argon2? argon2 recommended (OWASP default)")
+        self.assertEqual(out["raises"], [("RnD", "5", "bcrypt or argon2? argon2 recommended (OWASP default)")])
+
+    def test_done_marker_tolerates_task_suffix(self):
+        out = board.parse_markers("@BOSS-DONE[RnD#5]")
+        self.assertEqual(out["dones"], ["RnD"])
 
     def test_done_marker_by_dept_and_by_id(self):
         out = board.parse_markers("@BOSS-DONE[QA]\nx\n@BOSS-DONE[RnD-2]")
@@ -143,6 +151,51 @@ class Runtime(unittest.TestCase):
             self.assertEqual(e2["id"], "QA-1")
             store = board.load_store(os.path.join(d, board.STORE_REL))
             self.assertEqual(len(store["entries"]), 1)
+
+
+class TaskboardParse(unittest.TestCase):
+    BOARD = """# demo · TaskBoard
+
+## Active
+
+### TASK-001 · login form
+- **dept:** RnD
+- **task_id:** 3
+- **status:** doing
+- **blocked_on:** \u2014
+- **what:** build the login form
+- **done-when:** tests green
+
+### TASK-002 · privacy page
+- **dept:** Legal
+- **task_id:** <CEO fills at dispatch: the platform id>
+- **status:** blocked
+- **blocked_on:** Boss sign-off
+
+## Recently shipped
+prose line, not a row
+<!-- SHIPPED:START -->
+- 2026-07-10 \u00b7 #2 \u00b7 QA \u00b7 smoke suite \u00b7 abc1234
+<!-- SHIPPED:END -->
+"""
+
+    def test_parses_cards_placeholders_and_shipped(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "TaskBoard.md")
+            open(p, "w", encoding="utf-8").write(self.BOARD)
+            tb = board.parse_taskboard(p)
+            self.assertEqual(len(tb["tasks"]), 2)
+            t1, t2 = tb["tasks"]
+            self.assertEqual((t1["label"], t1["name"], t1["dept"], t1["task_id"], t1["status"]),
+                             ("TASK-001", "login form", "RnD", "3", "doing"))
+            self.assertEqual(t1["blocked_on"], "")            # \u2014 normalised to empty
+            self.assertEqual(t2["task_id"], "")               # <placeholder> filtered
+            self.assertEqual(t2["blocked_on"], "Boss sign-off")
+            self.assertEqual(tb["shipped"], ["2026-07-10 \u00b7 #2 \u00b7 QA \u00b7 smoke suite \u00b7 abc1234"])
+
+    def test_missing_file_is_empty(self):
+        self.assertEqual(board.parse_taskboard("/nonexistent/TaskBoard.md"),
+                         {"tasks": [], "shipped": []})
 
 
 class ConcurrencySafety(unittest.TestCase):
@@ -232,6 +285,14 @@ class HookFlow(unittest.TestCase):
             # no .claude/orchestrate.json -> hook must do nothing
             self._run_hook(d, "@BOSS[QA]: ignored?")
             self.assertFalse(os.path.exists(os.path.join(d, board.STORE_REL)))
+
+    def test_task_linked_raise_stores_task(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@BOSS[RnD#5]: bcrypt or argon2? recommend argon2 (OWASP default)")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            self.assertEqual(store["entries"][0].get("task"), "5")
 
     def test_ambiguous_done_is_surfaced_not_swallowed(self):
         # Two open asks + @BOSS-DONE[<dept>]: which one the Boss answered is unknowable,

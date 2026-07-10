@@ -4,6 +4,21 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.0] — 2026-07-10
+### Added
+- **Boss Board v2 — a decision panel, not an ask list.** The Boss's complaint: items said
+  "needs you" but never carried enough context to decide. Three fixes, one page:
+  - **Asks link to their task.** New marker grammar `@BOSS[<dept>#<task_id>]: <ask>` (old bare
+    form stays valid; `@BOSS-DONE[<dept>#…]` tolerated). A linked ask renders with its task card
+    as a chip (label · #id · name · status); an unlinked ask falls back to the dept's in-flight
+    cards. `orchestrate-board add` gains `--task`.
+  - **Current-iteration kanban under the asks.** The panel now renders `TaskBoard.md` live
+    (re-read per poll): Todo (+blocked, badged with `blocked_on`) · In progress (doing + review) ·
+    Done (done cards + the hook-maintained *Recently shipped* tail) — GitHub-Projects style, with
+    counts, so the Boss can locate the task that needs them and glance at the related ones.
+  - **Asks must be decidable from the board.** Dept brief now requires: question · options ·
+    recommendation + why, 1–2 lines — a bare "need your input" ping is the anti-pattern.
+
 ## [0.6.1] — 2026-07-10
 ### Changed
 - **The artifact model slims to two hand-curated surfaces.** Nine docs artifacts existed, four
