@@ -4,6 +4,13 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.7] — 2026-07-10
+### Fixed
+- **Shipped entries become real cards.** The *Recently shipped* lines in the Done column were
+  bare text runs on the tinted column — next to proper cards they read as a broken list. They
+  now carry the same card chrome (surface, border, radius), and the line-clamp moved to an
+  inner box so no sliver of the cropped 3rd line bleeds into the padding.
+
 ## [0.7.6] — 2026-07-10
 ### Changed
 - **Ask cards join the kanban's design system.** They were full-size paragraphs on heavy colour

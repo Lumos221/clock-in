@@ -488,13 +488,18 @@ b { font-weight: 600; }
 .badge { font-size: .66rem; border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
 .badge.blocked { background: #fdecea; color: #b3261e; }
 .badge.review { background: #efe7fd; color: #6f42c1; }
-.done-line { font-size: .76rem; color: #6e6e73; margin: .35em 0; padding: 4px 7px;
-             border-radius: 6px; display: -webkit-box; -webkit-box-orient: vertical;
-             -webkit-line-clamp: 2; overflow: hidden; cursor: pointer; }
-.done-line.x { -webkit-line-clamp: unset; }
+.done-line { font-size: .76rem; color: #6e6e73; margin: .35em 0; padding: 6px 9px;
+             border: 1px solid #e3e3e8; border-radius: 6px; background: #fff;
+             cursor: pointer; }
+/* clamp on an inner box, not the padded card — clamping the padded element lets a
+   sliver of the cropped 3rd line bleed into the bottom padding */
+.done-line .dl { display: -webkit-box; -webkit-box-orient: vertical;
+                 -webkit-line-clamp: 2; overflow: hidden; }
+.done-line.x .dl { -webkit-line-clamp: unset; }
 @media (prefers-color-scheme: dark) {
   body { color: #e3e3e8; background: #1c1c1e; }
-  .card, .col, .t { border-color: #3a3a3c; }
+  .card, .col, .t, .done-line { border-color: #3a3a3c; }
+  .done-line { background: #2c2c2e; }
   .card { background: rgba(255,105,97,.05); }
   .card.discuss { background: rgba(10,132,255,.07); }
   .col.c-todo { background: rgba(87,171,90,.08); }
@@ -590,7 +595,7 @@ async function tick(){
         col('Todo', '#57ab5a', 'c-todo', todo.map(tCard).join(''), todo.length)
       + col('In progress', '#c69026', 'c-prog', prog.map(tCard).join(''), prog.length)
       + col('Done', '#986ee2', 'c-done', doneT.map(tCard).join('') +
-            shipped.map(x=>`<div class='done-line' onclick="this.classList.toggle('x')">${md(x)}</div>`).join(''), doneT.length+shipped.length);
+            shipped.map(x=>`<div class='done-line' onclick="this.classList.toggle('x')"><div class='dl'>${md(x)}</div></div>`).join(''), doneT.length+shipped.length);
     document.body.style.opacity = "";
     fails = 0;
     document.getElementById('stamp').textContent =
