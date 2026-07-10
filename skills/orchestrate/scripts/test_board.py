@@ -142,9 +142,11 @@ class Runtime(unittest.TestCase):
             with open(board.versionfile(d), "w") as f:
                 f.write("0.0.1")
             self.assertFalse(board._server_is_current(d))          # stale stamp
+            # stamp = version + content hash, so a CODE edit re-deploys without a bump
+            self.assertIn("+", board.BUILD)
             self.assertTrue(board._plugin_version())               # resolvable from repo
             with open(board.versionfile(d), "w") as f:
-                f.write(board._plugin_version())
+                f.write(board.BUILD)
             self.assertTrue(board._server_is_current(d))
 
     def test_derive_port_is_deterministic_and_in_range(self):

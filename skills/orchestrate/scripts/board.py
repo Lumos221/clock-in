@@ -316,13 +316,28 @@ def _plugin_version():
         return ""
 
 
-def _server_is_current(root):
-    """True iff the recorded server was spawned from THIS plugin version. A live
-    daemon holds its page + logic in memory indefinitely, so after a plugin update a
-    stale server keeps serving the old panel while every hook politely reuses it —
-    the 'board still looks old after an update' trap."""
+def _build_stamp():
+    """Plugin version + content hash of this file — the staleness key for daemon
+    replacement and tab hot-reload. Hash-based so a CODE edit self-deploys exactly like
+    a release: no bumping the version for every little change (the alternative was
+    per-edit release churn)."""
     try:
-        return open(versionfile(root), encoding="utf-8").read().strip() == _plugin_version()
+        h = hashlib.sha1(open(os.path.abspath(__file__), "rb").read()).hexdigest()[:8]
+    except Exception:
+        h = "0"
+    return "%s+%s" % (_plugin_version(), h)
+
+
+BUILD = _build_stamp()
+
+
+def _server_is_current(root):
+    """True iff the recorded server was spawned from THIS build. A live daemon holds
+    its page + logic in memory indefinitely, so after an update a stale server keeps
+    serving the old panel while every hook politely reuses it — the 'board still looks
+    old after an update' trap."""
+    try:
+        return open(versionfile(root), encoding="utf-8").read().strip() == BUILD
     except Exception:
         return False
 
@@ -403,7 +418,7 @@ def ensure_server(root):
         with open(portfile(root), "w") as f:
             f.write(str(port))
         with open(versionfile(root), "w") as f:
-            f.write(_plugin_version())
+            f.write(BUILD)
         proc = subprocess.Popen(
             [sys.executable, os.path.abspath(__file__), "serve", "--root", root, "--port", str(port)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -437,32 +452,55 @@ PAGE = r"""<!doctype html><html><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <title>Boss Board · Needs you</title>
 <style>
-:root { color-scheme: light dark; }
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
 * { box-sizing: border-box; }
+/* Anthropic theme: ivory page, warm paper surfaces, Claude-coral accent, serif masthead */
 body { font: 14px/1.5 -apple-system, "SF Pro Text", Helvetica, "PingFang SC", Arial, sans-serif;
-       max-width: 1060px; margin: 24px auto; padding: 0 20px; color: #1c1c1e; }
-h1 { font-size: 1.3rem; margin: 0 0 .1em; }
-.stamp { color: #8e8e93; font-size: .8rem; margin-bottom: 1.1em; }
-h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: #8e8e93;
-     margin: 1.4em 0 .5em; }
-.count { display: inline-block; background: #e3e3e8; border-radius: 10px; padding: 0 8px;
-         font-size: .72rem; color: #48484a; vertical-align: 2px; }
-#asks { max-width: 78ch; }   /* cap the reading line — full-width asks were ~180ch */
-.card { border: 1px solid #e3e3e8; border-left: 3px solid #b3261e; border-radius: 6px;
-        padding: 7px 10px; margin: .35em 0; background: rgba(179,38,30,.03);
-        font-size: .84rem; line-height: 1.45; cursor: pointer; }
-.card.discuss { border-left-color: #0a84ff; background: rgba(10,132,255,.035); }
-.card .meta { font-size: .7rem; color: #8e8e93; margin-bottom: .1em; }
-.card .id { font-variant-numeric: tabular-nums; font-weight: 600; color: #636366; }
-.card .txt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4;
-             overflow: hidden; }
-.card.x .txt { -webkit-line-clamp: unset; }
-.age { float: right; color: #8e8e93; }
-.chip { display: inline-block; font-size: .72rem; border: 1px solid #d1d1d6; border-radius: 10px;
-        padding: 1px 8px; margin: .35em .3em 0 0; color: #48484a; }
+       max-width: 1060px; margin: 0 auto; padding: 26px 24px 48px; color: #1f1e1d;
+       background: #f0eee6; }
+header { padding-bottom: 14px; border-bottom: 1px solid #dcd8cb; margin-bottom: 20px; }
+.brand { font-size: .66rem; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+         color: #c15f3c; margin-bottom: 3px; }
+h1 { font-family: "Tiempos Text", ui-serif, Georgia, "Songti SC", serif;
+     font-size: 1.55rem; font-weight: 600; letter-spacing: 0; margin: 0 0 3px; }
+.stamp { color: #87867f; font-size: .76rem; }
+h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: #87867f;
+     margin: 1.9em 0 .55em; }
+.count { display: inline-block; background: #e7e2d5; border-radius: 10px; padding: 0 8px;
+         font-size: .7rem; color: #6b6a62; vertical-align: 2px;
+         font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+[data-k]:focus-visible { outline: 2px solid #c15f3c; outline-offset: 1px; }
+/* GitHub-issues-style rows: dot = state, click/Enter to expand */
+.row { display: flex; gap: 9px; padding: 8px 4px; border-top: 1px solid #edeae0;
+       cursor: pointer; font-size: .82rem; line-height: 1.45; }
+.row:first-child { border-top: none; }
+.row:hover { background: rgba(193,95,60,.05); }
+.dot2 { width: 9px; height: 9px; border-radius: 50%%; margin-top: .45em; flex: none; }
+.k-needs { background: #be4b32; }
+.k-discuss { background: #6e8ca8; }
+.rc { flex: 1; min-width: 0; }
+.rt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.row.x .rt { -webkit-line-clamp: unset; }
+.rm { font-size: .68rem; color: #87867f; margin-top: 2px; }
+.rm b { color: #6b6a62; font-weight: 600;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .95em; }
+.rx { display: none; }
+.row.x .rx { display: block; margin-top: 2px; }
+.rage { flex: none; font-size: .7rem; color: #87867f; margin-top: .25em;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.parked .row { opacity: .6; }
+.parked .dot2 { background: #cbc6b9; }
+.answered .row { opacity: .72; }
+.answered .dot2 { background: #6b9e5f; }
+.colempty { text-align: center; padding: 12px 6px 16px; }
+.glyph { color: #b6b2a4; margin: .45em 0 .05em; }
+html.dark .glyph { color: #6f6d66; }
+.chip { display: inline-block; font-size: .72rem; border: 1px solid #d9d4c6; border-radius: 10px;
+        padding: 1px 8px; margin: .35em .3em 0 0; color: #6b6a62; }
 .chip b { font-variant-numeric: tabular-nums; }
 code { font: .85em ui-monospace, "SF Mono", Menlo, monospace;
-       background: rgba(127,127,127,.14); border-radius: 4px; padding: 0 4px; }
+       background: #eae6d9; border-radius: 4px; padding: 0 4px; }
 b { font-weight: 600; }
 .t .nm, .t .sub { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .t .nm { -webkit-line-clamp: 2; }
@@ -470,52 +508,86 @@ b { font-weight: 600; }
 .t.x .nm, .t.x .sub { -webkit-line-clamp: unset; }
 .t { cursor: pointer; }
 .parked .card { opacity: .5; border-left-color: #c7c7cc; }
-.empty { color: #8e8e93; font-style: italic; margin: .3em 0; }
+.empty { color: #98968c; font-style: italic; margin: .3em 0; }
 .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: start; }
 @media (max-width: 760px) { .board { grid-template-columns: 1fr; } }
-.col { border: 1px solid #e3e3e8; border-radius: 8px; padding: 8px 10px; }
-.col.c-todo { background: rgba(87,171,90,.05); }
-.col.c-prog { background: rgba(198,144,38,.06); }
-.col.c-done { background: rgba(152,110,226,.05); }
+.col { border: 1px solid #dfdacc; border-radius: 8px; padding: 9px 11px;
+       background: #faf9f5; box-shadow: 0 1px 2px rgba(31,30,29,.05); }
+.col.c-todo { background: #ebefe1; }
+.col.c-prog { background: #f4ecda; }
+.col.c-done { background: #eee9f0; }
 .col h3 { font-size: .82rem; margin: .1em 0 .4em; display: flex; align-items: center; gap: 7px; }
 .dot { width: 9px; height: 9px; border-radius: 50%%; display: inline-block; border: 2px solid; }
-.t { border: 1px solid #e3e3e8; border-radius: 6px; padding: 6px 9px; margin: .35em 0; background: #fff; }
-.t.s-blocked { background: rgba(179,38,30,.07); }
-.t.s-review { background: rgba(111,66,193,.07); }
-.t .tid { font-size: .72rem; font-weight: 600; color: #636366; font-variant-numeric: tabular-nums; }
+.t { border: 1px solid #e2ddd0; border-radius: 6px; padding: 6px 9px; margin: .35em 0; background: #fffefb; }
+.t.s-blocked { background: #f8ece5; }
+.t.s-review { background: #f1edf6; }
+.tid, .t .tid { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.t .tid { font-size: .72rem; font-weight: 600; color: #6b6a62; font-variant-numeric: tabular-nums; }
 .t .nm { font-size: .84rem; }
-.t .sub { font-size: .7rem; color: #8e8e93; }
+.t .sub { font-size: .7rem; color: #87867f; }
 .badge { font-size: .66rem; border-radius: 8px; padding: 1px 7px; margin-left: 4px; }
-.badge.blocked { background: #fdecea; color: #b3261e; }
-.badge.review { background: #efe7fd; color: #6f42c1; }
-.done-line { font-size: .76rem; color: #6e6e73; margin: .35em 0; padding: 6px 9px;
-             border: 1px solid #e3e3e8; border-radius: 6px; background: #fff;
+.badge.blocked { background: #f6e0d7; color: #a6452c; }
+.badge.review { background: #ebe4f4; color: #7a67a8; }
+.done-line { font-size: .76rem; color: #87867f; margin: .35em 0; padding: 6px 9px;
+             border: 1px solid #e2ddd0; border-radius: 6px; background: #fffefb;
              cursor: pointer; }
 /* clamp on an inner box, not the padded card — clamping the padded element lets a
    sliver of the cropped 3rd line bleed into the bottom padding */
 .done-line .dl { display: -webkit-box; -webkit-box-orient: vertical;
                  -webkit-line-clamp: 2; overflow: hidden; }
 .done-line.x .dl { -webkit-line-clamp: unset; }
-@media (prefers-color-scheme: dark) {
-  body { color: #e3e3e8; background: #1c1c1e; }
-  .card, .col, .t, .done-line { border-color: #3a3a3c; }
-  .done-line { background: #2c2c2e; }
-  .card { background: rgba(255,105,97,.05); }
-  .card.discuss { background: rgba(10,132,255,.07); }
-  .col.c-todo { background: rgba(87,171,90,.08); }
-  .col.c-prog { background: rgba(198,144,38,.09); }
-  .col.c-done { background: rgba(152,110,226,.08); }
-  .t { background: #2c2c2e; }
-  .t.s-blocked { background: rgba(255,105,97,.10); }
-  .t.s-review { background: rgba(195,155,245,.10); }
-  .count { background: #3a3a3c; color: #c7c7cc; }
-  .chip { border-color: #48484a; color: #c7c7cc; }
-  .badge.blocked { background: #3a1210; color: #ff6961; }
-  .badge.review { background: #2a1e3f; color: #c39bf5; }
-}
-</style></head><body>
-<h1>⚠ Needs you <span class='count' id='askn'>0</span></h1><div class='stamp' id='stamp'>—</div>
-<div id='asks'></div>
+/* Claude dark: warm charcoal, paper surfaces, coral holds the accent. Applied via the
+   .dark class — set from the system preference, or pinned with ?theme=light|dark. */
+html.dark body { color: #eceae4; background: #262624; }
+html.dark header { border-bottom-color: #3e3d3a; }
+html.dark .brand { color: #d97757; }
+html.dark .col, html.dark .t, html.dark .done-line { border-color: #3e3d3a; box-shadow: none; }
+html.dark .done-line, html.dark .col { background: #30302e; }
+html.dark .row { border-top-color: #3a3936; }
+html.dark .row:hover { background: rgba(217,119,87,.07); }
+html.dark .k-needs { background: #e08262; }
+html.dark .k-discuss { background: #8fa9c4; }
+html.dark .parked .dot2 { background: #5c5b57; }
+html.dark .answered .dot2 { background: #7fae72; }
+html.dark .col.c-todo { background: #2c312a; }
+html.dark .col.c-prog { background: #363023; }
+html.dark .col.c-done { background: #322e37; }
+html.dark .t { background: #383734; }
+html.dark .t.s-blocked { background: #45302a; }
+html.dark .t.s-review { background: #3b3444; }
+html.dark .stamp, html.dark h2, html.dark .rm, html.dark .rage,
+html.dark .t .sub, html.dark .done-line, html.dark .empty { color: #a3a199; }
+html.dark .rm b, html.dark .t .tid { color: #c2c0b6; }
+html.dark .count { background: #3e3d3a; color: #b8b5ac; }
+html.dark .chip { border-color: #4a4945; color: #b8b5ac; }
+html.dark code { background: #3e3d3a; }
+html.dark .badge.blocked { background: #4a2a20; color: #e08262; }
+html.dark .badge.review { background: #3a3050; color: #c4b3e8; }
+html.dark [data-k]:focus-visible { outline-color: #d97757; }
+</style>
+<script>
+(function(){
+  const q = new URLSearchParams(location.search).get('theme');
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  const set = () => document.documentElement.classList.toggle('dark', q ? q === 'dark' : mq.matches);
+  set(); mq.addEventListener('change', set);
+})();
+</script>
+</head><body>
+<header>
+  <div class='brand'>Boss Board</div>
+  <h1 id='proj'>—</h1>
+  <div class='stamp' id='stamp'>—</div>
+</header>
+<h2>On your desk</h2>
+<div class='board top'>
+  <div class='col'><h3><span class='dot' style='border-color:#c15f3c'></span>Needs you
+    <span class='count' id='askn'>0</span></h3><div id='asks'></div></div>
+  <div class='col parked'><h3><span class='dot' style='border-color:#cbc6b9'></span>Parked
+    <span class='count' id='parkn'>0</span></h3><div id='parked'></div></div>
+  <div class='col answered'><h3><span class='dot' style='border-color:#6b9e5f'></span>Answered
+    <span class='count' id='ansn'>0</span></h3><div id='answered'></div></div>
+</div>
 <h2>Current iteration</h2>
 <div class='board' id='board'></div>
 <script>
@@ -543,6 +615,9 @@ function tog(el){
   if (el.classList.contains('x')) EXP.add(k); else EXP.delete(k);
 }
 function xc(k){ return EXP.has(k) ? ' x' : ''; }
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && e.target && e.target.dataset && e.target.dataset.k){ tog(e.target); e.preventDefault(); }
+});
 function age(ts){
   if(!ts) return '';
   const d = (Date.now() - new Date(ts).getTime())/1000;
@@ -552,18 +627,29 @@ function age(ts){
   if(d < 129600) return Math.round(d/3600)+'h';
   return Math.round(d/86400)+'d';
 }
+// Empty-state glyphs: monoline SVG in the theme's muted ink (currentColor) — not emoji.
+const ICONS = {
+  clear: `<svg width="42" height="42" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="15"/><path d="M17.5 24.5l4.5 4.5 9-10"/></svg>`,
+  crab: `<svg width="50" height="44" viewBox="0 0 52 46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="26" cy="29" rx="11" ry="8"/><path d="M21 22L19 16"/><circle cx="18.6" cy="13.6" r="1.8"/><path d="M31 22l2-6"/><circle cx="33.4" cy="13.6" r="1.8"/><path d="M15 26c-5-1-8-5-7-10"/><path d="M8 16l-3-2.5M8 16l3.5-2"/><path d="M37 26c5-1 8-5 7-10"/><path d="M44 16l3-2.5M44 16l-3.5-2"/><path d="M16 33.5l-6 2.5M18.5 36.5l-5 4M33.5 36.5l5 4M36 33.5l6 2.5"/></svg>`,
+  inbox: `<svg width="42" height="42" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.9 10.2 4 24v12a4 4 0 0 0 4 4h32a4 4 0 0 0 4-4V24l-6.9-13.8A4 4 0 0 0 33.5 8h-19a4 4 0 0 0-3.6 2.2z"/><polyline points="4 24 16 24 20 30 28 30 32 24 44 24"/></svg>`,
+};
 function chip(t){
   return `<span class="chip"><b>${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</b> · ${esc(t.name)} · ${esc(t.status||'?')}</span>`;
 }
-function askCard(e, T){
+function askRow(e, T, ts){
   // Context for the decision: the explicitly linked task first; else the dept's
   // in-flight cards (its ask is almost always about one of them).
   let linked = (e.task && T.byId[e.task]) ? [T.byId[e.task]]
     : T.list.filter(t=>t.dept===e.dept && ['doing','review','blocked'].includes(t.status)).slice(0,2);
-  const a = age(e.created);
-  return `<div class="card ${esc(e.kind)}${xc(e.id)}" data-k="${esc(e.id)}" onclick="tog(this)">
-    <div class="meta"><span class="id">${esc(e.id)}</span> · ${esc(e.dept)}${e.task?` · task #${esc(e.task)}`:''} · ${esc(e.kind)}${a?`<span class="age">waiting ${a}</span>`:''}</div>
-    <div class="txt">${md(e.text)}</div><div>${linked.map(chip).join('')}</div></div>`;
+  const a = age(ts || e.created);
+  return `<div class="row${xc(e.id)}" data-k="${esc(e.id)}" tabindex="0" onclick="tog(this)">
+    <span class="dot2 k-${esc(e.kind)}"></span>
+    <div class="rc">
+      <div class="rt">${md(e.text)}</div>
+      <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
+      <div class="rx">${linked.map(chip).join('')}</div>
+    </div>
+    <span class="rage">${a}</span></div>`;
 }
 function tCard(t){
   const badge = t.status==='blocked'
@@ -572,7 +658,7 @@ function tCard(t){
   // Long card bodies clamp to a few lines; click a card to expand it. The s-<status>
   // class gives blocked/review cards their coloured undershade.
   const k = 't:' + t.label + '#' + (t.task_id||'');
-  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" onclick="tog(this)"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
+  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
     <div class="nm">${md(t.name)}</div>
     <div class="sub">${esc(t.dept)}${t.what?` · `+md(t.what):''}</div></div>`;
 }
@@ -586,6 +672,9 @@ async function tick(){
     const r = await fetch('/state.json', {cache:'no-store'});
     const s = await r.json();
     if (s.version !== undefined && s.version !== VER) { location.reload(); return; }
+    const proj = s.project || 'Boss Board';
+    document.getElementById('proj').textContent = proj;
+    document.title = proj + ' · Boss Board';
     // Re-render ONLY when the data changed — a rebuild every poll would collapse
     // whatever the Boss just expanded and churn the DOM for nothing.
     const raw = JSON.stringify([s.entries, s.taskboard]);
@@ -605,10 +694,20 @@ async function tick(){
     const bywait = (a,b)=>(a.created||'').localeCompare(b.created||'');
     const open = es.filter(e=>e.status==='open').sort(bywait);
     const parked = es.filter(e=>e.status==='parked').sort(bywait);
+    const resolved = es.filter(e=>e.status==='resolved')
+                       .sort((a,b)=>(b.updated||'').localeCompare(a.updated||''));
     document.getElementById('askn').textContent = open.length;
-    document.getElementById('asks').innerHTML =
-      (open.length ? open.map(e=>askCard(e,T)).join('') : "<p class='empty'>Nothing waiting on you. 🎉</p>")
-      + (parked.length ? `<div class='parked'><h2>Parked</h2>${parked.map(e=>askCard(e,T)).join('')}</div>` : '');
+    document.getElementById('parkn').textContent = parked.length;
+    document.getElementById('ansn').textContent = resolved.length;
+    document.getElementById('asks').innerHTML = open.length
+      ? open.map(e=>askRow(e,T)).join('')
+      : `<div class='colempty'><div class='glyph'>${ICONS.clear}</div><p class='empty'>Nothing waiting on you.</p></div>`;
+    document.getElementById('parked').innerHTML = parked.length
+      ? parked.map(e=>askRow(e,T)).join('')
+      : `<div class='colempty'><div class='glyph'>${ICONS.crab}</div><p class='empty'>Nothing parked — the crab keeps the seat warm.</p></div>`;
+    document.getElementById('answered').innerHTML = resolved.length
+      ? resolved.slice(0,5).map(e=>askRow(e,T,e.updated)).join('')
+      : `<div class='colempty'><div class='glyph'>${ICONS.inbox}</div><p class='empty'>Resolved asks land here.</p></div>`;
     const todo = tb.tasks.filter(t=>['todo','blocked'].includes(t.status)||!t.status);
     const prog = tb.tasks.filter(t=>['doing','review'].includes(t.status));
     const doneT = tb.tasks.filter(t=>t.status==='done');
@@ -617,12 +716,12 @@ async function tick(){
     // archive (that's BACKLOG.md). done-status cards first (still on the live board),
     // then the shipped tail (already newest-first).
     const doneAll = doneT.map(tCard).concat(
-        shipped.map(x=>`<div class='done-line${xc('s:'+x)}' data-k="${esc('s:'+x)}" onclick="tog(this)"><div class='dl'>${md(x)}</div></div>`));
+        shipped.map(x=>`<div class='done-line${xc('s:'+x)}' data-k="${esc('s:'+x)}" tabindex="0" onclick="tog(this)"><div class='dl'>${md(x)}</div></div>`));
     const more = doneAll.length - 6;
     document.getElementById('board').innerHTML =
-        col('Todo', '#57ab5a', 'c-todo', todo.map(tCard).join(''), todo.length)
-      + col('In progress', '#c69026', 'c-prog', prog.map(tCard).join(''), prog.length)
-      + col('Done', '#986ee2', 'c-done', doneAll.slice(0,6).join('') +
+        col('Todo', '#6b9e5f', 'c-todo', todo.map(tCard).join(''), todo.length)
+      + col('In progress', '#c08b2d', 'c-prog', prog.map(tCard).join(''), prog.length)
+      + col('Done', '#9c87c9', 'c-done', doneAll.slice(0,6).join('') +
             (more>0?`<p class='empty'>+${more} more → BACKLOG.md</p>`:''), doneT.length+shipped.length);
     document.getElementById('stamp').textContent =
       open.length + " open · updated " + new Date().toLocaleTimeString();
@@ -632,12 +731,12 @@ async function tick(){
     if(++fails >= 4){
       document.body.style.opacity = ".4";
       document.getElementById('stamp').textContent =
-        "⚠ disconnected — this panel is no longer live; run /board to reopen";
+        "disconnected — this panel is no longer live; run /board to reopen";
     }
   }
 }
 tick(); setInterval(tick, POLL);
-</script></body></html>""" % (POLL_MS, json.dumps(_plugin_version()))
+</script></body></html>""" % (POLL_MS, json.dumps(BUILD))
 
 
 def serve(root, port):
@@ -655,7 +754,8 @@ def serve(root, port):
                 state["last_poll"] = time.time()
                 payload = load_store(store_path)
                 payload["taskboard"] = load_taskboard(root)  # live iteration view
-                payload["version"] = _plugin_version()       # tab hot-reloads on change
+                payload["version"] = BUILD                   # tab hot-reloads on change
+                payload["project"] = os.path.basename(os.path.abspath(root))
                 body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

@@ -60,7 +60,7 @@ def run(data, text=None):
                     # the Boss actually answered is unknowable here, so surface the
                     # ambiguity on the board itself (board_add dedups re-raises).
                     board.board_add(root, token, "discuss",
-                                    "⚠ @BOSS-DONE[%s] was ambiguous — %d asks open (%s); /board done <id> the answered one"
+                                    "@BOSS-DONE[%s] was ambiguous — %d asks open (%s); /board done <id> the answered one"
                                     % (token, len(opens), ", ".join(o["id"] for o in opens)))
         except Exception:
             pass

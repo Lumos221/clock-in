@@ -103,7 +103,7 @@ def tally(root, thresholds, roster=None):
     l1_key = "ceo-refute-%d" % refute_t
     if n_ref >= refute_t:
         _flag_once(root, l1_key, "督察",
-                   "⚠ CEO 已累计 %d 次 L1 封驳 (阈值 %d) — direction problem: Boss call needed (approve as-is / reframe)" % (n_ref, refute_t))
+                   "CEO 已累计 %d 次 L1 封驳 (阈值 %d) — direction problem: Boss call needed (approve as-is / reframe)" % (n_ref, refute_t))
     else:
         _unflag(root, l1_key)
 
@@ -131,10 +131,10 @@ def tally(root, thresholds, roster=None):
         diag_key = "%s.%s.diagnose" % (dkey, tid)
         if n >= escalate_t:
             _flag_once(root, esc_key, dept,
-                       "⚠ task %s (%s) 已连续 %d 次 L2 封驳 — 复盘后仍卡: Boss decision (re-scope / drop / take over)" % (tid, dept, n))
+                       "task %s (%s) 已连续 %d 次 L2 封驳 — 复盘后仍卡: Boss decision (re-scope / drop / take over)" % (tid, dept, n))
         elif n >= diagnose_t:
             _flag_once(root, diag_key, dept,
-                       "⚠ task %s (%s) 已连续 %d 次 L2 封驳 — 停止盲目返工: CEO invoke the 督察 (Inspector) to 复盘 now" % (tid, dept, n))
+                       "task %s (%s) 已连续 %d 次 L2 封驳 — 停止盲目返工: CEO invoke the 督察 (Inspector) to 复盘 now" % (tid, dept, n))
         if n < diagnose_t:
             _unflag(root, diag_key)
         if n < escalate_t:
@@ -151,7 +151,7 @@ def tally(root, thresholds, roster=None):
             key = "alias-%s" % dkey
             if dkey not in known:
                 _flag_once(root, key, "督察",
-                           "⚠ 审查 ledger holds a non-roster handle '%s' (%d file(s)) — markers under an alias split per-task counts and evade the circuit breaker; normalize to the roster handle" % (raw, n))
+                           "审查 ledger holds a non-roster handle '%s' (%d file(s)) — markers under an alias split per-task counts and evade the circuit breaker; normalize to the roster handle" % (raw, n))
             else:
                 _unflag(root, key)
         for s in glob.glob(os.path.join(rev, ".tally", "alias-*")):

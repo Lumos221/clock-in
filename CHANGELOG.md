@@ -4,6 +4,26 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.8.0] — 2026-07-10
+### Changed
+- **Needs-you becomes a GitHub-issues-style list.** Stacked paragraph cards → one contained
+  list of one-line rows: state dot (red needs · blue discuss · grey parked), the ask clamped
+  to a single line, an `id · dept · kind · task #` meta line, right-aligned waiting-age, hover
+  highlight, click to expand the full ask + task chips. Chosen over a Notion-style table
+  because free-length ask text has no sane column width; the issue-row pattern keeps the same
+  scannability with graceful expansion.
+- **Letterhead header.** The page opens with the **project name** (the root folder of the
+  session) as the masthead under a small BOSS BOARD eyebrow, live status beneath, over a
+  hairline rule; the browser title follows (`<project> · Boss Board`). "Needs you" becomes a
+  section header like the others.
+- **Design pass for the README hero — Anthropic theme** (Boss-pinned): ivory `#F0EEE6` page,
+  warm paper surfaces, Claude-coral eyebrow/accents, serif masthead, warm-tuned state colours,
+  matching Claude-dark mode; monospace ids/ages/counts (the ops-console register); keyboard
+  focus + Enter-to-expand on every card.
+- **Releases decouple from deploys.** The daemon/tab staleness key is now `version + content
+  hash of board.py`, so a code edit self-deploys (server replaced, tabs hot-reload) without a
+  version bump — no more per-edit release churn.
+
 ## [0.7.9] — 2026-07-10
 ### Fixed
 - **Expanded cards no longer collapse under you.** The panel rebuilt the whole DOM on every

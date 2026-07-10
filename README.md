@@ -21,9 +21,9 @@ A strong model plans and decides; cheap, fast ones carry the work out. That's th
 
 <p align="center">
   <img src="docs/assets/boss-board.png" width="760"
-       alt="A live 'Needs you' panel: the open questions from across the team that are waiting on the Boss's decision.">
+       alt="The Boss Board: open questions waiting on your decision, each linked to its task, above a live kanban of the current iteration.">
 </p>
-<p align="center"><sub>The one place the threads that would've been dropped end up — every open question waiting on <em>your</em> call, in a single always-open panel.</sub></p>
+<p align="center"><sub>The one place the threads that would've been dropped end up — every question waiting on <em>your</em> call, linked to its task, above a live board of the current iteration.</sub></p>
 
 ---
 
