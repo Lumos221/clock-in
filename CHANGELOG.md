@@ -4,6 +4,13 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.7.9] — 2026-07-10
+### Fixed
+- **Expanded cards no longer collapse under you.** The panel rebuilt the whole DOM on every
+  ~1.5s poll, wiping a just-clicked expansion. It now skips the re-render entirely when the
+  data hasn't changed, remembers which cards are expanded across real re-renders, and a click
+  that's selecting text no longer toggles the card.
+
 ## [0.7.8] — 2026-07-10
 ### Changed
 - **Done column caps at the 6 most recent entries** (+N-more pointer to BACKLOG.md) — it's a

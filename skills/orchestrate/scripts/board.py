@@ -533,6 +533,16 @@ function md(s){
                .replace(/`([^`]+)`/g,'<code>$1</code>')
                .replace(/\*\*/g,'');
 }
+// Expanded cards must survive the poll re-render (each tick used to rebuild the DOM
+// and instantly re-collapse whatever the Boss had just clicked open).
+const EXP = new Set();
+function tog(el){
+  if (getSelection().toString()) return;   // selecting text is not a toggle
+  const k = el.dataset.k;
+  el.classList.toggle('x');
+  if (el.classList.contains('x')) EXP.add(k); else EXP.delete(k);
+}
+function xc(k){ return EXP.has(k) ? ' x' : ''; }
 function age(ts){
   if(!ts) return '';
   const d = (Date.now() - new Date(ts).getTime())/1000;
@@ -551,7 +561,7 @@ function askCard(e, T){
   let linked = (e.task && T.byId[e.task]) ? [T.byId[e.task]]
     : T.list.filter(t=>t.dept===e.dept && ['doing','review','blocked'].includes(t.status)).slice(0,2);
   const a = age(e.created);
-  return `<div class="card ${esc(e.kind)}" onclick="this.classList.toggle('x')">
+  return `<div class="card ${esc(e.kind)}${xc(e.id)}" data-k="${esc(e.id)}" onclick="tog(this)">
     <div class="meta"><span class="id">${esc(e.id)}</span> · ${esc(e.dept)}${e.task?` · task #${esc(e.task)}`:''} · ${esc(e.kind)}${a?`<span class="age">waiting ${a}</span>`:''}</div>
     <div class="txt">${md(e.text)}</div><div>${linked.map(chip).join('')}</div></div>`;
 }
@@ -561,7 +571,8 @@ function tCard(t){
       : t.status==='review' ? `<span class="badge review">review</span>` : '';
   // Long card bodies clamp to a few lines; click a card to expand it. The s-<status>
   // class gives blocked/review cards their coloured undershade.
-  return `<div class="t s-${esc(t.status||'none')}" onclick="this.classList.toggle('x')"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
+  const k = 't:' + t.label + '#' + (t.task_id||'');
+  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" onclick="tog(this)"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
     <div class="nm">${md(t.name)}</div>
     <div class="sub">${esc(t.dept)}${t.what?` · `+md(t.what):''}</div></div>`;
 }
@@ -569,12 +580,23 @@ function col(title, color, cls, inner, n){
   return `<div class="col ${cls}"><h3><span class="dot" style="border-color:${color}"></span>${title}
     <span class="count">${n}</span></h3>${inner||"<p class='empty'>—</p>"}</div>`;
 }
-let fails = 0;
+let fails = 0, lastRaw = '';
 async function tick(){
   try{
     const r = await fetch('/state.json', {cache:'no-store'});
     const s = await r.json();
     if (s.version !== undefined && s.version !== VER) { location.reload(); return; }
+    // Re-render ONLY when the data changed — a rebuild every poll would collapse
+    // whatever the Boss just expanded and churn the DOM for nothing.
+    const raw = JSON.stringify([s.entries, s.taskboard]);
+    fails = 0;
+    document.body.style.opacity = "";   // clear a stale "disconnected" dim on reconnect
+    if (raw === lastRaw){
+      document.getElementById('stamp').textContent =
+        (s.entries||[]).filter(e=>e.status==='open').length + " open · updated " + new Date().toLocaleTimeString();
+      return;
+    }
+    lastRaw = raw;
     const es = s.entries || [];
     const tb = s.taskboard || {tasks:[], shipped:[]};
     const T = {list: tb.tasks, byId: {}};
@@ -595,15 +617,13 @@ async function tick(){
     // archive (that's BACKLOG.md). done-status cards first (still on the live board),
     // then the shipped tail (already newest-first).
     const doneAll = doneT.map(tCard).concat(
-        shipped.map(x=>`<div class='done-line' onclick="this.classList.toggle('x')"><div class='dl'>${md(x)}</div></div>`));
+        shipped.map(x=>`<div class='done-line${xc('s:'+x)}' data-k="${esc('s:'+x)}" onclick="tog(this)"><div class='dl'>${md(x)}</div></div>`));
     const more = doneAll.length - 6;
     document.getElementById('board').innerHTML =
         col('Todo', '#57ab5a', 'c-todo', todo.map(tCard).join(''), todo.length)
       + col('In progress', '#c69026', 'c-prog', prog.map(tCard).join(''), prog.length)
       + col('Done', '#986ee2', 'c-done', doneAll.slice(0,6).join('') +
             (more>0?`<p class='empty'>+${more} more → BACKLOG.md</p>`:''), doneT.length+shipped.length);
-    document.body.style.opacity = "";
-    fails = 0;
     document.getElementById('stamp').textContent =
       open.length + " open · updated " + new Date().toLocaleTimeString();
   }catch(e){
