@@ -1,4 +1,4 @@
-import os, sys, tempfile, unittest
+import contextlib, io, os, sys, tempfile, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import canon
 
@@ -312,6 +312,28 @@ class DecisionIO(unittest.TestCase):
             rows = canon.load_rows(canon.canon_path(d))
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["file"], "DECISIONS")
+
+
+class SetCliGuard(unittest.TestCase):
+    def test_positional_set_exits_loud_instead_of_garbage_row(self):
+        # Field report 2026-07-11: `orchestrate-canon set faq-content docs/x.md`
+        # used to register an empty-topic row and print "created " — silently.
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            argv, cwd = sys.argv, os.getcwd()
+            sys.argv = ["canon.py", "set", "faq-content", "docs/marketing/faq-content.md"]
+            os.chdir(d)
+            err = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+                    canon.main()
+            finally:
+                sys.argv = argv
+                os.chdir(cwd)
+            self.assertEqual(cm.exception.code, 2)
+            self.assertIn("--topic", err.getvalue())
+            self.assertFalse(os.path.exists(os.path.join(d, "docs", "CANON.md")))
 
 
 if __name__ == "__main__":

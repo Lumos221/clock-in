@@ -4,6 +4,26 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [Unreleased]
+### Fixed
+- **`canon.py set` silently registered garbage on positional args** (field report 2026-07-11:
+  a hand-registration of `faq-content` produced an empty-topic row and printed "created").
+  The CLI is flags-only; positional calls matched no flag and fell through to empty defaults.
+  `set` now refuses loudly (usage + exit 2) when `--topic`/`--file` are missing; `board.py add`
+  had the same foot-gun (empty card under the default dept) and gets the same guard. Regression
+  tests reproduce the exact reported call shape.
+
+### Changed
+- **Supersede rule for Boss-Board asks.** Field case: an answered ask re-raised in revised form
+  left BOTH open in Needs-you (`CEO-27`/`CEO-28`) — and two opens make a bare dept-level DONE
+  ambiguous. The marker contract now says it in all three places a pane reads (`department.md`
+  template, `SKILL.md` §4, `reference/boss-board.md`): re-raising a revised ask → `@BOSS-DONE[<old-id>]`
+  in the same turn; the board never auto-supersedes. Rule only for now — a mechanical
+  same-task supersede backstop is parked.
+- **README rewritten** around a functions-first structure (what it does, no mechanism talk);
+  em-dashes stripped from rendered prose; stale `⚠ Needs you` reference cleaned from
+  `reference/boss-board.md`.
+
 ## [0.8.0] — 2026-07-10
 ### Changed
 - **Needs-you becomes a GitHub-issues-style list.** Stacked paragraph cards → one contained

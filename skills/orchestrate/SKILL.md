@@ -138,7 +138,7 @@ Meetings are **events**, not stored files — their outcomes land in `TaskBoard.
 **Morning brief (overnight runs)** — the one *rendered* CEO output. When an unattended run finishes, the CEO **fills a few fields** (shipped · queued · needs-Boss — *it authors the content*) and renders a clean PDF/PNG, **auto-opened** when the Boss asks:
 `echo '{"shipped":[…],"queued":[…],"needs_boss":[…],"note":"…"}' | orchestrate-brief --pdf` (`--png`, or omit for HTML; field shapes in `reference/meetings.md`).
 
-**Boss Board (live "needs-you" panel)** — a single always-open panel aggregating every pending ask *for the Boss* across panes, separate from `TaskBoard.md`. A pane flags with `@BOSS[<dept>]: <ask>` (a Stop hook surfaces it) and clears with `@BOSS-DONE[<dept>]`; the Boss uses `/board [text|done <id>|park <id>]`. Detail → `reference/boss-board.md`.
+**Boss Board (live "needs-you" panel)** — a single always-open panel aggregating every pending ask *for the Boss* across panes, separate from `TaskBoard.md`. A pane flags with `@BOSS[<dept>]: <ask>` (a Stop hook surfaces it) and clears with `@BOSS-DONE[<dept>|<id>]`; **re-raising a revised ask → `@BOSS-DONE[<old-id>]` in the same turn** (the board never auto-supersedes). The Boss uses `/board [text|done <id>|park <id>]`. Detail → `reference/boss-board.md`.
 
 ---
 

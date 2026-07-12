@@ -5,11 +5,12 @@
 
 <div align="center">
 
-# 🕘 clock-in
+# clock-in
 
-**Smart models are the brains; cheap models are the hands.**
+**Run your Claude Code session like a company you own.**
 
-A strong model plans and decides; cheap, fast ones carry the work out. That's the split clock-in is built on — the **CEO and department heads run on Opus** (the brains: they plan, decide, and review), while the **staff they spawn run on Sonnet, or Haiku for pure grunt work** (the hands: they do the actual typing). You spend Opus on judgment, not on boilerplate.
+A manager that plans, specialists that build, an independent reviewer that signs off
+before anything counts as done, and one live board where everything that needs *you* shows up.
 
 [![version](https://img.shields.io/github/v/tag/Lumos221/clock-in?label=version&color=3b82f6)](CHANGELOG.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://docs.claude.com/en/docs/claude-code)
@@ -21,66 +22,60 @@ A strong model plans and decides; cheap, fast ones carry the work out. That's th
 
 <p align="center">
   <img src="docs/assets/boss-board.png" width="760"
-       alt="The Boss Board: open questions waiting on your decision, each linked to its task, above a live kanban of the current iteration.">
+       alt="The Boss Board: questions waiting on your decision, each linked to its task, above a live kanban of the current iteration.">
 </p>
-<p align="center"><sub>The one place the threads that would've been dropped end up — every question waiting on <em>your</em> call, linked to its task, above a live board of the current iteration.</sub></p>
+<p align="center"><sub>The Boss Board: every question waiting on <em>your</em> call, with the context to decide it, above a live view of the current iteration. It opens itself, updates itself, and never lets a thread sink.</sub></p>
 
 ---
 
-## At a glance
+## What it does
 
-- **You can trust "done."** Nothing is marked finished until an independent reviewer has actually checked it — the plan *and* the result.
-- **Nothing settled gets forgotten.** The team keeps a shared memory of every decision and answer, so one part never contradicts another or works off stale information.
-- **Nothing waiting on you slips.** Whatever needs your call surfaces in one place, instead of getting buried in the noise.
-- **You steer in plain language.** Say what you want; the team plans it, does it, and reports back. You don't manage the machinery.
-- **Someone independent watches the whole team** — even the manager. If something's going wrong, you hear about it directly.
-- **It stays fast on long projects.** It keeps only what matters in view and leaves the rest on disk, so it doesn't bog down or lose the plot.
-
----
-
-## What it is
-
-You're the Boss. Your Claude Code session becomes a **manager** that breaks your goal into pieces and hands each to a **specialist** — engineering, testing, ops, legal, finance, docs, whatever the work needs. An **independent reviewer** checks every plan before work starts and every result before it's called done. A separate **overseer** watches the whole team — including the manager — and comes straight to you when something's off. And the team **remembers**: decisions and settled answers are kept where everyone can see them, so the work stays consistent as it grows.
+- **Makes "done" mean done.** Nothing is marked finished until an independent reviewer has approved the plan *and* the result. Quality comes from the structure, not from one model marking its own homework.
+- **Puts everything that needs you in one place.** Asks land on the Boss Board with what you need to decide on the spot: the question, the options, a recommendation. Nothing scrolls past you mid-transcript.
+- **Stops stuck work early.** A task that keeps bouncing gets pulled out of the rework loop and diagnosed; if it's still stuck after that, it comes to you as a decision, not a surprise.
+- **Keeps a shared memory.** Decisions and settled answers are written where every teammate reads them, so nothing settled gets re-litigated or quietly contradicted as the project grows.
+- **Watches the watchers.** An independent inspector audits the whole team, including the manager, and answers only to you.
+- **Spends smart models on judgment, cheap models on typing.** The manager and department heads run on Opus; the staff they spawn run on Sonnet, or Haiku for pure grunt work.
+- **Catches destructive commands.** Force-pushes, recursive deletes and dropped tables are intercepted before they run.
+- **Stays fast on long projects.** Only what matters stays in view; the rest lives on disk. Long runs don't bog down or lose the plot.
 
 <p align="center">
   <img src="docs/assets/hero.png" width="760"
        alt="An independent reviewer catches a defect that would have shipped broken output, and bounces it before it merges.">
 </p>
-<p align="center"><sub>The independent reviewer caught a defect that would have shipped broken output, and bounced it <em>before it merged</em>.</sub></p>
+<p align="center"><sub>The reviewer earning its keep: a defect caught and bounced <em>before it merged</em>.</sub></p>
 
-The point is **separation of powers.** Quality comes from the structure, not from trusting one model to mark its own homework. Most "multi-agent" tools are one prompt wearing different hats — this one isn't.
+---
+
+## The company
+
+You're the Boss. Your Claude Code session becomes the **manager**: it breaks your goal into tasks and hands each to a **specialist** (engineering, testing, ops, legal, finance, docs, whatever the work needs). An independent **reviewer** clears every plan before work starts and every result before it ships. An **inspector** oversees the whole operation, including the manager, and reports straight to you.
+
+Most "multi-agent" tools are one prompt wearing different hats. clock-in is built on **separation of powers**: the roles genuinely check each other, and the checks fire on their own; they don't depend on anyone remembering to ask.
 
 > [!NOTE]
-> clock-in thinks bilingually — some roles carry Chinese names and the workflow has a Chinese shorthand. You never need to read them; everything works in plain English. They're flavour, not a requirement.
+> clock-in thinks bilingually: some roles carry Chinese names and the workflow has a Chinese shorthand. You never need to read them; everything works in plain English. Flavour, not a requirement.
 
 ---
 
-## Why I built it
+## Working with it
 
-My thoughts are jumpy and bursty. I start more threads than I finish, and the ones I don't write down slip away — so I lean hard on structure outside my head. And I can't leave a rough tool alone; when a structure doesn't quite work, I keep polishing it until it does. clock-in is the scaffolding I built to run AI agents without dropping threads: the checks, the shared memory, the one place where whatever needs me shows up.
-
-Build for a mind that needs structure to stay on track, and you get something steadier for everyone. That's clock-in.
-
----
-
-## What it's like to work with it
-
-You say what you want, in plain words. The manager drafts a plan and runs it past you. Once you're happy, the specialists do the work and check each other's output — and you get a short, clear report of what changed.
-
-Founder-mode means you're never boxed out: drop in on any specialist directly, hash something out, and it catches the manager up afterwards. You keep full control even as the work grows past what you could hold in your head.
+Say what you want, in plain words. The manager drafts a plan and runs it past you; once you're happy, the specialists build while checking each other's output, and you get a short, clear report of what changed.
 
 <p align="center">
   <img src="docs/assets/loop.png" width="820"
        alt="Specialist teammates reporting their finished work up to the manager for an independent re-check.">
 </p>
-<p align="center"><sub>The team in motion — specialists do the work and report up, each result waiting on an independent check before it counts as done.</sub></p>
+<p align="center"><sub>The team in motion: specialists report up, and every result waits on an independent check before it counts.</sub></p>
 
-Leave it running and come back to a **one-glance summary of what shipped, what's queued, and what needs your decision** — so a long unattended run doesn't turn into an archaeology dig.
+You're never boxed out. Founder mode means you can drop in on any specialist directly, hash something out, and the manager gets caught up afterwards. Full control, even when the work outgrows what you could hold in your head.
+
+Leave it running overnight and you come back to a one-glance summary of **what shipped, what's queued, and what needs your decision**, instead of an archaeology dig.
 
 <p align="center">
   <img src="docs/assets/brief-example.png" alt="A one-glance morning brief: what shipped, what's queued, and what needs the Boss." width="620">
 </p>
-<p align="center"><sub>Wake up to the state of the run — shipped · queued · needs-you — instead of scrolling back through the night.</sub></p>
+<p align="center"><sub>Wake up to the state of the run (shipped · queued · needs-you) instead of scrolling back through the night.</sub></p>
 
 ---
 
@@ -88,9 +83,9 @@ Leave it running and come back to a **one-glance summary of what shipped, what's
 
 ### You'll need
 
-- **Claude Code with Agent Teams enabled** — the whole thing runs on teammates.
-- **Python 3** — standard library only, nothing to `pip install`.
-- **A git repo** (recommended) — the team commits as it goes, so you can always see and trust the history.
+- **Claude Code with Agent Teams enabled.** The whole thing runs on teammates.
+- **Python 3.** Standard library only, nothing to `pip install`.
+- **A git repo** (recommended). The team commits as it goes, so the history is always yours to check.
 
 Turn on Agent Teams in your Claude Code `settings.json`:
 
@@ -105,31 +100,39 @@ Turn on Agent Teams in your Claude Code `settings.json`:
 /plugin install clock-in@mycompany
 ```
 
-Then restart Claude Code. (Everything wires itself up on enable — no extra setup.)
+Then restart Claude Code. Everything wires itself up on enable; no extra setup.
 
 ### Start
 
-Open a project and just say **"clocking in"** (or 「开始上班」). The first time, it sets up the team your project needs and asks you to restart so everything loads; after that it picks up right where you left off.
+Open a project and just say **"clocking in"** (or 「开始上班」). The first time, it sets up the team your project needs and asks for one restart so everything loads; after that it picks up right where you left off.
 
 > [!TIP]
-> **Skip it for small stuff.** A one-file tweak doesn't need a company — just ask Claude directly. clock-in earns its keep on multi-part work.
+> **Skip it for small stuff.** A one-file tweak doesn't need a company; just ask Claude directly. clock-in earns its keep on multi-part work.
 
 ---
 
 ## Good to know
 
 > [!WARNING]
-> **Actively evolving.** It works — I use it daily — but expect rough edges.
+> **Actively evolving.** It works (I use it daily), but expect rough edges.
 >
-> - **The way it works is still being refined** (see the [CHANGELOG](CHANGELOG.md) for what's changed release to release).
-> - **Not yet cost-measured.** The brains/hands split keeps Opus on judgment and cheap models on the legwork, but I haven't yet measured the actual saving, your mileage may vary on different plans.
-> - **Not yet battle-tested** on very large, long-running projects.
+> - The workflow is still being refined ([CHANGELOG](CHANGELOG.md) has the release-to-release story).
+> - Not yet cost-measured: the brains/hands split keeps Opus off the boilerplate, but I haven't measured the actual saving. Mileage varies by plan.
+> - Not yet battle-tested on very large, long-running projects.
+
+---
+
+## Why I built it
+
+My thoughts are jumpy and bursty. I start more threads than I finish, and the ones I don't write down slip away, so I lean hard on structure outside my head. clock-in is that structure, applied to running AI agents: the checks, the shared memory, the one place where whatever needs me shows up.
+
+Build for a mind that needs structure to stay on track, and you get something steadier for everyone.
 
 ---
 
 ## Feedback
 
-A personal experiment, shared in the hope it helps someone and gets better with other eyes. **Issues and PRs are very welcome** — especially concrete reports of where it breaks down on real work.
+A personal experiment, shared in the hope it helps someone and gets better with other eyes. **Issues and PRs are very welcome**, especially concrete reports of where it breaks down on real work.
 
 ## Credits
 
@@ -137,4 +140,4 @@ Inspired by [edict](https://github.com/cft0808/edict) (Tang-dynasty 三省六部
 
 ## License
 
-[MIT](LICENSE) — Lumos, 2026.
+[MIT](LICENSE) · Lumos, 2026.

@@ -325,9 +325,18 @@ def main():
     cmd = argv[0] if argv else ""
     root = project_root()
     if cmd == "set":
-        res = cmd_set(root, _opt(argv, "--dept", "?"), _opt(argv, "--topic", ""),
-                      _opt(argv, "--file", ""), parse_cell_list(_opt(argv, "--affects", "")))
-        print("%s %s" % (res["action"], _opt(argv, "--topic", "")))
+        topic, file = _opt(argv, "--topic", ""), _opt(argv, "--file", "")
+        if not topic or not file:
+            # Positional args ("set faq-content docs/x.md") match no flag, so both
+            # lookups came back empty and fell through to a garbage row with an empty
+            # topic — silently (field report 2026-07-11). Refuse loudly instead.
+            sys.stderr.write("set is flags-only — need --topic and --file:\n"
+                             "  orchestrate-canon set --dept <handle> --topic <topic>"
+                             " --file <path|DECISIONS> [--affects a,b]\n")
+            sys.exit(2)
+        res = cmd_set(root, _opt(argv, "--dept", "?"), topic, file,
+                      parse_cell_list(_opt(argv, "--affects", "")))
+        print("%s %s" % (res["action"], topic))
     elif cmd == "get":
         print(cmd_get_display(root, argv[1] if len(argv) > 1 else ""))
     elif cmd == "list":

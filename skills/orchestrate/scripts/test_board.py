@@ -1,4 +1,4 @@
-import os, sys, json, tempfile, time, subprocess, unittest
+import contextlib, io, os, sys, json, tempfile, time, subprocess, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import board
 
@@ -393,6 +393,28 @@ class SurfaceOpen(unittest.TestCase):
             self.assertEqual(len(opened), 1)
         finally:
             self._restore(saved)
+
+
+class AddCliGuard(unittest.TestCase):
+    def test_positional_add_exits_loud_instead_of_empty_card(self):
+        # Same flags-only foot-gun as canon.py `set`: positional text matches no
+        # flag and an empty card would post under the default dept.
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            argv, cwd = sys.argv, os.getcwd()
+            sys.argv = ["board.py", "add", "need a decision on pricing"]
+            os.chdir(d)
+            err = io.StringIO()
+            try:
+                with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+                    board.main()
+            finally:
+                sys.argv = argv
+                os.chdir(cwd)
+            self.assertEqual(cm.exception.code, 2)
+            self.assertIn("--text", err.getvalue())
+            self.assertFalse(os.path.exists(os.path.join(d, board.STORE_REL)))
 
 
 if __name__ == "__main__":

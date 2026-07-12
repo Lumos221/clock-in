@@ -851,8 +851,16 @@ def main():
     cmd = argv[0] if argv else "open"
     root = project_root()
     if cmd == "add":
+        text = _opt(argv, "--text", "")
+        if not text.strip():
+            # Positional args match no flag → an empty card would post (same
+            # flags-only foot-gun as canon.py `set`). Refuse loudly instead.
+            sys.stderr.write("add is flags-only — need --text:\n"
+                             "  orchestrate-board add --dept <handle> --kind <needs|discuss>"
+                             " --text \"...\" [--task <id>]\n")
+            sys.exit(2)
         e = board_add(root, _opt(argv, "--dept", "Boss"),
-                      _opt(argv, "--kind", "needs"), _opt(argv, "--text", ""),
+                      _opt(argv, "--kind", "needs"), text,
                       _opt(argv, "--task"))
         print(e["id"])
     elif cmd == "done":
