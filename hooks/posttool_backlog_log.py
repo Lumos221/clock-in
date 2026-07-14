@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """PostToolUse hook — on a task's `completed` transition: (1) retire its 审查-pass
 marker, (2) auto-append the finished task to docs/BACKLOG.md, (3) refresh the
-machine-owned *Recently shipped* block on docs/TaskBoard.md. Mechanical
-task-logging: no agent has to remember to run a script, and the CEO no longer
-hand-copies shipped lines between the two files.
+machine-owned *Recently shipped* block on docs/TaskBoard.md, (4) retire the card
+itself from `## Active` (only when its `task_id` field is exactly this one id —
+shared multi-id cards are never touched; see hooklib). Mechanical task-logging:
+no agent has to remember to run a script, and the CEO no longer hand-copies
+shipped lines between the two files or hand-deletes done cards.
 
 The pass retirement closes a gate hole: platform task ids are small integers that
 restart with each session, while docs/reviews/ persists — an unconsumed `<id>.pass`
@@ -172,6 +174,15 @@ def main():
     try:
         update_shipped(tb, "- %s · #%s · %s · %s · %s"
                        % (today, task_id, dept or "—", name or "—", sha or "—"))
+    except Exception:
+        pass
+    try:
+        # card retirement happens HERE, after the card was read for dept/name and the
+        # shipped line landed — never in the sync hook, which would race this one.
+        text = open(tb, encoding="utf-8").read()
+        out = hooklib.tb_remove_card(text, task_id)
+        if out is not None:
+            hooklib.tb_write(tb, out)
     except Exception:
         pass
 

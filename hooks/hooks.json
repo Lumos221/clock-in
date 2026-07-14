@@ -27,6 +27,12 @@
         "hooks": [
           { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/posttool_backlog_log.py" }
         ]
+      },
+      {
+        "matcher": "TaskCreate|TaskUpdate",
+        "hooks": [
+          { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/posttool_task_sync.py" }
+        ]
       }
     ],
     "Stop": [

@@ -2,7 +2,7 @@
 """Shared helpers for this plugin's hooks — the logic every hook was duplicating
 (project-root walk, transcript reading, marker-miss logging) lives once, here.
 Importable from a hook (same dir) or a test (sys.path.insert). No side effects."""
-import os, json
+import os, re, json
 from datetime import datetime
 
 
@@ -48,6 +48,99 @@ def last_assistant_text(transcript_path):
                              if isinstance(b, dict) and b.get("type") == "text")
         return ""
     return ""
+
+
+# ---------------------------------------------------------------- TaskBoard surgery
+# Shared by the task-sync hook (card birth + status mirror) and the completion hook
+# (card retirement). Every mutator keys on a `**task_id:**` field that cleans to
+# EXACTLY one id: real boards grow shared cards ("task_id:** 6 规格 · 7 build") and
+# prose statuses — surgery on a card this code only half-understands would destroy
+# the other tasks' record, so anything ambiguous is left alone (caller gets None).
+
+def tb_clean(v):
+    """Field value → semantic value: placeholders (`<...>`, `—`, backticks) → ''."""
+    v = (v or "").strip().strip("`").strip()
+    return "" if (not v or v.startswith("<") or v == "—") else v
+
+
+def tb_card_spans(text):
+    """[(start, end)] of every `### ` card block — heading line up to the next
+    `##`/`###` heading or EOF. Line-scanner, not regex: card bodies are free prose."""
+    spans, cur, pos = [], None, 0
+    for ln in (text or "").splitlines(keepends=True):
+        if ln.startswith("### ") or ln.startswith("## "):
+            if cur is not None:
+                spans.append((cur, pos))
+                cur = None
+            if ln.startswith("### "):
+                cur = pos
+        pos += len(ln)
+    if cur is not None:
+        spans.append((cur, len(text or "")))
+    return spans
+
+
+def tb_card_span(text, task_id):
+    """Span of the card whose task_id field is exactly `task_id`, else None."""
+    for a, b in tb_card_spans(text):
+        m = re.search(r"\*\*task_id:\*\*\s*([^\n]*)", text[a:b])
+        if m and tb_clean(m.group(1)) == str(task_id):
+            return (a, b)
+    return None
+
+
+def tb_remove_card(text, task_id):
+    """Text minus that card's whole block; None when no unambiguous match."""
+    span = tb_card_span(text, task_id)
+    if not span:
+        return None
+    a, b = span
+    return text[:a] + text[b:]
+
+
+def tb_set_field_at(text, span, field, value):
+    """Set `- **field:** value` inside the card at `span`; a card missing the field
+    line gains it right under the heading. Returns new text."""
+    a, b = span
+    block = text[a:b]
+    new_block, n = re.subn(r"(\*\*%s:\*\*)[ \t]*[^\n]*" % re.escape(field),
+                           lambda m: "%s %s" % (m.group(1), value), block, count=1)
+    if not n:
+        lines = block.splitlines(keepends=True)
+        lines.insert(1, "- **%s:** %s\n" % (field, value))
+        new_block = "".join(lines)
+    return text[:a] + new_block + text[b:]
+
+
+def tb_set_field(text, task_id, field, value):
+    """Set a field on the exactly-matching card; None when no unambiguous match."""
+    span = tb_card_span(text, task_id)
+    if not span:
+        return None
+    return tb_set_field_at(text, span, field, value)
+
+
+def tb_append_card(text, card_md):
+    """Append a card at the END of the `## Active` section (before the next `##`
+    heading); a board without one gains it at EOF. Returns new text."""
+    card = card_md.rstrip() + "\n"
+    m = re.search(r"(?m)^##\s+Active[^\n]*\n", text or "")
+    if not m:
+        base = (text or "").rstrip()
+        return (base + "\n\n" if base else "") + "## Active\n\n" + card
+    nxt = re.search(r"(?m)^##\s", text[m.end():])
+    cut = m.end() + nxt.start() if nxt else len(text)
+    before = text[:cut].rstrip("\n") + "\n\n"
+    after = text[cut:]
+    return before + card + ("\n" + after if after else "")
+
+
+def tb_write(path, text):
+    """Atomic replace — hooks race panes editing the board; no torn reads."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
 
 
 def log_marker_misses(root, channel, misses):

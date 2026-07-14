@@ -133,6 +133,21 @@ class EndToEnd(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(d, "docs", "reviews", "archive", "3.pass")))
             board = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
             self.assertIn("· #3 · RnD · login form ·", board)   # shipped line hook-written
+            self.assertNotIn("### TASK-001", board)             # card retired from Active
+
+    def test_completion_leaves_multi_id_cards_alone(self):
+        """A shared card ("task_id:** 6 规格 · 7 build") must survive one of its ids
+        completing — surgery on a half-understood card would destroy the others."""
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            os.makedirs(os.path.join(d, "docs", "reviews"))
+            shared = TASKBOARD.replace("task_id:** 3", "task_id:** 3 spec · 7 build")
+            with open(os.path.join(d, "docs", "TaskBoard.md"), "w") as f:
+                f.write(shared)
+            open(os.path.join(d, "docs", "reviews", "3.pass"), "w").write("ok")
+            _run_hook(d)
+            board = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
+            self.assertIn("### TASK-001", board)  # card kept
 
     def test_non_completed_and_inactive_are_noops(self):
         with tempfile.TemporaryDirectory() as d:

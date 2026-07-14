@@ -4,7 +4,45 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
-## [Unreleased]
+## [0.9.0] — 2026-07-14
+### Added
+- **TaskBoard.md now follows the platform task widget** (field report: "TaskBoard.md constantly
+  got stale, and tasks are messier without taskwidget created"). The widget is system-level —
+  its schemas ship in the harness and task state is re-injected as reminders — so it is the
+  channel that actually gets followed; the markdown stays the durable, git-diffable, hook-readable
+  layer. New `posttool_task_sync.py` (PostToolUse on `TaskCreate|TaskUpdate`): `TaskCreate`
+  **births the card** with `task_id` pre-filled (a hand-written card with a matching name is
+  filled, not duplicated; a stale card holding a recycled id is detached with a trace in
+  `marker-misses.log`); `TaskUpdate` mirrors `pending→todo` / `in_progress→doing` and fills an
+  empty `dept` from `owner` (the CLI's `TaskCreate` takes no owner — assignment happens at
+  dispatch via `TaskUpdate`, verified against the 2.1.206 binary); a `deleted`/`cancelled`
+  task retires its card (forward-proofing — the current status enum ends at `completed`). The completion hook
+  now also **deletes the card** on `completed` (was a manual CEO step — the top staleness source).
+  All card surgery keys on a `task_id` field that is exactly one id — shared multi-id cards and
+  prose the hook only half-understands are never touched. Session start flags Active cards that
+  carry no `task_id`. CEO contract updated in `SKILL.md` §2.4/§2.6/§2.7 + the TaskBoard template;
+  dept flow unchanged (depts still own their card's fine states — `review`/`blocked` stay prose).
+
+### Added (bloat sentinel)
+- **Token-free file-discipline sentinel at session start.** One-off housekeeping doesn't hold:
+  prose caps (SoT ~15 lines · cards are pointers) rot silently between cleanups. The
+  session-start hook now re-measures every session and flags violations — SoT over ~20
+  non-empty lines / 2k chars, any Active card block over ~1.2k chars (named), plus the
+  existing unregistered-cards flag. Detection only, zero tokens when clean, one line per
+  violation until fixed; the hook never truncates CEO prose. Dept brief gains the matching
+  rule: card `status` is ONE line, history goes to reports/DECISIONS. New
+  `hooks/test_session_start.py` (5 tests).
+
+### Changed
+- **Orchestrate spine diet** (field report: sessions loaded 80k+ before real work; the skill's
+  wholesale-loaded SKILL.md was ~28.4k chars). Progressive disclosure pass: activation/adoption
+  + closeout ritual → `reference/activate.md`, task-widget contract + sync-hook behaviour →
+  `reference/task-widget.md`, spawn syntax/lifecycle/experts/Workflow/model-routing detail →
+  `reference/teammates.md`, morning-brief command → `reference/meetings.md` (it already held the
+  field shapes). SKILL.md lands at ~20.9k chars (−26%, ≈2.5k tokens per invoke) with **every rule
+  and every section number kept** — external references (§2.3/§2.6 from recruit, §4 from
+  meetings, "Files") stay valid; only procedural detail moved behind pointers.
+
 ### Fixed
 - **`canon.py set` silently registered garbage on positional args** (field report 2026-07-11:
   a hand-registration of `faq-content` produced an empty-topic row and printed "created").
