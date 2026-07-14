@@ -4,6 +4,21 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.2] — 2026-07-14
+### Fixed
+- **Registrar reported the widget missing — its own `tools:` allowlist was starving it.**
+  First real-use spawn (refcheck) found no task tools on haiku, where they demonstrably exist.
+  Root cause (probe-verified + transcript-verified): a teammate's allowlist filters its ENTIRE
+  tool surface, including ToolSearch and the deferred registry — the platform docs' "task tools
+  are always available to a teammate even when `tools` restricts other tools" does not hold
+  under deferred tool loading. A sibling probe with a restricted list lost ToolSearch and even
+  SendMessage (its report was composed but never delivered). The template now names
+  TaskCreate/TaskUpdate/TaskList/TaskGet explicitly, and the spawn step **verifies by doing**
+  (call TaskList once) instead of trusting a ToolSearch miss — robust whether the tools arrive
+  direct or deferred. Fix in a live project: re-copy the template over
+  `.claude/agents/Registrar.md`, restart the CEO pane (agent files load at session start),
+  respawn the Registrar.
+
 ## [0.9.1] — 2026-07-14
 ### Added
 - **书记处 Registrar — the task widget for widget-gated sessions.** Field finding: the platform
