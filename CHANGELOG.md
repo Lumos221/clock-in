@@ -4,6 +4,50 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.3] — 2026-07-15
+### Fixed
+- **Tombstone cards garbled the panel's Todo column.** Field case (refcheck): during the
+  widget-gated era the CEO closed finished cards by striking the heading
+  (`### ~~LABEL~~ ALL SHIPPED …`) — the parser split the heading at the first `·`
+  (mid-strike), the renderer had no `~~` support, the label chip was escape-only, and
+  status-less cards defaulted into Todo. Now a struck/closure-worded heading with no
+  status field files as **done** (`TOMB_RE`); `md()` renders `~~strike~~` and strips
+  unpaired markers; the label chip renders markdown; hook-born cards drop the redundant
+  `#id · #id` chip; `·`-less headings no longer print the same text twice. The
+  session-start sentinel now prescribes **delete** (not register-via-TaskCreate) for
+  id-less tombstones — the register advice would re-register shipped work, so CEOs
+  rightly ignored it and the tombstones rotted.
+### Added
+- **DECISIONS lookup/impl discipline — template field + token-free sentinels.** Field
+  causes (refcheck CEO self-diagnosis): settled questions answered from principles
+  instead of the log; rulings "queued" in prose that never became cards (silent loss —
+  the dead behaviour re-teaches the dead design); code outliving decisions. Every
+  behaviour-changing entry now carries `**Impl:**` — `#<card>` · `parked: <why>` ·
+  `none-needed`; a superseding ruling's card must name the removal of the old path.
+  Session start flags tagged `[topic-key]` entries with no CANON row and recent (≤7 d)
+  entries missing **Impl**, and injects the settled-question rule every session
+  (`orchestrate-canon get <topic>` + grep DECISIONS **before** stating what's
+  allowed/designed/settled) instead of leaving it to one session's memory. Closeout
+  ritual gains a decision-implementation gap audit (every ruling swept against live
+  code; each gap becomes a card or an explicit park).
+- **Clickable file paths on the panel.** Asks and cards constantly carry artifact paths
+  (render mockups, review files) that the Boss had to hunt down by hand. Project-relative
+  paths with an extension now render as links onto a new daemon endpoint `/file?p=…`;
+  images/PDF display inline, everything else ships as `text/plain` (never an executable
+  type — html/svg could script in the board's origin). Guards: relative paths only,
+  realpath pinned under the checkout (kills `..`/symlink escapes). A miss in the main
+  checkout falls through to the repo's **linked worktrees** — pre-merge renders (the
+  exact "your eyeball before L2/merge" case) live only in a dept pane's worktree; the
+  main checkout wins when both have the file. URLs are never mistaken for paths; a link
+  click doesn't toggle its row.
+- **Needs-you readability for essay asks.** Field case (refcheck CEO-89, 800+ chars):
+  boss-board.md's decidable-ask rule (question · options · recommendation, 1–2 lines)
+  is prose, and prose rots. Panel side: an expanded ask now breaks at clause
+  enumerators (①…⑳ — inline references like "chain ①②③④" stay intact) and gets
+  looser leading + a gap before the meta line. Root-cause side: a session-start
+  sentinel flags open asks over 280 chars (id + size) with the re-raise prescription
+  (`@BOSS-DONE[<old-id>]` + decidable one-liner, detail → file/card).
+
 ## [0.9.2] — 2026-07-14
 ### Fixed
 - **Registrar reported the widget missing — its own `tools:` allowlist was starving it.**

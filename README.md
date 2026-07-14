@@ -24,14 +24,14 @@ before anything counts as done, and one live board where everything that needs *
   <img src="docs/assets/boss-board.png" width="760"
        alt="The Boss Board: questions waiting on your decision, each linked to its task, above a live kanban of the current iteration.">
 </p>
-<p align="center"><sub>The Boss Board: every question waiting on <em>your</em> call, with the context to decide it, above a live view of the current iteration. It opens itself, updates itself, and never lets a thread sink.</sub></p>
+<p align="center"><sub>The Boss Board: every question waiting on <em>your</em> call, with the context to decide it, above a live view of the current iteration. It opens itself, updates itself, and never lets a thread sink. Every file path on it is a link.</sub></p>
 
 ---
 
 ## What it does
 
 - **Makes "done" mean done.** Nothing is marked finished until an independent reviewer has approved the plan *and* the result. Quality comes from the structure, not from one model marking its own homework.
-- **Puts everything that needs you in one place.** Asks land on the Boss Board with what you need to decide on the spot: the question, the options, a recommendation. Nothing scrolls past you mid-transcript.
+- **Puts everything that needs you in one place.** Asks land on the Boss Board with what you need to decide on the spot: the question, the options, a recommendation. Any file an ask mentions is one click away, so a "your eyeball on this render" ask opens the render itself, even when it only exists in a teammate's worktree before merge. Nothing scrolls past you mid-transcript.
 - **Stops stuck work early.** A task that keeps bouncing gets pulled out of the rework loop and diagnosed; if it's still stuck after that, it comes to you as a decision, not a surprise.
 - **Keeps a shared memory.** Decisions and settled answers are written where every teammate reads them, so nothing settled gets re-litigated or quietly contradicted as the project grows.
 - **Watches the watchers.** An independent inspector audits the whole team, including the manager, and answers only to you.

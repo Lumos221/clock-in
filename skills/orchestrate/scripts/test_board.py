@@ -213,6 +213,40 @@ prose line, not a row
         self.assertEqual(board.parse_taskboard("/nonexistent/TaskBoard.md"),
                          {"tasks": [], "shipped": []})
 
+    def test_struck_tombstone_heading_parses_as_done(self):
+        """Field case (refcheck 07-14): finished cards hand-closed by striking the
+        heading (`### ~~LABEL~~ ALL SHIPPED …`, no status field) garbled the panel's
+        Todo column. A tombstone heading must file as done, not status-less."""
+        BOARD = ("# real · TaskBoard\n\n## Active\n\n"
+                 "### ~~FE-BATCH1~~ ALL SHIPPED 07-14 (detail = BACKLOG) — card closes.\n"
+                 "- **Vitest mystery CLOSED:** 45 DB-gated skips explained.\n\n"
+                 "### ~~COPY-SWEEP · ZH-SWEEP~~ RETIRED 07-14 (superseded)\n\n"
+                 "### LIVE-01 · genuinely new hand card\n"
+                 "- **status:** todo\n")
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "TaskBoard.md")
+            open(p, "w", encoding="utf-8").write(BOARD)
+            tb = board.parse_taskboard(p)
+            self.assertEqual([t["status"] for t in tb["tasks"]], ["done", "done", "todo"])
+
+    def test_explicit_status_field_beats_tombstone_heading(self):
+        BOARD = ("# t · TaskBoard\n\n## Active\n\n"
+                 "### ~~REOPENED~~ SHIPPED too early\n- **status:** doing\n")
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "TaskBoard.md")
+            open(p, "w", encoding="utf-8").write(BOARD)
+            self.assertEqual(board.parse_taskboard(p)["tasks"][0]["status"], "doing")
+
+    def test_lowercase_closure_words_are_not_tombstones(self):
+        """Live card names legitimately contain 'shipped'/'done-when' in prose —
+        only SHOUTED closure words / strike marks / 'card closes' mean a tombstone."""
+        BOARD = ("# t · TaskBoard\n\n## Active\n\n"
+                 "### T-3 · polish the shipped-list and done-when copy\n")
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "TaskBoard.md")
+            open(p, "w", encoding="utf-8").write(BOARD)
+            self.assertEqual(board.parse_taskboard(p)["tasks"][0]["status"], "")
+
     def test_field_layout_shipped_first_and_prose_statuses(self):
         """Regression against a real board (refcheck): Recently-shipped ABOVE Active
         (positional split returned 0 tasks), prose status lines, and non-card bullets
@@ -239,6 +273,64 @@ prose line, not a row
             self.assertEqual(tb["tasks"][0]["task_id"], "2")
             self.assertEqual(tb["tasks"][1]["task_id"], "")          # "—" normalised
             self.assertEqual(tb["shipped"], ["#82 · QA · smoke suite green"])  # bounded to its section
+
+
+class FileServe(unittest.TestCase):
+    """resolve_file guards the panel's /file endpoint: project files only (no
+    traversal, no symlink escape), inline-viewable types whitelisted, everything
+    else text/plain so nothing active ever runs in the board's origin."""
+
+    def test_project_relative_png_and_cjk_path(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "docs", "营销"))
+            open(os.path.join(d, "docs", "营销", "渲染.png"), "wb").write(b"x")
+            full, ctype = board.resolve_file(d, "docs/营销/渲染.png")
+            self.assertEqual(ctype, "image/png")
+            self.assertTrue(full.endswith("渲染.png"))
+
+    def test_text_and_active_types_serve_as_plain(self):
+        with tempfile.TemporaryDirectory() as d:
+            for name in ("a.md", "b.html", "c.svg"):
+                open(os.path.join(d, name), "w").write("hi")
+                self.assertEqual(board.resolve_file(d, name)[1],
+                                 "text/plain; charset=utf-8")
+
+    def test_traversal_absolute_and_missing_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertIsNone(board.resolve_file(d, "../../etc/hosts"))
+            self.assertIsNone(board.resolve_file(d, "/etc/hosts"))
+            self.assertIsNone(board.resolve_file(d, "docs/nope.png"))
+            self.assertIsNone(board.resolve_file(d, ""))
+
+    def test_symlink_escaping_root_rejected(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile() as out:
+            os.symlink(out.name, os.path.join(d, "sneaky.png"))
+            self.assertIsNone(board.resolve_file(d, "sneaky.png"))
+
+    def test_falls_back_to_linked_worktrees(self):
+        """Field case (refcheck CEO-89): pre-merge renders live only in a dept pane's
+        worktree — exactly what the Boss is asked to eyeball. A miss in the main
+        checkout must fall through to the repo's linked worktrees."""
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            main, wt = os.path.join(d, "main"), os.path.join(d, "wt")
+            os.makedirs(main)
+            run = lambda *a: subprocess.run(a, cwd=main, capture_output=True, check=True)
+            run("git", "init", "-q", ".")
+            run("git", "-c", "user.email=t@t", "-c", "user.name=t",
+                "commit", "-q", "--allow-empty", "-m", "root")
+            run("git", "worktree", "add", "-q", wt, "-b", "pane")
+            os.makedirs(os.path.join(wt, "docs", "mockups"))
+            open(os.path.join(wt, "docs", "mockups", "v5.png"), "wb").write(b"x")
+            got = board.resolve_file(main, "docs/mockups/v5.png")
+            self.assertIsNotNone(got)
+            self.assertEqual(got[1], "image/png")
+            self.assertTrue(got[0].startswith(os.path.realpath(wt)))
+            # main checkout wins when both have the file
+            os.makedirs(os.path.join(main, "docs", "mockups"))
+            open(os.path.join(main, "docs", "mockups", "v5.png"), "wb").write(b"y")
+            self.assertTrue(board.resolve_file(main, "docs/mockups/v5.png")[0]
+                            .startswith(os.path.realpath(main)))
 
 
 class ConcurrencySafety(unittest.TestCase):

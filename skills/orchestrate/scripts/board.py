@@ -193,6 +193,11 @@ def _section(text, title):
 
 
 STATUS_RE = re.compile(r"\b(todo|doing|review|blocked|done)\b", re.I)
+# Hand-struck "tombstone" headings — a finished card closed by striking the heading
+# instead of TaskUpdate→completed (field case: refcheck 07-14; such cards have no
+# status field and would garble the Todo column). SHOUTED closure words only: live
+# card names legitimately contain lowercase "shipped"/"done-when".
+TOMB_RE = re.compile(r"~~|\b(?:SHIPPED|RETIRED)\b|card closes")
 
 
 def parse_taskboard(path):
@@ -220,9 +225,12 @@ def parse_taskboard(path):
             return clean(m.group(1)) if m else ""
 
         sm = STATUS_RE.search(field("status"))
+        status = sm.group(1).lower() if sm else ""
+        if not status and TOMB_RE.search(head):
+            status = "done"  # tombstone heading, no status field → file as done, not Todo
         tasks.append({"label": clean(label) or head, "name": clean(name) or clean(label),
                       "dept": field("dept"), "task_id": field("task_id"),
-                      "status": sm.group(1).lower() if sm else "",
+                      "status": status,
                       "blocked_on": field("blocked_on"), "what": field("what")})
     shipped = []
     m = re.search(r"<!-- SHIPPED:START -->(.*?)<!-- SHIPPED:END -->", text, re.S)
@@ -481,7 +489,9 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
 .k-discuss { background: #6e8ca8; }
 .rc { flex: 1; min-width: 0; }
 .rt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.row.x .rt { -webkit-line-clamp: unset; }
+/* expanded essays need air: looser leading + a gap before the meta line */
+.row.x .rt { -webkit-line-clamp: unset; line-height: 1.55; }
+.row.x .rm { margin-top: 6px; }
 .rm { font-size: .68rem; color: #87867f; margin-top: 2px; }
 .rm b { color: #6b6a62; font-weight: 600;
         font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .95em; }
@@ -501,6 +511,10 @@ html.dark .glyph { color: #6f6d66; }
 .chip b { font-variant-numeric: tabular-nums; }
 code { font: .85em ui-monospace, "SF Mono", Menlo, monospace;
        background: #eae6d9; border-radius: 4px; padding: 0 4px; }
+/* file-path links (served by /file) — quiet accent, long paths wrap anywhere */
+a { color: #a2542f; text-decoration: underline; text-decoration-color: rgba(193,95,60,.4);
+    text-underline-offset: 2px; overflow-wrap: anywhere; }
+a:hover { text-decoration-color: #c15f3c; }
 b { font-weight: 600; }
 .t .nm, .t .sub { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .t .nm { -webkit-line-clamp: 2; }
@@ -561,6 +575,8 @@ html.dark .rm b, html.dark .t .tid { color: #c2c0b6; }
 html.dark .count { background: #3e3d3a; color: #b8b5ac; }
 html.dark .chip { border-color: #4a4945; color: #b8b5ac; }
 html.dark code { background: #3e3d3a; }
+html.dark a { color: #e08262; text-decoration-color: rgba(224,130,98,.4); }
+html.dark a:hover { text-decoration-color: #e08262; }
 html.dark .badge.blocked { background: #4a2a20; color: #e08262; }
 html.dark .badge.review { background: #3a3050; color: #c4b3e8; }
 html.dark [data-k]:focus-visible { outline-color: #d97757; }
@@ -597,13 +613,25 @@ const VER = %s;  // page generation — a version change from the server hot-rel
 // unescaped they'd be an HTML injection straight into the Boss's panel.
 function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 // Minimal markdown AFTER escaping (order matters — esc first keeps the XSS guarantee):
-// **bold** and `code` are what markers/cards actually use. A leftover unpaired ** —
-// panes use "** " as a bullet — is stripped rather than shown literally.
+// **bold**, `code` and ~~strike~~ (hand-struck tombstone headings) are what markers/
+// cards actually use. Leftover unpaired markers — panes use "** " as a bullet — are
+// stripped rather than shown literally.
+// Project-relative file paths (asks constantly carry mockup/review paths) become
+// links onto the daemon's /file endpoint, so the Boss clicks instead of hunting in
+// Finder. Needs a slash + an extension; a preceding char outside the path charset
+// (or start) anchors it, so URL innards (host/a.png) never match; trailing
+// punctuation stays outside via the \b. stopPropagation keeps a link click from
+// toggling the row/card it sits in.
+function paths(h){
+  return h.replace(/(^|[^\w.\-\/一-鿿])((?:[\w.\-一-鿿]+\/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5})\b/g,
+    (m,pre,p)=>pre+`<a href="/file?p=${encodeURIComponent(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${p}</a>`);
+}
 function md(s){
-  return esc(s).replace(/^\*\*\s+/,'')                       // "** " used as a bullet, not bold
+  return paths(esc(s).replace(/^\*\*\s+/,'')                 // "** " used as a bullet, not bold
                .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+               .replace(/~~([^~]+)~~/g,'<s>$1</s>')
                .replace(/`([^`]+)`/g,'<code>$1</code>')
-               .replace(/\*\*/g,'');
+               .replace(/\*\*|~~/g,''));
 }
 // Expanded cards must survive the poll re-render (each tick used to rebuild the DOM
 // and instantly re-collapse whatever the Boss had just clicked open).
@@ -634,7 +662,7 @@ const ICONS = {
   inbox: `<svg width="42" height="42" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.9 10.2 4 24v12a4 4 0 0 0 4 4h32a4 4 0 0 0 4-4V24l-6.9-13.8A4 4 0 0 0 33.5 8h-19a4 4 0 0 0-3.6 2.2z"/><polyline points="4 24 16 24 20 30 28 30 32 24 44 24"/></svg>`,
 };
 function chip(t){
-  return `<span class="chip"><b>${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</b> · ${esc(t.name)} · ${esc(t.status||'?')}</span>`;
+  return `<span class="chip"><b>${md(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</b> · ${md(t.name)} · ${esc(t.status||'?')}</span>`;
 }
 function askRow(e, T, ts){
   // Context for the decision: the explicitly linked task first; else the dept's
@@ -642,10 +670,15 @@ function askRow(e, T, ts){
   let linked = (e.task && T.byId[e.task]) ? [T.byId[e.task]]
     : T.list.filter(t=>t.dept===e.dept && ['doing','review','blocked'].includes(t.status)).slice(0,2);
   const a = age(ts || e.created);
+  // Long asks enumerate with circled digits (① button label… ② the view… ③ the N…) —
+  // break each onto its own line so the expanded wall scans as a list. The lookahead
+  // keeps inline REFERENCES ("chain ①②③④ COMPLETE") intact: only a digit that starts
+  // a clause (preceded by space, not followed by another digit) breaks.
+  const rt = md(e.text).replace(/\s([①-⑳])(?![①-⑳])/g,'<br>$1');
   return `<div class="row${xc(e.id)}" data-k="${esc(e.id)}" tabindex="0" onclick="tog(this)">
     <span class="dot2 k-${esc(e.kind)}"></span>
     <div class="rc">
-      <div class="rt">${md(e.text)}</div>
+      <div class="rt">${rt}</div>
       <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
       <div class="rx">${linked.map(chip).join('')}</div>
     </div>
@@ -656,10 +689,13 @@ function tCard(t){
       ? `<span class="badge blocked">blocked${t.blocked_on?': '+esc(t.blocked_on):''}</span>`
       : t.status==='review' ? `<span class="badge review">review</span>` : '';
   // Long card bodies clamp to a few lines; click a card to expand it. The s-<status>
-  // class gives blocked/review cards their coloured undershade.
+  // class gives blocked/review cards their coloured undershade. Hook-born cards have
+  // label "#<id>" (skip the redundant id chip) and ·-less headings parse label===name
+  // (skip the redundant body line) — show each fact once.
   const k = 't:' + t.label + '#' + (t.task_id||'');
-  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${esc(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</span>${badge}
-    <div class="nm">${md(t.name)}</div>
+  const id = t.task_id && t.label !== '#'+t.task_id ? ` · #`+esc(t.task_id) : '';
+  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${md(t.label)}${id}</span>${badge}
+    ${t.name && t.name !== t.label ? `<div class="nm">${md(t.name)}</div>` : ''}
     <div class="sub">${esc(t.dept)}${t.what?` · `+md(t.what):''}</div></div>`;
 }
 function col(title, color, cls, inner, n){
@@ -739,6 +775,52 @@ tick(); setInterval(tick, POLL);
 </script></body></html>""" % (POLL_MS, json.dumps(BUILD))
 
 
+# Inline-viewable types the browser renders natively. Everything else ships as
+# text/plain — never an executable type: html/svg served from the board's origin
+# could script against the panel (and any future endpoint on it).
+VIEWABLE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf"}
+
+
+def _resolve_under(base, p):
+    """abspath of `p` under `base`, or None. Guards: relative paths only, realpath
+    pinned under base (kills `..` and symlink escapes), regular files only."""
+    if not p or p.startswith(("/", "~")):
+        return None
+    full = os.path.realpath(os.path.join(base, p))
+    baser = os.path.realpath(base)
+    if not full.startswith(baser + os.sep) or not os.path.isfile(full):
+        return None
+    return full
+
+
+def _linked_worktrees(root):
+    """Paths of the repo's linked worktrees (main checkout excluded); [] outside git."""
+    try:
+        out = subprocess.run(["git", "-C", root, "worktree", "list", "--porcelain"],
+                             capture_output=True, text=True, timeout=5).stdout
+        wts = [l.split(" ", 1)[1].strip() for l in out.splitlines()
+               if l.startswith("worktree ")]
+        rootr = os.path.realpath(root)
+        return [w for w in wts if os.path.realpath(w) != rootr]
+    except Exception:
+        return []
+
+
+def resolve_file(root, p):
+    """(abspath, content-type) for a project file the panel may serve, else None.
+    Backs the /file endpoint that makes paths in asks clickable. A miss in the main
+    checkout falls through to the repo's linked worktrees — pre-merge artifacts
+    (renders the Boss is asked to eyeball) live only in a dept pane's worktree. The
+    main checkout wins when both have the file: post-merge, master is the truth."""
+    for base in [root] + _linked_worktrees(root):
+        full = _resolve_under(base, p)
+        if full:
+            return full, VIEWABLE.get(os.path.splitext(full)[1].lower(),
+                                      "text/plain; charset=utf-8")
+    return None
+
+
 def serve(root, port):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
@@ -759,6 +841,22 @@ def serve(root, port):
                 body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path.startswith("/file"):
+                from urllib.parse import urlparse, parse_qs
+                p = parse_qs(urlparse(self.path).query).get("p", [""])[0]
+                got = resolve_file(root, p)
+                if got:
+                    full, ctype = got
+                    body = open(full, "rb").read()
+                else:
+                    body, ctype = ("not found in this project or its worktrees: %s"
+                                   % p).encode("utf-8"), None
+                self.send_response(200 if got else 404)
+                self.send_header("Content-Type", ctype or "text/plain; charset=utf-8")
+                self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(body)
