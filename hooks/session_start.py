@@ -96,9 +96,9 @@ def context_for(root, cfg):
                     "⚠ %d Active card(s) carry no platform task_id (%s). CEO: register each "
                     "via TaskCreate — widget-born tasks stay hook-synced; hand-only cards rot. "
                     "(TaskCreate not loaded? It's deferred — ToolSearch "
-                    "select:TaskCreate,TaskUpdate,TaskList,TaskGet first. Genuinely absent "
-                    "from the registry? This build exposes no widget to this session — skip "
-                    "registration, keep the board by hand; the sync hooks stay dormant, fail-open.)"
+                    "select:TaskCreate,TaskUpdate,TaskList,TaskGet first. Genuinely absent — "
+                    "widget-gated session? Spawn the 书记处 Registrar (.claude/agents/Registrar.md, "
+                    "haiku teammate) and route the task lifecycle through it — reference/task-widget.md.)"
                     % (len(unreg), ", ".join(unreg[:6]) + ("…" if len(unreg) > 6 else "")))
         except Exception:
             pass

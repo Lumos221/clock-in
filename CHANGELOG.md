@@ -4,6 +4,20 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.1] — 2026-07-14
+### Added
+- **书记处 Registrar — the task widget for widget-gated sessions.** Field finding: the platform
+  currently withholds TaskCreate/TaskUpdate/TaskList/TaskGet from interactive sessions on the
+  big models (Sonnet 5 / Fable 5 / Opus 4.8) while Haiku 4.5 sessions keep them — and a **haiku
+  teammate of a gated lead gets the full widget** (verified live: ToolSearch load, TaskList,
+  TaskCreate onto the shared team list). New standing file `templates/registrar.md`: a minimal
+  haiku teammate that proxies the CEO's literal lifecycle commands (`CREATE`/`ASSIGN`/`STATUS`/
+  `COMPLETE`/`LIST`/`GET`), relays failures verbatim (a gate-blocked COMPLETE included — the L2
+  gate keeps enforcing through the proxy), and the 0.9.0 sync hooks fire in its session, so the
+  board stays machine-fresh. CEO spawns it only when its own ToolSearch finds no task tools
+  (session-start flag + SKILL §2.4 route there); recruit installs it as the third standing file.
+  Availability matrix + protocol: `reference/task-widget.md`.
+
 ## [0.9.0] — 2026-07-14
 ### Added
 - **TaskBoard.md now follows the platform task widget** (field report: "TaskBoard.md constantly
