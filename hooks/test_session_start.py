@@ -230,6 +230,57 @@ class Audience(unittest.TestCase):
             self.assertIn("carry no platform task_id", out)     # flags intact
 
 
+class StaleIdDetach(unittest.TestCase):
+    """Platform ids die with the session; stale ones auto-detach to — at session
+    start so the id-less flag takes over (field cause: refcheck CEO journaled
+    '#— (session-1 id retired; re-CREATE at dispatch)' into card headings)."""
+
+    SID = "dddd1111-2222-3333-4444-555566667777"
+
+    def setUp(self):
+        self._env = os.environ.get("CLAUDE_CONFIG_DIR")
+        self.cfg_root = tempfile.mkdtemp()
+        os.environ["CLAUDE_CONFIG_DIR"] = self.cfg_root
+
+    def tearDown(self):
+        if self._env is None:
+            os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        else:
+            os.environ["CLAUDE_CONFIG_DIR"] = self._env
+
+    def _store_task(self, tid):
+        d = os.path.join(self.cfg_root, "tasks", "session-%s" % self.SID[:8])
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "%s.json" % tid), "w") as f:
+            json.dump({"id": str(tid), "status": "in_progress"}, f)
+
+    def test_stale_id_detached_live_id_kept(self):
+        with tempfile.TemporaryDirectory() as d:
+            cards = ("### #7 · dead one\n- **task_id:** 7\n- **status:** todo\n\n"
+                     "### #9 · live one\n- **task_id:** 9\n- **status:** doing\n")
+            _proj(d, cards=cards)
+            self._store_task(9)
+            cfg = json.load(open(os.path.join(d, ".claude", "orchestrate.json")))
+            n = ss.detach_stale_ids(d, cfg, {"session_id": self.SID})
+            self.assertEqual(n, 1)
+            text = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
+            self.assertIn("- **task_id:** —", text)
+            self.assertIn("- **task_id:** 9", text)
+
+    def test_detached_card_then_gets_the_idless_flag(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, cards="### TASK-X · orphan\n- **task_id:** 5\n- **status:** todo\n")
+            cfg = json.load(open(os.path.join(d, ".claude", "orchestrate.json")))
+            ss.detach_stale_ids(d, cfg, {"session_id": self.SID})
+            self.assertIn("carry no platform task_id", ss.context_for(d, cfg))
+
+    def test_no_session_id_or_missing_board_noop(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            cfg = json.load(open(os.path.join(d, ".claude", "orchestrate.json")))
+            self.assertEqual(ss.detach_stale_ids(d, cfg, {}), 0)
+
+
 class Gating(unittest.TestCase):
     def test_inactive_marker_silent(self):
         with tempfile.TemporaryDirectory() as d:

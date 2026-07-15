@@ -24,7 +24,7 @@ The task tools (`TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet`) are Claude
 
 - `TaskCreate(subject, description[, activeForm])` — ONE task per call; born `pending`, **unowned** (there is no owner parameter at creation).
 - `TaskUpdate(taskId, …)` — assign `owner` (= teammate name), set `status` (`pending` / `in_progress` / `completed` — the enum ends there), edit dependencies (`blockedBy`).
-- Task ids are small integers, unique per session team, **restarting each session** — never reuse them across sessions.
+- Task ids are small integers, unique per session team, **restarting each session** — never reuse them across sessions. At session start the hook **auto-detaches** any card whose id names a task absent from this session's store (`task_id` → `—`); the id-less flag then prescribes the re-CREATE. **Never journal id-migration state into card names** — the `—` field IS that state.
 
 ## What the sync hooks do (all fail-open, active-project only)
 

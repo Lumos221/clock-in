@@ -224,6 +224,44 @@ def context_for(root, cfg, audience="lead", agent_name=None):
     return "\n".join(parts) + "\n"
 
 
+def detach_stale_ids(root, cfg, data):
+    """Platform task ids die with their session. At (lead) session start, any card
+    whose exactly-one-id task_id names a task ABSENT from this session's store is
+    mechanically detached (task_id → —), so the existing id-less flag takes over and
+    the CEO never journals migration state into card headings (field cause, refcheck
+    2026-07-15: titles like "#— (session-1 id retired; re-CREATE at dispatch)").
+    Field surgery only — machine-owned field, prose untouched; ambiguous cards left
+    alone. Returns how many were detached."""
+    if hooklib is None:
+        return 0
+    sid = str(data.get("session_id") or "")
+    if not sid:
+        return 0
+    cfg_root = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    store = os.path.join(cfg_root, "tasks", "session-%s" % sid[:8])
+    tb_path = os.path.join(root, cfg.get("taskboard", "docs/TaskBoard.md"))
+    try:
+        text = open(tb_path, encoding="utf-8").read()
+    except Exception:
+        return 0
+    stale = []
+    for m in re.finditer(r"(?m)^-\s*\*\*task_id:\*\*\s*(\d+)\s*$", text):
+        tid = m.group(1)
+        if not os.path.exists(os.path.join(store, "%s.json" % tid)):
+            stale.append(tid)
+    n = 0
+    for tid in dict.fromkeys(stale):
+        new = hooklib.tb_set_field(text, tid, "task_id", "—")
+        if new:
+            text, n = new, n + 1
+    if n:
+        try:
+            hooklib.tb_write(tb_path, text)
+        except Exception:
+            return 0
+    return n
+
+
 def housekeep_flag(root, cfg):
     """One nudge line when stale artefacts exist and housekeeping hasn't run for
     RESIDUE_NUDGE_DAYS (cheap age-only count — `run` does the reference-safe part),
@@ -337,6 +375,11 @@ def main():
             audience, agent_name = "dept", name
     except Exception:
         pass
+    if audience == "lead":
+        try:
+            detach_stale_ids(root, cfg, data)  # before flags — the id-less flag reads the result
+        except Exception:
+            pass
     out = context_for(root, cfg, audience, agent_name)
     if audience == "lead":
         try:

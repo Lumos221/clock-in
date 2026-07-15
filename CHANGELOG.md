@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.11] — 2026-07-15
+### Fixed
+- **Stale task ids auto-detach at session start** — platform ids die with their session, and the plugin left the CEO no mechanical home for "this id is dead, re-create at dispatch", so it journaled migration state into card headings (field case, refcheck: panel titles like `#— (session-1 id retired; re-CREATE at dispatch)` — NOT the Registrar's doing, it proxies faithfully). Now the session-start hook detaches any exactly-one-id card whose id is absent from this session's task store (`task_id` → `—`, field surgery only, prose untouched, ambiguous cards left alone), and the existing id-less flag prescribes the re-CREATE. `task-widget.md` adds the rule: never journal id-migration into card names — the `—` field IS that state.
+
 ## [0.9.10] — 2026-07-15
 ### Added
 - **New-artefact-dir detector** (Boss's "what if new folders appear later?" — the discovery was write-once, so a dir born after config would accumulate unseen). Every `scan`/`run` now mechanically counts artefact-type files (images/PDF/video) in unconfigured dirs — skipping `.git`/`node_modules`/`archive/`/asset-style dirnames and everything already configured — and prints one `hint:` line when a dir crosses the threshold (8). Detection machine, classification model (only when the hint fires: `/housekeep` judges working-artefacts vs product-assets and proposes the config entry), decision Boss. Recurring runs stay zero-token.
