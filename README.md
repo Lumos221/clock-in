@@ -1,5 +1,4 @@
-<!-- Language switcher — restore once README.zh-CN.md is published:
-     <div align="right"><strong>English</strong> · <a href="README.zh-CN.md">中文</a></div> -->
+<div align="right"><strong>English</strong> · <a href="README.zh-CN.md">中文</a></div>
 
 <!-- Drop a logo here when you have one: <p align="center"><img src="docs/assets/logo.png" width="120"></p> -->
 

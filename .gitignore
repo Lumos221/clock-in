@@ -5,8 +5,7 @@
 __pycache__/
 *.py[cod]
 
-# local-only docs — not published (README.md is the single published doc)
-README.zh-CN.md
+# local-only draft docs — not published
 README2.md
 README.old.md
 
