@@ -9,8 +9,7 @@
 
 **Run your Claude Code session like a company you own.**
 
-A manager that plans, specialists that build, an independent reviewer that signs off
-before anything counts as done, and one live board where everything that needs *you* shows up.
+A manager that plans, specialists that build, an independent reviewer that signs off before anything counts as done, and one live board where everything that needs *you* shows up.
 
 [![version](https://img.shields.io/github/v/tag/Lumos221/clock-in?label=version&color=3b82f6)](CHANGELOG.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://docs.claude.com/en/docs/claude-code)
@@ -32,12 +31,14 @@ before anything counts as done, and one live board where everything that needs *
 
 - **Makes "done" mean done.** Nothing is marked finished until an independent reviewer has approved the plan *and* the result. Quality comes from the structure, not from one model marking its own homework.
 - **Puts everything that needs you in one place.** Asks land on the Boss Board with what you need to decide on the spot: the question, the options, a recommendation. Any file an ask mentions is one click away, so a "your eyeball on this render" ask opens the render itself, even when it only exists in a teammate's worktree before merge. Nothing scrolls past you mid-transcript.
+- **Reads a marked-up screenshot like a bug report.** Circle what's wrong and paste it in. The manager plays back what it understood, mark by mark, before anything is dispatched, so a misread costs you two lines instead of a build cycle. Specialists then get a shortlist of likely causes, each with a way to confirm it and the fix to apply once confirmed. No fix lands on an unconfirmed cause; the evidence goes in the report.
+- **Follows the real task system.** Task cards are born from Claude Code's own task tracker and retire themselves when work ships, so the board can't quietly drift from what's actually happening. A hand-written card that nothing tracks gets flagged the next time you sit down.
 - **Stops stuck work early.** A task that keeps bouncing gets pulled out of the rework loop and diagnosed; if it's still stuck after that, it comes to you as a decision, not a surprise.
 - **Keeps a shared memory.** Decisions and settled answers are written where every teammate reads them, so nothing settled gets re-litigated or quietly contradicted as the project grows.
 - **Watches the watchers.** An independent inspector audits the whole team, including the manager, and answers only to you.
-- **Spends smart models on judgment, cheap models on typing.** The manager and department heads run on Opus; the staff they spawn run on Sonnet, or Haiku for pure grunt work.
+- **Spends the smartest model on judgment, cheap models on typing.** With an Opus manager, department heads run on Opus and the staff they spawn on Sonnet, or Haiku for pure grunt work. Bring Fable and the whole org reshapes itself around it (see below).
+- **Cleans up after itself.** Specialists appear for a task and are released when it ships, so idle panes never pile up. One that goes quiet with unreported work gets a single mechanical nudge to report. Discipline tripwires (an overgrown status file, essay-length asks, untracked cards) fire one line at session start and cost zero tokens when everything is clean. Only what matters stays in view; the rest lives on disk, so long runs don't bog down or lose the plot.
 - **Catches destructive commands.** Force-pushes, recursive deletes and dropped tables are intercepted before they run.
-- **Stays fast on long projects.** Only what matters stays in view; the rest lives on disk. Long runs don't bog down or lose the plot.
 
 <p align="center">
   <img src="docs/assets/hero.png" width="760"
@@ -58,6 +59,18 @@ Most "multi-agent" tools are one prompt wearing different hats. clock-in is buil
 
 ---
 
+## Same trigger, two companies
+
+The org chart adapts to the model driving it.
+
+**Opus in the driver's seat (the default).** Judgment is distributed: the manager routes, sequences and stays out of the craft; each department head owns how its work gets done and reviews the staff it hires.
+
+**Fable in the driver's seat.** The session becomes the brain. It translates what you meant, diagnoses from your marked screenshots without opening a single file, and hands Sonnet specialists cause-by-cause tables to confirm and execute. The expensive model holds words, tables and reports, never code, so your Fable budget goes to thinking instead of to reading files it never needed.
+
+Same trigger, same gates, same board. The model you start the session with decides which company shows up.
+
+---
+
 ## Working with it
 
 Say what you want, in plain words. The manager drafts a plan and runs it past you; once you're happy, the specialists build while checking each other's output, and you get a short, clear report of what changed.
@@ -68,7 +81,7 @@ Say what you want, in plain words. The manager drafts a plan and runs it past yo
 </p>
 <p align="center"><sub>The team in motion: specialists report up, and every result waits on an independent check before it counts.</sub></p>
 
-You're never boxed out. Founder mode means you can drop in on any specialist directly, hash something out, and the manager gets caught up afterwards. Full control, even when the work outgrows what you could hold in your head.
+You're never boxed out. Founder mode means you can drop in on any specialist directly, hash something out, and the manager gets caught up afterwards. While you're in a specialist's pane the manager goes quiet and stays out of your conversation; the moment you leave, the specialist reports what changed and the manager syncs from that report. Full control, even when the work outgrows what you could hold in your head.
 
 Leave it running overnight and you come back to a one-glance summary of **what shipped, what's queued, and what needs your decision**, instead of an archaeology dig.
 
@@ -117,7 +130,7 @@ Open a project and just say **"clocking in"** (or 「开始上班」). The first
 > **Actively evolving.** It works (I use it daily), but expect rough edges.
 >
 > - The workflow is still being refined ([CHANGELOG](CHANGELOG.md) has the release-to-release story).
-> - Not yet cost-measured: the brains/hands split keeps Opus off the boilerplate, but I haven't measured the actual saving. Mileage varies by plan.
+> - Not yet cost-measured: the brains/hands split keeps the expensive models off the boilerplate, but I haven't measured the actual saving. Mileage varies by plan.
 > - Not yet battle-tested on very large, long-running projects.
 
 ---
