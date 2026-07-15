@@ -1,4 +1,4 @@
-# Workers — spawning, lifecycle, bursts (detail for `SKILL.md` §8)
+# Workers — spawning, lifecycle, bursts (detail for `SKILL.md` §7)
 
 ## Spawn mechanics
 
@@ -7,18 +7,22 @@
 - the `name` is what makes it a teammate: a `<id>@session` identity, a `members` roster slot, its own pane, `SendMessage(to:"<id>")` addressability. `run_in_background:true` just keeps the lead non-blocking. The team forms on the first teammate; cleanup is automatic.
 - **Only the CEO (lead) spawns teammates.** A non-lead passing a `name` **orphans** (live — possibly with a pane — but unmanaged: on nobody's roster, in nobody's member list): no nested teams. Dept briefs carry the matching prohibition.
 
-**Subagent** — `Agent(subagent_type=<role>)` with **no `name`**: foreground returns its result once; add `run_in_background:true` for a **background subagent** (async, notifies on completion, final message auto-returns). **Never pass `name:` on a one-shot** (staff · expert · 审查官 · research burst) — naming converts it into a standing teammate (from a non-lead, an orphan).
+**Subagent** — `Agent(subagent_type=<role>)` with **no `name`**: foreground returns its result once; add `run_in_background:true` for a **background subagent** (async, notifies on completion, final message auto-returns; `SendMessage(to:"main")` is its channel — background subagents only, teammates report to `team-lead`). **Never pass `name:` on a one-shot** (staff · expert · 审查官 · research burst) — naming converts it into a standing teammate (from a non-lead, an orphan).
 
 **New agent files load only at the next session start.** Created one (the activation roster, a new expert, a re-hire)? **Restart + resume** (`claude -c` keeps the conversation) before spawning it. Urgent one-off → spawn `general-purpose` with the role inlined; the named file takes over next session.
 
-## Lifecycle — resume, don't cold-respawn
+## Lifecycle — a teammate lives per task
 
 Nothing is lost unless you make a *fresh* `Agent()` call or *shut an agent down*. Any spawned agent resumes losslessly from its transcript via `SendMessage` (teammate → by name; **background subagent → by the `agentId` from its spawn result, which you MUST capture** — an agent isn't told its own id).
 
-- **Continue the SAME task** (rework after a bounce, a clarification) → **resume**; a fresh `Agent()` re-derives from disk (commits / BACKLOG / `.fail`) and throws away the reasoning.
-- **At a clean task boundary** (passed 审查 + committed, next task independent) a **fresh lean spawn is preferred** — it catches up from BACKLOG + commits and sheds accumulated context.
-- **Mid-task bloat (no clean boundary yet)** → ask the Boss to `/compact` the teammate's pane.
-- **Never shut a teammate down mid-project to cut noise** (idle ≠ done-with; shutdown is terminal). Shut depts down only at true closeout.
+The unit of a teammate's life is the **task**, not the project — standing idle panes rot into corpses, and the duplicate spawns they force are worse:
+
+- **Spawn at dispatch** (card ready, `TaskUpdate` → owner + `in_progress`).
+- **Mid-task — always resume, never kill:** rework after a bounce, a clarification → `SendMessage`; a fresh `Agent()` re-derives from disk (commits / BACKLOG / `.fail`) and throws away the reasoning. Mid-task bloat → ask the Boss to `/compact` the pane.
+- **At the clean boundary** — L2 `.pass` verified, merged, `TaskUpdate→completed`, report received — **release it: ask it to shut down** (cleanup is automatic). Shutdown here loses nothing: everything that matters is already externalised (commits · board · BACKLOG · its report). A dept that goes idle with unreported work gets ONE mechanical stderr nudge to report (Stop/TeammateIdle hook; suppressed while `orchestrate-pane` marks the Boss in its pane) — the CEO's manual prompt is the fallback, not the routine.
+- **Next task for the same dept → fresh spawn, same handle** — clean context; it catches up from SoT + the card + CANON + commits. One exception: the next card is dispatch-ready in the same turn the report lands → hand it to the live teammate (zero idle time, no churn).
+- **No corpse panes:** a graceful release frees the handle. A spawn failing because the name is taken usually means the previous instance is still alive — shut it down first; **never mint `RnD2`** (that's how corpse panes multiply). Field-observed exception: a pane killed *externally* (Boss closed the terminal pane) can leave a zombie member entry that still blocks the name — send it a shutdown request, re-try once, and only then spawn suffixed, noting the zombie for closeout.
+- **The Registrar is infrastructure, not a dept:** it proxies the task widget for the whole project — retire it at closeout (`reference/task-widget.md`).
 
 ## Experts (Prof_ / Spec_ — reusable subagents)
 
@@ -26,7 +30,7 @@ Domain knowledge a 部门 invokes outside its field. No expert exists → the de
 
 ## Workflow — the CEO's burst engine (not a worker kind)
 
-A *bounded* parallel fan-out that isn't department-shaped — review N files, research N questions, verify N findings (split → run → collect → verify). Teammates = standing domains re-tasked across rounds; Workflow = one-shot bursts. Agents that **write in parallel** pass `isolation:"worktree"` (own checkout each); read-only bursts don't.
+A *bounded* parallel fan-out that isn't department-shaped — review N files, research N questions, verify N findings (split → run → collect → verify). Teammates = a dept driving its task in its own pane; Workflow = one-shot bursts. Agents that **write in parallel** pass `isolation:"worktree"` (own checkout each); read-only bursts don't.
 
 ## Model routing
 

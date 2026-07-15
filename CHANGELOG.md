@@ -4,6 +4,49 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.4] — 2026-07-15
+### Changed
+- **SKILL.md deduplicated** (21.2 KB → ~17.8 KB, ~1.2k tokens saved per invocation): each
+  rule stated once (peers-never-task · shutdown doctrine · 审查 independence · 报告即停),
+  mechanics pushed to the reference files that own them (Registrar spawn → task-widget ·
+  L2 bars → the Auditor's contract · activation steps → activate · head/staff two-stage →
+  model-routing); old §7 folded into §1, Workers renumbered §8→§7. Two facts re-homed,
+  not lost: L1 `.refute`s are hand-archived after resolution (only L2 markers
+  self-archive), and `"main"` is the background-subagent channel (→ teammates.md).
+- **Teammate lifecycle is per task, not per project.** Field cause: "fresh spawn
+  preferred at a clean boundary" + "never shut down mid-project" jointly manufactured
+  corpse panes and name-collision duplicates (observed live: `Registrar-2`). Now: spawn
+  at dispatch → mid-task always resume → **release at the clean boundary** (completed +
+  report received) → the dept's next task respawns fresh on the same handle
+  (next-card-same-turn may re-task the live pane). The Registrar is infrastructure
+  (lives until closeout). Zombie escape: an externally killed pane can leave a member
+  entry blocking its name — shutdown-request it, retry once, only then spawn suffixed.
+### Added
+- **Boss-in-pane mute + report green light** — `orchestrate-pane start|end|status|clear`
+  writes `.claude/boss-in-pane.json` (main checkout, worktree-pierced, gitignored).
+  While marked, the CEO treats that dept's pings as pure liveness (reply nothing, call
+  nothing, read nothing); on `end`, the dept's unprompted report is the green light to
+  release its pane. Dept briefs carry the mirror rule.
+- **Idle-nudge hook** (`stop_idle_nudge.py`, riding `stop_dispatch` on Stop + the
+  newly registered TeammateIdle): a dept teammate going idle with **unreported work**
+  (work tool calls after its last `SendMessage(to:"team-lead")`) gets ONE stderr nudge
+  to send its 4-line report. Capped per report-epoch (never loops), suppressed by the
+  boss-in-pane marker and by an open `@BOSS[…]` ask, `stop_hook_active`-aware,
+  fail-open everywhere; zero tokens on every silent path. Identity is read from the
+  teammate transcript stamps (`agentName`/`agentSetting`/`teamName` — field-verified;
+  the TeammateIdle input schema is undocumented). The dispatcher now propagates a
+  module's block request (exit 2 + stderr) — still one interpreter per turn end.
+- **Audience-aware session start:** dept panes now get a slim teammate brief (role line
+  naming the agent + settled-question rule + 红线 + SoT) instead of the CEO injection —
+  every dept spawn was being told "You are the CEO" and handed the CEO's chore flags;
+  the Registrar (mechanical proxy) gets nothing; the lead is unchanged.
+### Fixed
+- **Registrar round-trip waste:** `task-widget.md` quoted the drive-it grammar loosely
+  (`ASSIGN id owner`) while the agent demands strict `key=value` — a real MALFORMED
+  bounce in the field; the reference now quotes the exact grammar. `LIST` replies one
+  line per task (no descriptions — the CEO wrote them; `GET` for detail); trailing
+  "awaiting instructions" filler after replies is banned (invisible to the lead).
+
 ## [0.9.3] — 2026-07-15
 ### Fixed
 - **Tombstone cards garbled the panel's Todo column.** Field case (refcheck): during the

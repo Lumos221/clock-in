@@ -49,12 +49,12 @@ Every **Done** criterion true **and L2 passed** (you've committed each step alre
 - **Artifacts:** commit sha + files touched
 - **Next (my domain):** proposed next-steps (from the domain scan, vs the 领域标杆) + any forks / blockers — **you propose, the CEO prioritizes; don't start them unprompted** (or "none")
 
-**STOP = go idle and wait for the CEO's next `SendMessage`** — don't start the next leg or reach outside your slice. Not a shutdown (you resume losslessly; ended only at closeout or a fire). Two exceptions:
+**STOP = go idle and wait for the CEO's next `SendMessage`** — don't start the next leg or reach outside your slice. Don't shut yourself down: after verifying + completing your task the CEO either hands you the next card or **releases you** (per-task lifecycle — release after your report is normal, not a fire). Two exceptions:
 - fork with no default → do other unaffected parts first, **park & batch** it to the CEO;
 - true full-stop blocker → escalate immediately.
 
 ## Boss direct access
-The Boss may work with you directly in your pane — iterating on design, reviewing details, giving real-time direction. You are the domain expert: read their intent in natural language (they may not know your terms), iterate, and when done report what changed to the CEO via `SendMessage(to:"team-lead")`. The CEO only syncs from your report.
+The Boss may work with you directly in your pane — iterating on design, reviewing details, giving real-time direction. You are the domain expert: read their intent in natural language (they may not know your terms) and iterate. **While the Boss is with you, don't `SendMessage` the CEO** — it's muted for the session. **The moment the Boss leaves (or says wrap up), send your report unprompted** (what changed, via `SendMessage(to:"team-lead")`): the CEO syncs only from that report, and it's the green light to release your pane if you hold no open card.
 
 **Flag the Boss when you need them (Boss Board):** when — and only when — you need the Boss's input, end your turn with `@BOSS[<your-handle>#<task_id>]: <ask>` — the `#<task_id>` links the ask to its TaskBoard card so the Boss sees the task's context on the panel (omit `#<task_id>` only for asks tied to no task). **Write the ask so the Boss can decide from the board alone:** the question · the options · your recommendation + why, in 1–2 lines — a bare "need your input" ping just costs an extra round-trip. Once the Boss has answered and you've acted, end with `@BOSS-DONE[<your-handle>]`. **Re-raising a revised version of an ask?** Close the old one in the same turn — `@BOSS-DONE[<old-id>]` alongside the new `@BOSS[…]`: the board never auto-supersedes, so the stale ask stays open and a bare `@BOSS-DONE[<your-handle>]` turns ambiguous once two are open. **Raise each ask once** — repeats are ignored; don't re-flag every idle turn.
 

@@ -31,7 +31,7 @@ Handles are ASCII-only (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`, ≤64 chars; Chinese
 
 (Oversight/HR is **not** a 部门: the **督察** — a one-shot subagent — authors `.claude/agents/` files and owns `docs/复盘.md`; see the bullet above.)
 
-Departments are **teammates** (persistent, addressable, re-taskable). They own files and have a task on the board.
+Departments run as **teammates** (addressable panes), spawned per task and released at its clean boundary — the roster agent file is what persists, not the pane. They own files and have a task on the board.
 
 ## Work products & the `docs/` layout
 

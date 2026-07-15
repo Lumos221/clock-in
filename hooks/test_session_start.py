@@ -180,6 +180,56 @@ class SettledQuestionRule(unittest.TestCase):
             self.assertIn("DECISIONS", out)
 
 
+def _hook_out(d, transcript_path=None):
+    import subprocess
+    payload = {"cwd": d}
+    if transcript_path:
+        payload["transcript_path"] = transcript_path
+    hook = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session_start.py")
+    r = subprocess.run([sys.executable, hook], input=json.dumps(payload),
+                       text=True, capture_output=True, timeout=20)
+    return r.stdout
+
+
+def _teammate_transcript(d, name, setting):
+    p = os.path.join(d, "%s.jsonl" % name)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"type": "last-prompt", "agentName": name,
+                            "agentSetting": setting, "teamName": "session-ab12cd34"}) + "\n")
+    return p
+
+
+class Audience(unittest.TestCase):
+    """Teammate panes get the slim brief (role line + SoT, no CEO flags); the
+    Registrar gets nothing; the lead keeps the full injection (field cause: every
+    dept spawn was being told 'You are the CEO' + handed the CEO's chore flags)."""
+
+    def test_dept_gets_slim_brief_without_ceo_flags(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, sot="# SoT\n" + "a line of standing detail\n" * 40)  # over-cap
+            out = _hook_out(d, _teammate_transcript(d, "RnD", "RnD"))
+            self.assertIn("teammate RnD", out)
+            self.assertIn("a line of standing detail", out)     # SoT still injected
+            self.assertIn("orchestrate-canon get", out)         # settled-question rule
+            self.assertNotIn("You are the CEO", out)
+            self.assertNotIn("⚠", out)                          # CEO chores not relayed
+
+    def test_registrar_gets_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            out = _hook_out(d, _teammate_transcript(d, "Registrar-2", "Registrar"))
+            self.assertEqual(out, "")
+
+    def test_lead_still_gets_full_injection(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, cards="### TASK-009 · hand thing\n- **task_id:** —\n- **status:** todo\n")
+            p = os.path.join(d, "lead.jsonl")
+            open(p, "w").write(json.dumps({"type": "last-prompt"}) + "\n")
+            out = _hook_out(d, p)
+            self.assertIn("You are the CEO", out)
+            self.assertIn("carry no platform task_id", out)     # flags intact
+
+
 class Gating(unittest.TestCase):
     def test_inactive_marker_silent(self):
         with tempfile.TemporaryDirectory() as d:

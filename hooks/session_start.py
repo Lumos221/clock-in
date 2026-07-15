@@ -117,8 +117,32 @@ def decisions_flags(root, cfg):
     return flags
 
 
-def context_for(root, cfg):
-    """The full injection text for an armed project (str), or None to stay silent."""
+def context_for(root, cfg, audience="lead", agent_name=None):
+    """The injection text for an armed project (str), or None to stay silent.
+    audience: "lead" = the CEO session (full text + discipline flags);
+    "dept" = a teammate pane (slim: role line + redlines + SoT — the flags are CEO
+    chores and would only distract/cost tokens in every dept spawn)."""
+    if audience == "dept":
+        parts = ["📋 CEO orchestration is active for this project. You are the teammate "
+                 "%s — follow your agent brief; the CEO owns the task lifecycle."
+                 % (agent_name or "",),
+                 "Settled-question discipline: before stating what's allowed/designed/"
+                 "settled, search the record — `orchestrate-canon get <topic>` + grep "
+                 "DECISIONS.md — and answer from the log, not from principles."]
+        redlines = cfg.get("redlines", [])
+        if redlines:
+            parts.append("Signed 红线 (need the Boss's two-key 准/驳 before editing):")
+            for r in redlines:
+                rp = r.get("path") if isinstance(r, dict) else r
+                note = (" — %s" % r.get("note")) if isinstance(r, dict) and r.get("note") else ""
+                parts.append("  - %s%s" % (rp, note))
+        sot_rel = cfg.get("sot", "docs/SoT.md")
+        try:
+            text = open(os.path.join(root, sot_rel), encoding="utf-8").read()
+            parts.append("\n— current source of truth (%s) —\n%s" % (sot_rel, text[:4000]))
+        except Exception:
+            pass
+        return "\n".join(parts) + "\n"
     parts = ["📋 CEO orchestration mode is active for this project. You are the CEO — follow the orchestrate skill.",
              "Settled-question discipline: before stating what's allowed/designed/settled, "
              "search the record — `orchestrate-canon get <topic>` + grep DECISIONS.md — and "
@@ -218,7 +242,20 @@ def main():
         return
     if not cfg.get("active"):
         return
-    out = context_for(root, cfg)
+    # Audience: teammate transcripts stamp agentName/agentSetting/teamName on every
+    # line (field-verified 2026-07-15). Depts get the slim brief; the Registrar (a
+    # mechanical proxy whose file says everything) gets nothing; the lead gets it all.
+    audience, agent_name = "lead", None
+    try:
+        import stop_idle_nudge
+        name, setting, team = stop_idle_nudge.identity(data.get("transcript_path") or "")
+        if team and name and name != "team-lead":
+            if (setting or name).startswith("Registrar"):
+                return
+            audience, agent_name = "dept", name
+    except Exception:
+        pass
+    out = context_for(root, cfg, audience, agent_name)
     if out:
         sys.stdout.write(out)
 

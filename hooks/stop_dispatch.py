@@ -26,14 +26,22 @@ def main():
         return
     hooklib = _load("hooklib")
     text = hooklib.last_assistant_text(data.get("transcript_path", "")) if hooklib else None
-    for name in ("stop_boss_board", "stop_canon", "stop_refute_tally"):
+    block = None
+    for name in ("stop_boss_board", "stop_canon", "stop_refute_tally", "stop_idle_nudge"):
         mod = _load(name)
         if mod is None:
             continue
         try:
-            mod.run(data, text)
+            ret = mod.run(data, text)
         except Exception:
-            pass
+            continue
+        # A module may return a block reason (str) — exit 2 feeds it back to the agent
+        # (Stop: blocks the stop; TeammateIdle: keeps the teammate working). First wins.
+        if block is None and isinstance(ret, str) and ret:
+            block = ret
+    if block:
+        sys.stderr.write(block)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

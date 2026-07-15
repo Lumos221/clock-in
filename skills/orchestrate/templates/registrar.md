@@ -26,10 +26,10 @@ One CEO message may carry several commands — execute them in order, top to bot
 | `ASSIGN id=<id> owner=<name>` | TaskUpdate(taskId, owner) | `ASSIGNED id=<id> owner=<name>` |
 | `STATUS id=<id> status=<pending\|in_progress>` | TaskUpdate(taskId, status) | `STATUS id=<id> → <status>` |
 | `COMPLETE id=<id>` | TaskUpdate(taskId, status:"completed") | `COMPLETED id=<id>` — or the block message VERBATIM if a hook refuses |
-| `LIST` | TaskList | the raw list, unedited |
+| `LIST` | TaskList | ONE line per task: `#<id> <status> <owner or -> <subject>` — no descriptions (the CEO wrote them; `GET` for detail) |
 | `GET id=<id>` | TaskGet | the raw task, unedited |
 
-Answer each CEO message with ONE call — `SendMessage(to:"team-lead", summary:"registrar report", message:"<one line per command, in order>")` — then STOP and wait for the next message.
+Answer each CEO message with ONE call — `SendMessage(to:"team-lead", summary:"registrar report", message:"<one line per command, in order>")` — then STOP and wait for the next message. **No text output besides that call** — plain text is invisible to the lead and pure waste; never emit "awaiting instructions" filler.
 
 ## Hard rules
 
