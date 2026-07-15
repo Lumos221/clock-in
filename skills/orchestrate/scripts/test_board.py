@@ -333,6 +333,67 @@ class FileServe(unittest.TestCase):
                             .startswith(os.path.realpath(main)))
 
 
+class BareNameResolve(unittest.TestCase):
+    """Field case (refcheck CEO-102): the CEO writes the first artifact with its full
+    path and abbreviates the sibling to its bare filename — same folder, natural prose
+    economy. A bare name (no slash) must resolve by basename search so the second file
+    is just as clickable; all the /file guards still apply per match."""
+
+    def test_bare_name_found_by_basename_search(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "docs", "mockups"))
+            open(os.path.join(d, "docs", "mockups", "字段-optional.png"), "wb").write(b"x")
+            got = board.resolve_file(d, "字段-optional.png")
+            self.assertIsNotNone(got)
+            self.assertEqual(got[1], "image/png")
+            self.assertTrue(got[0].endswith(os.path.join("docs", "mockups", "字段-optional.png")))
+
+    def test_ambiguous_bare_name_newest_wins(self):
+        """Asks point at fresh renders — when two files share the name, serve the
+        one just produced, not last month's."""
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "old")); os.makedirs(os.path.join(d, "new"))
+            open(os.path.join(d, "old", "r.png"), "wb").write(b"x")
+            open(os.path.join(d, "new", "r.png"), "wb").write(b"y")
+            os.utime(os.path.join(d, "old", "r.png"), (1, 1))
+            self.assertTrue(board.resolve_file(d, "r.png")[0]
+                            .endswith(os.path.join("new", "r.png")))
+
+    def test_hidden_and_heavy_dirs_not_searched(self):
+        with tempfile.TemporaryDirectory() as d:
+            for sub in (".claude", "node_modules", "__pycache__"):
+                os.makedirs(os.path.join(d, sub))
+                open(os.path.join(d, sub, "h.png"), "wb").write(b"x")
+            self.assertIsNone(board.resolve_file(d, "h.png"))
+
+    def test_symlink_escape_in_search_rejected(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.NamedTemporaryFile() as out:
+            os.makedirs(os.path.join(d, "docs"))
+            os.symlink(out.name, os.path.join(d, "docs", "sneaky.png"))
+            self.assertIsNone(board.resolve_file(d, "sneaky.png"))
+
+    def test_bare_name_falls_back_to_worktrees_main_wins(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            main, wt = os.path.join(d, "main"), os.path.join(d, "wt")
+            os.makedirs(main)
+            run = lambda *a: subprocess.run(a, cwd=main, capture_output=True, check=True)
+            run("git", "init", "-q", ".")
+            run("git", "-c", "user.email=t@t", "-c", "user.name=t",
+                "commit", "-q", "--allow-empty", "-m", "root")
+            run("git", "worktree", "add", "-q", wt, "-b", "pane")
+            os.makedirs(os.path.join(wt, "docs", "mockups"))
+            open(os.path.join(wt, "docs", "mockups", "pre-merge.png"), "wb").write(b"x")
+            got = board.resolve_file(main, "pre-merge.png")
+            self.assertIsNotNone(got)
+            self.assertTrue(got[0].startswith(os.path.realpath(wt)))
+            # main checkout wins when both have a file of that name
+            os.makedirs(os.path.join(main, "docs"))
+            open(os.path.join(main, "docs", "pre-merge.png"), "wb").write(b"y")
+            self.assertTrue(board.resolve_file(main, "pre-merge.png")[0]
+                            .startswith(os.path.realpath(main)))
+
+
 class ConcurrencySafety(unittest.TestCase):
     """Regression for the lost-update bug: stop_boss_board.py and stop_refute_tally.py
     both call board_add on the same Stop event. Without a lock around the store's

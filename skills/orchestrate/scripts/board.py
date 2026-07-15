@@ -618,12 +618,14 @@ function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 // stripped rather than shown literally.
 // Project-relative file paths (asks constantly carry mockup/review paths) become
 // links onto the daemon's /file endpoint, so the Boss clicks instead of hunting in
-// Finder. Needs a slash + an extension; a preceding char outside the path charset
-// (or start) anchors it, so URL innards (host/a.png) never match; trailing
-// punctuation stays outside via the \b. stopPropagation keeps a link click from
-// toggling the row/card it sits in.
+// Finder. Two shapes: dir/…/name.any-ext, and a BARE filename with a known artifact
+// extension — CEOs write "docs/mockups/a.png + b.png" and the sibling must be just
+// as clickable (the server resolves bare names by basename search). A preceding char
+// outside the path charset (or start) anchors both, so URL innards (host/a.png)
+// never match; trailing punctuation stays outside via the \b. stopPropagation keeps
+// a link click from toggling the row/card it sits in.
 function paths(h){
-  return h.replace(/(^|[^\w.\-\/一-鿿])((?:[\w.\-一-鿿]+\/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5})\b/g,
+  return h.replace(/(^|[^\w.\-\/一-鿿])((?:[\w.\-一-鿿]+\/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5}|[\w\-一-鿿][\w.\-一-鿿]*\.(?:png|jpe?g|gif|webp|pdf|svg|md|txt|csv|json|log|html?|ya?ml|toml))\b/g,
     (m,pre,p)=>pre+`<a href="/file?p=${encodeURIComponent(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${p}</a>`);
 }
 function md(s){
@@ -807,17 +809,44 @@ def _linked_worktrees(root):
         return []
 
 
+_SEARCH_PRUNE = {"node_modules", "__pycache__"}
+
+
+def _find_by_name(base, name):
+    """Every file called `name` under base — hidden dirs and dependency trees pruned,
+    each hit re-checked through _resolve_under so the symlink guard holds."""
+    hits = []
+    for cur, dirs, files in os.walk(base):
+        dirs[:] = [x for x in dirs if not x.startswith(".") and x not in _SEARCH_PRUNE]
+        if name in files:
+            full = _resolve_under(base, os.path.relpath(os.path.join(cur, name), base))
+            if full:
+                hits.append(full)
+    return hits
+
+
 def resolve_file(root, p):
     """(abspath, content-type) for a project file the panel may serve, else None.
     Backs the /file endpoint that makes paths in asks clickable. A miss in the main
     checkout falls through to the repo's linked worktrees — pre-merge artifacts
     (renders the Boss is asked to eyeball) live only in a dept pane's worktree. The
-    main checkout wins when both have the file: post-merge, master is the truth."""
-    for base in [root] + _linked_worktrees(root):
+    main checkout wins when both have the file: post-merge, master is the truth.
+    A bare filename (no slash — CEOs abbreviate a sibling artifact to its name alone)
+    resolves by basename search under the same roots; newest match wins, because an
+    ask points at the render just produced, not last month's namesake."""
+    roots = [root] + _linked_worktrees(root)
+    for base in roots:
         full = _resolve_under(base, p)
         if full:
             return full, VIEWABLE.get(os.path.splitext(full)[1].lower(),
                                       "text/plain; charset=utf-8")
+    if p and "/" not in p and "\\" not in p:
+        for base in roots:
+            hits = _find_by_name(base, p)
+            if hits:
+                full = max(hits, key=os.path.getmtime)
+                return full, VIEWABLE.get(os.path.splitext(full)[1].lower(),
+                                          "text/plain; charset=utf-8")
     return None
 
 

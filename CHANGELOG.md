@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.6] — 2026-07-15
+### Fixed
+- **Bare filenames in asks are now clickable on the Boss Board.** Field case (refcheck CEO-102): the CEO wrote the first render with its full path and abbreviated the sibling to its bare name ("docs/mockups/a.png + b.png") — natural prose economy, but the linkifier required a `dir/` segment, so the second file wasn't clickable. Two-ended fix: the page linkifier also matches bare filenames carrying a known artifact extension (png/jpg/gif/webp/pdf/svg/md/txt/csv/json/log/html/yaml/toml — an allowlist so version numbers, dates, domains and `GB/T 7714`-style prose never link), and the `/file` endpoint resolves a bare name by basename search across the main checkout and its linked worktrees (main wins; within a root the newest match wins, since an ask points at the render just produced). Hidden dirs and dependency trees are pruned from the search; every hit still passes the realpath-under-root symlink guard and the viewable-types whitelist.
+
 ## [0.9.5] — 2026-07-15
 ### Added
 - **Two-regime orchestration — the brain regime (Fable CEO).** `reference/brain-regime.md` is an on-demand overlay loaded only when the session model is Fable, via a 3-line regime switch under the SKILL CORE RULE — parity sessions (opus CEO, today's rules) pay ~60 always-loaded tokens and never read the overlay; nobody loads both systems. Rationale: the parity CORE RULE ("never dictate method") rested on opus-CEO/opus-head craft parity; a Fable CEO breaks it, so method ownership moves up while the CEO's context goes on a strict diet (Fable is weekly-capped — its context is the org's scarcest resource).
