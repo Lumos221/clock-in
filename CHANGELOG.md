@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.9] — 2026-07-15
+### Added
+- **Housekeeping: model at the edges, machine in the loop** (Boss's design point). Ad-hoc sweeps: `orchestrate-housekeep run --path <dir-in-project> [--days N]` — the Boss names a folder ("clean up the renders"), `/housekeep` resolves and passes it, no config needed; paths outside the project are rejected. First-run discovery: in a project with no `housekeeping` config and no `docs/mockups`, `/housekeep` now instructs one turn of judgment — find the artefact-accumulating dirs, propose, write the config on the Boss's OK — after which every run and nudge is pure machine again.
+
 ## [0.9.8] — 2026-07-15
 ### Added
 - **Timed housekeeping** (`orchestrate-housekeep` + `/housekeep` + a session-start nudge). Field cause: visual working artefacts — the Boss's marked screenshots in, dept-rendered mockups out — are load-bearing while their card is open and clutter after the round ships (~10 MB/day observed in refcheck's `docs/mockups/`). The sweep is **archive-only** (`run` moves stale files to `<dir>/archive/YYYY-MM/`, subfolders preserved; deletion exists only as the explicit Boss-run `prune --days N` over archives) and **reference-safe by construction** (anything named on an Active card, an open Boss-Board ask, `CANON.md` or the SoT never moves, whatever its age — the *Recently shipped* tail deliberately doesn't protect). Dirs configurable via `orchestrate.json` `"housekeeping": [{"path": …, "days": …}]`, defaulting to `docs/mockups` at 14 days when that dir exists. "Timed" the plugin's way: `run` stamps `.claude/housekeep-stamp`, and session start nudges one line when candidates exist and the stamp is a week old — zero tokens when clean. Also sweeps plugin residue (idle-nudge state >7 d, oversized `marker-misses.log` rotated).

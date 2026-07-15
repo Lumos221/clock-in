@@ -123,6 +123,43 @@ class Prune(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(d, "docs/mockups/live.png")))
 
 
+class PathOverride(unittest.TestCase):
+    def _run(self, d, argv):
+        cwd = os.getcwd()
+        os.chdir(d)
+        try:
+            return hk.main(argv)
+        finally:
+            os.chdir(cwd)
+
+    def test_adhoc_path_sweeps_unconfigured_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _file(d, "design/renders/old.png", OLD)
+            self.assertEqual(self._run(d, ["run", "--path", "design/renders"]), 0)
+            self.assertFalse(os.path.exists(os.path.join(d, "design/renders/old.png")))
+            self.assertTrue(os.path.isdir(os.path.join(d, "design/renders/archive")))
+
+    def test_adhoc_days_respected(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _file(d, "design/x.png", NOW - 3 * 86400)
+            self._run(d, ["run", "--path", "design", "--days", "7"])
+            self.assertTrue(os.path.exists(os.path.join(d, "design/x.png")))   # under 7d
+            self._run(d, ["run", "--path", "design", "--days", "2"])
+            self.assertFalse(os.path.exists(os.path.join(d, "design/x.png")))  # over 2d
+
+    def test_path_outside_project_rejected(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as other:
+            _proj(d)
+            self.assertEqual(self._run(d, ["run", "--path", other]), 1)
+
+    def test_missing_dir_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            self.assertEqual(self._run(d, ["run", "--path", "no/such/dir"]), 1)
+
+
 class SessionStartNudge(unittest.TestCase):
     def test_flag_fires_then_clears_after_run(self):
         import session_start as ss

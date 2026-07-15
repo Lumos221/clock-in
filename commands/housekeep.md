@@ -7,9 +7,13 @@ Visual working artefacts (the Boss's marked screenshots, dept-rendered mockups) 
 - **no args** → report what's stale and unreferenced, then archive it (safe by construction):
   `orchestrate-housekeep scan` · then `orchestrate-housekeep run`
 - **`scan`** → report only, touch nothing.
+- **the Boss named or implied a folder** ("clean up the renders folder", a path in `$ARGUMENTS`) → resolve it to the actual project dir and pass it through — ad-hoc, no config needed:
+  `orchestrate-housekeep run --path <dir> [--days <N>]`
 - **`prune <days>`** → DELETE archived files older than `<days>` — destructive, so run it only when the Boss asked for the prune in their own words:
   `orchestrate-housekeep prune --days <days>`
 
-Which folders it watches: `orchestrate.json` → `"housekeeping": [{"path": "docs/mockups", "days": 14}]`; without the key it defaults to `docs/mockups` at 14 days when that dir exists. A session-start nudge fires when candidates exist and no run happened for a week.
+Which folders it watches standing: `orchestrate.json` → `"housekeeping": [{"path": "docs/mockups", "days": 14}]`; without the key it defaults to `docs/mockups` at 14 days when that dir exists. A session-start nudge fires when candidates exist and no run happened for a week.
+
+**First run in a project with no `housekeeping` config and no `docs/mockups`:** do the one-time discovery yourself — look for dirs that accumulate visual/working artefacts (mockups, screenshots, renders, exports; image-heavy, dated filenames), propose the entries to the Boss in one line, and on their OK write `"housekeeping": [...]` into `.claude/orchestrate.json`, then run. One turn of judgment; every later run and nudge is pure machine.
 
 $ARGUMENTS
