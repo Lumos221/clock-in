@@ -1,0 +1,152 @@
+"""Tests for pretool_spawn_guard.py (spawn-collision guard) and the lingering-pane
+sentinel in session_start.py. Both read the team config / task store under
+CLAUDE_CONFIG_DIR, so tests point that env at a temp dir.
+Run: python3 hooks/test_spawn_guard.py"""
+import os, sys, json, tempfile, unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import pretool_spawn_guard as guard
+import session_start as ss
+
+SID = "aaaa1111-2222-3333-4444-555566667777"
+
+
+def _team(cfg_root, members, lead_sid=SID):
+    d = os.path.join(cfg_root, "teams", "session-%s" % lead_sid[:8])
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "config.json"), "w") as f:
+        json.dump({"name": "session-%s" % lead_sid[:8], "leadSessionId": lead_sid,
+                   "members": members}, f)
+
+
+def _task(cfg_root, tid, owner, status, lead_sid=SID):
+    d = os.path.join(cfg_root, "tasks", "session-%s" % lead_sid[:8])
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "%s.json" % tid), "w") as f:
+        json.dump({"id": str(tid), "subject": "t", "owner": owner, "status": status}, f)
+
+
+def _member(name, active=True, agent_type=None):
+    return {"name": name, "agentType": agent_type or name.rstrip("-2"),
+            "isActive": active}
+
+
+def _proj(d):
+    os.makedirs(os.path.join(d, ".claude"), exist_ok=True)
+    with open(os.path.join(d, ".claude", "orchestrate.json"), "w") as f:
+        f.write('{"active":true}')
+
+
+class SpawnGuard(unittest.TestCase):
+    def setUp(self):
+        self._env = os.environ.get("CLAUDE_CONFIG_DIR")
+        self.cfg = tempfile.mkdtemp()
+        os.environ["CLAUDE_CONFIG_DIR"] = self.cfg
+
+    def tearDown(self):
+        if self._env is None:
+            os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        else:
+            os.environ["CLAUDE_CONFIG_DIR"] = self._env
+
+    def test_live_same_base_collides(self):
+        _team(self.cfg, [_member("RnD", active=True)])
+        cfg = guard.team_config(SID)
+        self.assertEqual(guard.live_collision(cfg, "RnD"), "RnD")
+        self.assertEqual(guard.live_collision(cfg, "RnD-2"), "RnD")   # suffixed request
+
+    def test_suffixed_live_member_blocks_base_request(self):
+        _team(self.cfg, [_member("RnD-2", active=True, agent_type="RnD")])
+        cfg = guard.team_config(SID)
+        self.assertEqual(guard.live_collision(cfg, "RnD"), "RnD-2")
+
+    def test_inactive_member_frees_the_name(self):
+        _team(self.cfg, [_member("RnD", active=False)])
+        cfg = guard.team_config(SID)
+        self.assertIsNone(guard.live_collision(cfg, "RnD"))
+
+    def test_other_dept_no_collision(self):
+        _team(self.cfg, [_member("QA", active=True)])
+        cfg = guard.team_config(SID)
+        self.assertIsNone(guard.live_collision(cfg, "RnD"))
+
+    def test_wrong_lead_sid_or_missing_config_is_none(self):
+        self.assertIsNone(guard.team_config(SID))                    # no config at all
+        _team(self.cfg, [_member("RnD")], lead_sid=SID)
+        other = SID.replace("aaaa", "bbbb")
+        self.assertIsNone(guard.team_config(other))                  # not this lead
+        # dir matches by 8-hex but leadSessionId differs → not the lead → None
+        _team(self.cfg, [_member("RnD")], lead_sid=SID)
+        cfgpath = os.path.join(self.cfg, "teams", "session-%s" % SID[:8], "config.json")
+        c = json.load(open(cfgpath)); c["leadSessionId"] = other
+        json.dump(c, open(cfgpath, "w"))
+        self.assertIsNone(guard.team_config(SID))
+
+
+class PaneSentinel(unittest.TestCase):
+    def setUp(self):
+        self._env = os.environ.get("CLAUDE_CONFIG_DIR")
+        self.cfg = tempfile.mkdtemp()
+        os.environ["CLAUDE_CONFIG_DIR"] = self.cfg
+
+    def tearDown(self):
+        if self._env is None:
+            os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        else:
+            os.environ["CLAUDE_CONFIG_DIR"] = self._env
+
+    def _flags(self, d):
+        return ss.pane_flags(d, {"session_id": SID})
+
+    def test_orphan_pane_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [_member("QA", active=True)])
+            _task(self.cfg, 1, "RnD", "in_progress")                 # QA owns nothing
+            flags = self._flags(d)
+            self.assertEqual(len(flags), 1)
+            self.assertIn("QA", flags[0])
+
+    def test_owner_of_open_task_is_clean(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [_member("QA", active=True)])
+            _task(self.cfg, 1, "QA", "in_progress")
+            self.assertEqual(self._flags(d), [])
+
+    def test_suffixed_owner_matches_base_member(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [_member("QA-2", active=True, agent_type="QA")])
+            _task(self.cfg, 1, "QA", "in_progress")
+            self.assertEqual(self._flags(d), [])
+
+    def test_registrar_and_inactive_and_lead_exempt(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [{"name": "team-lead", "isActive": True},
+                             _member("Registrar-2", active=True, agent_type="Registrar"),
+                             _member("RnD", active=False)])
+            _task(self.cfg, 1, "Nobody", "completed")
+            self.assertEqual(self._flags(d), [])
+
+    def test_boss_in_pane_exempt(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [_member("QA", active=True)])
+            os.makedirs(os.path.join(self.cfg, "tasks", "session-%s" % SID[:8]),
+                        exist_ok=True)
+            with open(os.path.join(d, ".claude", "boss-in-pane.json"), "w") as f:
+                json.dump({"QA": "2026-07-15T00:00:00Z"}, f)
+            self.assertEqual(self._flags(d), [])
+
+    def test_no_task_store_is_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [_member("QA", active=True)])            # no tasks dir
+            self.assertEqual(self._flags(d), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

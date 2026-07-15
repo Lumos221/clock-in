@@ -224,6 +224,66 @@ def context_for(root, cfg, audience="lead", agent_name=None):
     return "\n".join(parts) + "\n"
 
 
+def pane_flags(root, data):
+    """Lingering-pane sentinel (lead session only): one line naming live teammates
+    that hold no open task, or [] when clean/undeterminable. Liveness from the team
+    config's members[].isActive (internal state — read-only, fail-open); open tasks
+    from the platform task store; boss-in-pane-marked depts and the Registrar are
+    exempt. Widget-gated sessions (no task store) stay silent — no data, no flag."""
+    sid = str(data.get("session_id") or "")
+    if not sid:
+        return []
+    cfg_root = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    try:
+        team = json.load(open(os.path.join(cfg_root, "teams", "session-%s" % sid[:8],
+                                           "config.json"), encoding="utf-8"))
+    except Exception:
+        return []
+    if str(team.get("leadSessionId", "")) != sid:
+        return []
+    tasks_dir = os.path.join(cfg_root, "tasks", "session-%s" % sid[:8])
+    try:
+        names = os.listdir(tasks_dir)
+    except Exception:
+        return []  # no task store (widget-gated) — can't judge, stay silent
+    owners = set()
+    for fn in names:
+        if not fn.endswith(".json"):
+            continue
+        try:
+            t = json.load(open(os.path.join(tasks_dir, fn), encoding="utf-8"))
+        except Exception:
+            continue
+        if t.get("status") in ("pending", "in_progress") and t.get("owner"):
+            owners.add(re.sub(r"-\d+$", "", str(t["owner"])).lower())
+            owners.add(str(t["owner"]).lower())
+    try:
+        pane = json.load(open(os.path.join(root, ".claude", "boss-in-pane.json"),
+                              encoding="utf-8"))
+        exempt = {re.sub(r"-\d+$", "", k).lower() for k in pane}
+    except Exception:
+        exempt = set()
+    orphans = []
+    for m in team.get("members", []):
+        if not isinstance(m, dict):
+            continue
+        name = str(m.get("name", ""))
+        b = re.sub(r"-\d+$", "", name).lower()
+        if name == "team-lead" or b.startswith("registrar"):
+            continue
+        if str(m.get("isActive")).lower() != "true":
+            continue
+        if name.lower() in owners or b in owners or b in exempt:
+            continue
+        orphans.append(name)
+    if not orphans:
+        return []
+    return ["⚠ %d live teammate pane(s) hold no open task (%s) — release each "
+            "(per-task lifecycle: SendMessage shutdown request) or dispatch its next "
+            "card. Boss-in-pane-marked depts are exempt automatically."
+            % (len(orphans), ", ".join(orphans[:6]) + ("…" if len(orphans) > 6 else ""))]
+
+
 def main():
     if hooklib is None:
         return
@@ -256,6 +316,13 @@ def main():
     except Exception:
         pass
     out = context_for(root, cfg, audience, agent_name)
+    if audience == "lead":
+        try:
+            flags = pane_flags(root, data)
+            if flags:
+                out = (out or "") + "\n".join(flags) + "\n"
+        except Exception:
+            pass
     if out:
         sys.stdout.write(out)
 
