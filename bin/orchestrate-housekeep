@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# orchestrate-housekeep — archive stale visual artefacts (reference-safe), sweep residue.
+#   orchestrate-housekeep            # scan: report stale unreferenced files
+#   orchestrate-housekeep run        # archive them to <dir>/archive/YYYY-MM/ + stamp
+#   orchestrate-housekeep prune --days 60   # Boss-only: DELETE old archives
+# Resolves housekeep.py relative to ITS OWN location — works from any cwd.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/orchestrate/scripts/housekeep.py" "$@"

@@ -224,6 +224,28 @@ def context_for(root, cfg, audience="lead", agent_name=None):
     return "\n".join(parts) + "\n"
 
 
+def housekeep_flag(root, cfg):
+    """One nudge line when stale artefacts exist and housekeeping hasn't run for
+    RESIDUE_NUDGE_DAYS (cheap age-only count — `run` does the reference-safe part),
+    or None. Zero tokens when clean or recently run."""
+    try:
+        import housekeep
+    except Exception:
+        return None
+    try:
+        age = housekeep.stamp_age_days(root)
+        if age is not None and age < housekeep.RESIDUE_NUDGE_DAYS:
+            return None
+        n, b = housekeep.stale_quick_count(root, cfg)
+        if not n:
+            return None
+        return ("⚠ housekeeping due: %d artefact file(s) (~%.0f MB) past retention — "
+                "`orchestrate-housekeep run` archives the unreferenced ones "
+                "(reference-safe, reversible; /housekeep for detail)." % (n, b / 1e6))
+    except Exception:
+        return None
+
+
 def pane_flags(root, data):
     """Lingering-pane sentinel (lead session only): one line naming live teammates
     that hold no open task, or [] when clean/undeterminable. Liveness from the team
@@ -319,6 +341,9 @@ def main():
     if audience == "lead":
         try:
             flags = pane_flags(root, data)
+            hk = housekeep_flag(root, cfg)
+            if hk:
+                flags = flags + [hk]
             if flags:
                 out = (out or "") + "\n".join(flags) + "\n"
         except Exception:
