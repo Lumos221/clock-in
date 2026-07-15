@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.10] — 2026-07-15
+### Added
+- **New-artefact-dir detector** (Boss's "what if new folders appear later?" — the discovery was write-once, so a dir born after config would accumulate unseen). Every `scan`/`run` now mechanically counts artefact-type files (images/PDF/video) in unconfigured dirs — skipping `.git`/`node_modules`/`archive/`/asset-style dirnames and everything already configured — and prints one `hint:` line when a dir crosses the threshold (8). Detection machine, classification model (only when the hint fires: `/housekeep` judges working-artefacts vs product-assets and proposes the config entry), decision Boss. Recurring runs stay zero-token.
+
 ## [0.9.9] — 2026-07-15
 ### Added
 - **Housekeeping: model at the edges, machine in the loop** (Boss's design point). Ad-hoc sweeps: `orchestrate-housekeep run --path <dir-in-project> [--days N]` — the Boss names a folder ("clean up the renders"), `/housekeep` resolves and passes it, no config needed; paths outside the project are rejected. First-run discovery: in a project with no `housekeeping` config and no `docs/mockups`, `/housekeep` now instructs one turn of judgment — find the artefact-accumulating dirs, propose, write the config on the Boss's OK — after which every run and nudge is pure machine again.

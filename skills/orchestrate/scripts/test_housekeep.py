@@ -160,6 +160,36 @@ class PathOverride(unittest.TestCase):
             self.assertEqual(self._run(d, ["run", "--path", "no/such/dir"]), 1)
 
 
+class NewDirDetector(unittest.TestCase):
+    def test_unconfigured_artefact_dir_hinted(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            os.makedirs(os.path.join(d, "docs/mockups"))          # configured (default)
+            for i in range(9):
+                _file(d, "design/renders/r%d.png" % i, FRESH)
+            hint = hk.new_dir_hint(d, hk.load_cfg(d))
+            self.assertIn("design/renders", hint)
+            self.assertIn("(9)", hint)
+
+    def test_configured_archive_and_asset_dirs_excluded(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            for i in range(9):
+                _file(d, "docs/mockups/m%d.png" % i, FRESH)       # configured
+                _file(d, "docs/mockups/archive/2026-06/a%d.png" % i, FRESH)
+                _file(d, "docs/assets/logo%d.png" % i, FRESH)     # product assets
+                _file(d, "node_modules/pkg/img%d.png" % i, FRESH)
+            self.assertIsNone(hk.new_dir_hint(d, hk.load_cfg(d)))
+
+    def test_below_threshold_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            os.makedirs(os.path.join(d, "docs/mockups"))
+            for i in range(hk.NEW_DIR_THRESHOLD - 1):
+                _file(d, "design/x%d.png" % i, FRESH)
+            self.assertIsNone(hk.new_dir_hint(d, hk.load_cfg(d)))
+
+
 class SessionStartNudge(unittest.TestCase):
     def test_flag_fires_then_clears_after_run(self):
         import session_start as ss

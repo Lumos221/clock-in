@@ -150,6 +150,44 @@ def stale_quick_count(root, cfg, now=None):
     return n, b
 
 
+ARTEFACT_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".mp4", ".mov"}
+SKIP_DIRNAMES = {".git", "node_modules", ".claude", "archive", "assets", "static",
+                 "public", "fixtures", "__pycache__"}
+NEW_DIR_THRESHOLD = 8
+
+
+def detect_new_dirs(root, cfg):
+    """[(rel_dir, count)] of unconfigured dirs holding ≥NEW_DIR_THRESHOLD artefact
+    files — a mechanical HINT for the model/Boss to judge; never acted on by itself.
+    Configured trees, archives, and product-asset-style dirnames are skipped."""
+    configured = {os.path.abspath(d) for d, _, _ in hk_dirs(root, cfg)}
+    counts = {}
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [x for x in dirnames if x not in SKIP_DIRNAMES
+                       and not x.startswith(".")]
+        ap = os.path.abspath(dirpath)
+        if any(ap == c or ap.startswith(c + os.sep) for c in configured):
+            dirnames[:] = []
+            continue
+        n = sum(1 for f in filenames
+                if os.path.splitext(f)[1].lower() in ARTEFACT_EXTS)
+        if n:
+            counts[os.path.relpath(dirpath, root)] = n
+    return sorted(((d, n) for d, n in counts.items() if n >= NEW_DIR_THRESHOLD),
+                  key=lambda x: -x[1])
+
+
+def new_dir_hint(root, cfg):
+    """One printable hint line, or None."""
+    found = detect_new_dirs(root, cfg)
+    if not found:
+        return None
+    return ("hint: possible new artefact dir(s): %s — if these are working artefacts "
+            "(not product assets), add them to orchestrate.json `housekeeping` "
+            "(/housekeep proposes the entry)."
+            % ", ".join("%s (%d)" % f for f in found[:4]))
+
+
 def stamp_age_days(root, now=None):
     now = now or time.time()
     try:
@@ -264,10 +302,13 @@ def main(argv):
             sys.stderr.write("orchestrate-housekeep: no such dir: %s\n" % rel)
             return 1
         dirs = [(ap, rel, days if (days is not None and cmd != "prune") else 14)]
+    hint = None if dirs is not None else new_dir_hint(root, cfg)
     if cmd == "scan":
         cand = candidates(root, cfg, dirs=dirs)
         if not cand:
             print("housekeep: clean — nothing stale and unreferenced.")
+            if hint:
+                print(hint)
             return 0
         mb = sum(s for _, _, s in cand) / 1e6
         print("housekeep: %d stale unreferenced file(s), %.1f MB — `orchestrate-housekeep run` archives them:"
@@ -276,11 +317,15 @@ def main(argv):
             print("  " + relp)
         if len(cand) > 40:
             print("  … +%d more" % (len(cand) - 40))
+        if hint:
+            print(hint)
         return 0
     if cmd == "run":
         moved = archive(root, cfg, dirs=dirs)
         print("housekeep: archived %d file(s)%s; residue swept; stamp updated."
               % (len(moved), (" → " + os.path.dirname(moved[0][1])) if moved else ""))
+        if hint:
+            print(hint)
         return 0
     if cmd == "prune":
         if days is None:

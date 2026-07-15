@@ -16,4 +16,6 @@ Which folders it watches standing: `orchestrate.json` → `"housekeeping": [{"pa
 
 **First run in a project with no `housekeeping` config and no `docs/mockups`:** do the one-time discovery yourself — look for dirs that accumulate visual/working artefacts (mockups, screenshots, renders, exports; image-heavy, dated filenames), propose the entries to the Boss in one line, and on their OK write `"housekeeping": [...]` into `.claude/orchestrate.json`, then run. One turn of judgment; every later run and nudge is pure machine.
 
+**When the script prints a `hint: possible new artefact dir(s)` line** (a mechanical detector spotted an unconfigured dir crossing the artefact-file threshold): judge it — working artefacts get proposed to the Boss as a new `housekeeping` entry (write on their OK); product assets (logos, README images, app resources) get left alone, and if the hint keeps naming the same asset dir, tell the Boss it may deserve an `assets`-style name the detector skips.
+
 $ARGUMENTS
