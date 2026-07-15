@@ -1,6 +1,6 @@
 # Boss Board Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A live, always-open "Needs-You" panel aggregating every pending ask for the Boss across all panes, raised/resolved by panes via markers and a Stop hook, with a `/board` command for the Boss.
 
@@ -141,7 +141,7 @@ Boss across panes. Panes raise `@BOSS[<dept>]: <ask>` (a Stop hook captures it)
 and resolve with `@BOSS-DONE[<dept>]`; the Boss raises via the `/board` command.
 A singleton localhost server serves a self-polling page that always shows the
 current open asks. Stdlib only; degrades, never hard-fails. See
-docs/superpowers/specs/2026-06-30-boss-board-design.md."""
+docs/design/specs/2026-06-30-boss-board-design.md."""
 import sys, os, re, json, time, html, hashlib, socket, tempfile, subprocess
 from datetime import datetime
 
@@ -1058,7 +1058,7 @@ Create `skills/orchestrate/reference/boss-board.md`:
 ```markdown
 # Boss Board — `scripts/board.py`
 
-> A live **"Needs-You" panel**: every pending ask *for the Boss*, across all panes, in one always-open window. Separate from `TaskBoard.md` (dept work) — it does not touch the task system or its gates. Design: `docs/superpowers/specs/2026-06-30-boss-board-design.md`.
+> A live **"Needs-You" panel**: every pending ask *for the Boss*, across all panes, in one always-open window. Separate from `TaskBoard.md` (dept work) — it does not touch the task system or its gates. Design: `docs/design/specs/2026-06-30-boss-board-design.md`.
 
 ## What it is
 The Boss works solo and multi-pane; the one message that needs the Boss gets buried. The Boss Board surfaces those asks into a single self-refreshing panel on the Boss's laptop. Mostly mechanical — the model writes a one-line marker; a Stop hook does the panel work.

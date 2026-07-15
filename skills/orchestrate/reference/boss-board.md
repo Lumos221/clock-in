@@ -1,6 +1,6 @@
 # Boss Board — `scripts/board.py`
 
-> A live **decision panel for the Boss**: every pending ask on top — each linked to its task for context — with a read-only *current iteration* kanban (from `TaskBoard.md`) underneath. It never touches the task system or its gates. Design: `docs/superpowers/specs/2026-06-30-boss-board-design.md`.
+> A live **decision panel for the Boss**: every pending ask on top — each linked to its task for context — with a read-only *current iteration* kanban (from `TaskBoard.md`) underneath. It never touches the task system or its gates. Design: `docs/design/specs/2026-06-30-boss-board-design.md`.
 
 ## What it is
 The Boss works solo and multi-pane; the one message that needs the Boss gets buried — and a bare "need input" line isn't decidable anyway. The panel fixes both: asks are pinned in the upper **Needs you** section with the ask's task card shown as a chip (id · name · status), and the lower section renders the iteration board (Todo / In progress / Done — Done includes the hook-maintained *Recently shipped* tail), so the Boss can locate the task that needs them and glance at the related ones. Mostly mechanical — the model writes a one-line marker; a Stop hook does the panel work; the server re-reads `TaskBoard.md` per poll.

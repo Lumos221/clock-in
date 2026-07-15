@@ -4,7 +4,7 @@ Boss across panes. Panes raise `@BOSS[<dept>]: <ask>` (a Stop hook captures it)
 and resolve with `@BOSS-DONE[<dept>]`; the Boss raises via the `/board` command.
 A singleton localhost server serves a self-polling page that always shows the
 current open asks. Stdlib only; degrades, never hard-fails. See
-docs/superpowers/specs/2026-06-30-boss-board-design.md."""
+docs/design/specs/2026-06-30-boss-board-design.md."""
 import sys, os, re, json, time, html, hashlib, socket, tempfile, subprocess
 from datetime import datetime
 

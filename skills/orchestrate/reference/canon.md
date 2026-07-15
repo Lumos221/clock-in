@@ -1,6 +1,6 @@
 # Canonical Answers — `scripts/canon.py`
 
-> A machine-maintained registry of the **current authoritative file per answered question**: `docs/CANON.md`. Read-first by every dept; registered mechanically so the CEO relay can't drop a pointer. Separate from `DECISIONS.md` (full why-log, on-demand). Design: `docs/superpowers/specs/2026-06-30-canonical-answers-design.md`.
+> A machine-maintained registry of the **current authoritative file per answered question**: `docs/CANON.md`. Read-first by every dept; registered mechanically so the CEO relay can't drop a pointer. Separate from `DECISIONS.md` (full why-log, on-demand). Design: `docs/design/specs/2026-06-30-canonical-answers-design.md`.
 
 ## Why
 A decision settled in one dept must reach the depts that act on it. `CANON.md` is the lean, read-first index of current binding answers — a dept that re-reads it each session can't carry pre-decision memory, and a peer needing a cross-domain fact looks it up by topic instead of guessing a filename.

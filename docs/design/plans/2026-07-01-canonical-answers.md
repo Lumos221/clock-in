@@ -1,6 +1,6 @@
 # Canonical Answers Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A mechanically-maintained `docs/CANON.md` registry of current canonical answers — owning depts register via a `@CANON` marker caught by a Stop hook, peers look up by topic instead of guessing filenames, and dependents are flagged when an answer changes.
 
@@ -144,7 +144,7 @@ Create `skills/orchestrate/scripts/canon.py`:
 authoritative file per answered question. Owning depts register via a `@CANON[..]`
 marker (a Stop hook applies it); peers look up by topic instead of guessing filenames;
 dependents are flagged when an answer changes. Stdlib only; degrades, never hard-fails.
-See docs/superpowers/specs/2026-06-30-canonical-answers-design.md."""
+See docs/design/specs/2026-06-30-canonical-answers-design.md."""
 import sys, os, re, subprocess
 from datetime import datetime
 
@@ -867,7 +867,7 @@ Create `skills/orchestrate/reference/canon.md`:
 ```markdown
 # Canonical Answers — `scripts/canon.py`
 
-> A machine-maintained registry of the **current authoritative file per answered question**: `docs/CANON.md`. Read-first by every dept; registered mechanically so the CEO relay can't drop a pointer. Separate from `DECISIONS.md` (full why-log, on-demand). Design: `docs/superpowers/specs/2026-06-30-canonical-answers-design.md`.
+> A machine-maintained registry of the **current authoritative file per answered question**: `docs/CANON.md`. Read-first by every dept; registered mechanically so the CEO relay can't drop a pointer. Separate from `DECISIONS.md` (full why-log, on-demand). Design: `docs/design/specs/2026-06-30-canonical-answers-design.md`.
 
 ## Why
 A decision settled in one dept must reach the depts that act on it. `CANON.md` is the lean, read-first index of current binding answers — a dept that re-reads it each session can't carry pre-decision memory, and a peer needing a cross-domain fact looks it up by topic instead of guessing a filename.

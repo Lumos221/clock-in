@@ -3,7 +3,7 @@
 authoritative file per answered question. Owning depts register via a `@CANON[..]`
 marker (a Stop hook applies it); peers look up by topic instead of guessing filenames;
 dependents are flagged when an answer changes. Stdlib only; degrades, never hard-fails.
-See docs/superpowers/specs/2026-06-30-canonical-answers-design.md."""
+See docs/design/specs/2026-06-30-canonical-answers-design.md."""
 import sys, os, re, subprocess
 from datetime import datetime
 

@@ -1,6 +1,6 @@
 # Canonical Answers v2 (Decisions) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let a CANON row index a *key in-force decision* — pointer literal `DECISIONS`, resolved by grepping the topmost `[topic-key]` tag in `DECISIONS.md`, with that entry's headline mirrored as the gist.
 
