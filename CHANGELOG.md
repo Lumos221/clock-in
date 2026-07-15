@@ -4,6 +4,13 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.5] — 2026-07-15
+### Added
+- **Two-regime orchestration — the brain regime (Fable CEO).** `reference/brain-regime.md` is an on-demand overlay loaded only when the session model is Fable, via a 3-line regime switch under the SKILL CORE RULE — parity sessions (opus CEO, today's rules) pay ~60 always-loaded tokens and never read the overlay; nobody loads both systems. Rationale: the parity CORE RULE ("never dictate method") rested on opus-CEO/opus-head craft parity; a Fable CEO breaks it, so method ownership moves up while the CEO's context goes on a strict diet (Fable is weekly-capped — its context is the org's scarcest resource).
+- **Zero-code CEO via differential diagnosis:** the CEO holds words, marked images, tables, 4-line reports and harness artefacts — never code. Bug rounds dispatch a 诊断 table (candidate cause · confirm-by probe · fix-if-confirmed, likelihood-ordered) with two card-borne rules: confirm the cause with probe evidence BEFORE applying its fix, and an escape rung (none verified → report your own diagnosis + evidence, never fix beyond the table). Feature work dispatches interface-level specs + harness. Echo table (mark → understood → planned fix) locks intent with the non-technical Boss before any dispatch; L1 gates the round's batch, not each micro-spec; the CEO judges outcomes from artefacts (L2 stays the independent floor — CEO and spec share blind spots, the gate doesn't).
+- **Escalation ladder** (descend only on failure): ① hypothesis dispatch (default, zero code) → ② dept diagnosis (the dept has read the code; CEO sanity-checks a 5-line report) → ③ commissioned read (cheap subagent carrying a sharp discriminating question, conclusions only; direct Read = bounded excerpt when exactness is load-bearing).
+- **Org under brain regime:** depts spawn at sonnet via per-spawn `model:"sonnet"` (the override beats the opus pin; one roster serves both regimes, no re-recruit) — with piece-level specs the head's planning job is gone, which also dissolves the opus-head work-hoarding pathology structurally. 审查官/督察 stay opus (verification asymmetry: the top routable tier meaningfully audits Fable designs). Recorded as the one CEO model call in `model-routing.md`; 诊断-card discipline backstop added to the dept template.
+
 ## [0.9.4] — 2026-07-15
 ### Changed
 - **SKILL.md deduplicated** (21.2 KB → ~17.8 KB, ~1.2k tokens saved per invocation): each

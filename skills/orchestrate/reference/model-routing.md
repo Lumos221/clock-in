@@ -29,6 +29,8 @@ isn't worth a subagent round-trip — the head types it inline.)
 **The only per-spawn model decision in the whole org is a head choosing each staff spawn's tier.**
 Every standing role is opus, pinned once at recruit; the CEO orchestrates and makes no model call.
 
+**Brain-regime exception (Fable CEO — `reference/brain-regime.md`):** dept spawns carry `model:"sonnet"` (the per-spawn override beats the opus pin; the roster is unchanged and serves both regimes). 审查官/督察 stay opus. This is the one place the CEO makes a model call.
+
 ## The staff tier — per piece (the head's call)
 
 | The piece | Tier |
