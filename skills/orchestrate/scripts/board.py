@@ -440,6 +440,65 @@ def server_info(root):
     return None
 
 
+def _port_holders(port):
+    """PIDs listening on the port, via lsof — best-effort (absent/odd platform → [])."""
+    try:
+        out = subprocess.run(["lsof", "-ti", "tcp:%d" % port, "-sTCP:LISTEN"],
+                             capture_output=True, text=True, timeout=3).stdout
+        return [int(p) for p in out.split() if int(p) != os.getpid()]
+    except Exception:
+        return []
+
+
+def _is_our_board(port, root):
+    """True iff the port answers like a Boss-Board server FOR THIS ROOT — the guard
+    that keeps zombie reclaim from shooting an innocent process that happens to
+    squat the derived port."""
+    import urllib.request
+    try:
+        raw = urllib.request.urlopen("http://127.0.0.1:%d/state.json" % port, timeout=1).read()
+        d = json.loads(raw)
+        return "entries" in d and d.get("project") == os.path.basename(os.path.abspath(root))
+    except Exception:
+        return False
+
+
+def _reclaim_port(port, root):
+    """Free the port from a superseded board server whose pidfile generation was
+    lost. Field case (refcheck 2026-07-17): a 0.9.6 zombie held the derived port
+    for two days — the pidfile pointed elsewhere, so every replacement missed it,
+    drifted to +1, and the Boss's open tab (which polls the ZOMBIE) kept it alive
+    while each real server, unpolled, idle-reaped itself. Kills only a process
+    that answers as this root's board."""
+    if port_free(port) or not _is_our_board(port, root):
+        return
+    for pid in _port_holders(port):
+        try:
+            os.kill(pid, 15)
+        except Exception:
+            pass
+    for _ in range(40):
+        if port_free(port):
+            return
+        time.sleep(0.05)
+
+
+def _superseded(root, port):
+    """True iff the on-disk record (version stamp · port) no longer names this
+    server. The idle reaper alone cannot retire a stale server: an open tab keeps
+    polling it (immortal) while the freshly spawned current one, unpolled, reaps
+    itself — the system converges on serving old code. Missing record → False
+    (standalone `serve` runs have none)."""
+    try:
+        if open(versionfile(root), encoding="utf-8").read().strip() != BUILD:
+            return True
+        if int(open(portfile(root)).read().strip()) != port:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def ensure_server(root):
     """Return (port, started) — `started` True only when THIS call spawned the server
     (so the caller can open the browser once, not on every ask). The check+spawn window
@@ -462,6 +521,10 @@ def ensure_server(root):
                 if port_free(port):
                     break
                 time.sleep(0.05)
+            _reclaim_port(port, root)          # pidfile pid missed the real holder
+        # Reclaim the derived port from any unrecorded predecessor — otherwise the
+        # respawn drifts to +1 and every open tab stays orphaned on the old server.
+        _reclaim_port(derive_port(root), root)
         port = pick_port(root)
         with open(portfile(root), "w") as f:
             f.write(str(port))
@@ -550,12 +613,20 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
 .col.answered h3::after { content: '▸'; margin-left: auto; color: #87867f; font-size: .82em; }
 .col.answered h3.x::after { content: '▾'; }
 .col.answered h3:not(.x) + div { display: none; }
-/* Direction banner — the product's standing "where we're heading" slot, set via
-   `orchestrate-board direction`; hidden entirely when unset. */
-.dircard { display: flex; gap: 10px; border: 1px solid #dfdacc; border-left: 3px solid #c15f3c;
-           border-radius: 8px; padding: 10px 12px; background: #faf9f5;
-           font-size: .84rem; line-height: 1.5; box-shadow: 0 1px 2px rgba(31,30,29,.05); }
-.dircard .dirtext { flex: 1; min-width: 0; }
+/* Direction band — the product's standing compass, set via `orchestrate-board
+   direction`; hidden entirely when unset. Deliberately UNBOXED: every card below
+   is work, this is the thesis the work serves — so it reads as the masthead's
+   motto line (kicker in the brand's voice, statement in the panel's serif), not
+   as one more card in the stack. */
+.dirband { margin: 2px 0 4px; padding: 12px 2px 16px; border-bottom: 1px solid #dcd8cb; }
+.dkick { display: flex; align-items: center; gap: 6px; font-size: .66rem; font-weight: 600;
+         letter-spacing: .16em; text-transform: uppercase; color: #c15f3c; }
+.dkick svg { flex: none; }
+.dkick .rage { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 400; }
+.dstate { font-family: "Tiempos Text", ui-serif, Georgia, "Songti SC", serif;
+          font-size: 1.04rem; line-height: 1.6; margin-top: 7px; max-width: 75ch;
+          text-wrap: pretty; }
+.dstate .dlabel { color: #a2542f; font-weight: 600; letter-spacing: .02em; }
 /* An answered row with a one-line outcome folds to it; the original ask sits
    behind the click, quoted under a hairline. */
 .rx .orig { margin: 4px 0 2px; padding-left: 8px; border-left: 2px solid #e2ddd0;
@@ -621,8 +692,9 @@ html.dark .k-discuss { background: #8fa9c4; }
 html.dark .parked .dot2 { background: #5c5b57; }
 html.dark .answered .dot2 { background: #7fae72; }
 html.dark .col.answered h3::after { color: #a3a199; }
-html.dark .dircard { background: #30302e; border-color: #3e3d3a; border-left-color: #d97757;
-                     box-shadow: none; }
+html.dark .dirband { border-bottom-color: #3e3d3a; }
+html.dark .dkick { color: #d97757; }
+html.dark .dstate .dlabel { color: #e08262; }
 html.dark .rx .orig { border-left-color: #4a4945; color: #b8b5ac; }
 html.dark .col.c-todo { background: #2c312a; }
 html.dark .col.c-prog { background: #363023; }
@@ -725,6 +797,16 @@ const ICONS = {
   crab: `<svg width="50" height="44" viewBox="0 0 52 46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="26" cy="29" rx="11" ry="8"/><path d="M21 22L19 16"/><circle cx="18.6" cy="13.6" r="1.8"/><path d="M31 22l2-6"/><circle cx="33.4" cy="13.6" r="1.8"/><path d="M15 26c-5-1-8-5-7-10"/><path d="M8 16l-3-2.5M8 16l3.5-2"/><path d="M37 26c5-1 8-5 7-10"/><path d="M44 16l3-2.5M44 16l-3.5-2"/><path d="M16 33.5l-6 2.5M18.5 36.5l-5 4M33.5 36.5l5 4M36 33.5l6 2.5"/></svg>`,
   inbox: `<svg width="42" height="42" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.9 10.2 4 24v12a4 4 0 0 0 4 4h32a4 4 0 0 0 4-4V24l-6.9-13.8A4 4 0 0 0 33.5 8h-19a4 4 0 0 0-3.6 2.2z"/><polyline points="4 24 16 24 20 30 28 30 32 24 44 24"/></svg>`,
 };
+function dirBand(d){
+  // A short leading "LABEL:" (≤30 chars, colon+space) becomes the statement's
+  // coral head — the CEO's texts naturally carry one (LAUNCH LINE: · 主攻方向：).
+  const m = /^([^:：\n]{2,30})[:：]\s+/.exec(d.text);
+  const label = m ? `<span class='dlabel'>${md(m[1])}:</span> ` : '';
+  const rest = m ? d.text.slice(m[0].length) : d.text;
+  const rose = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2.6 5.4-4.4 1.6 2.6-5.4z"/></svg>`;
+  return `<div class='dirband'><div class='dkick'>${rose} Direction<span class='rage'>${age(d.updated)}</span></div>
+    <div class='dstate'>${label}${md(rest)}</div></div>`;
+}
 function chip(t){
   // Hook-born cards have label "#<id>" and ·-less headings parse label===name —
   // show each fact once (same guards as tCard).
@@ -795,8 +877,7 @@ async function tick(){
     }
     lastRaw = raw;
     const dir = s.direction;
-    document.getElementById('dir').innerHTML = (dir && dir.text)
-      ? `<h2>Direction</h2><div class='dircard'><div class='dirtext'>${md(dir.text)}</div><span class='rage'>${age(dir.updated)}</span></div>` : '';
+    document.getElementById('dir').innerHTML = (dir && dir.text) ? dirBand(dir) : '';
     const es = s.entries || [];
     const tb = s.taskboard || {tasks:[], shipped:[]};
     const T = {list: tb.tasks, byId: {}};
@@ -978,6 +1059,8 @@ def serve(root, port):
     def reaper():
         while True:
             time.sleep(30)
+            if _superseded(root, port):   # record moved on — exit even while polled
+                os._exit(0)
             idle = (time.time() - state["last_poll"]) > IDLE_REAP_SECONDS
             opens = any(e["status"] == "open" for e in load_store(store_path)["entries"])
             if idle and not opens:

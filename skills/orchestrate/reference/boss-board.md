@@ -20,7 +20,7 @@ The Boss works solo and multi-pane; the one message that needs the Boss gets bur
 - Ids are dept-prefixed (`QA-1`); `orchestrate-board get <id>` and `list --dept <dept>` read only what's needed, so a pane never parses the whole board.
 
 ## The panel
-A singleton localhost server (port derived from the project path; pidfile = "is it up"). The page polls every ~1.5 s and re-renders. It **self-reaps** when there are no open items and it hasn't been polled for ~10 min; the next `add` respawns it. Stdlib only; degrades to no-op if a browser can't open.
+A singleton localhost server (port derived from the project path; pidfile = "is it up"). The page polls every ~1.5 s and re-renders. It **self-reaps** when there are no open items and it hasn't been polled for ~10 min; the next `add` respawns it. A server the record no longer names (version stamp or port moved on) **exits within ~30 s even while polled** — an open tab otherwise keeps a stale one immortal; and at respawn the derived port is **reclaimed** from any lost-generation zombie that still answers as this project's board, so open tabs never orphan onto old code. Stdlib only; degrades to no-op if a browser can't open.
 
 ## CLI (the launcher is `orchestrate-board`, on PATH)
 `add --dept <h> --kind <needs|discuss> --text "…"` · `done <id> [--sum "…"]` · `resolve --dept <h>` · `park <id>` · `reopen <id>` · `get <id>` · `list [--dept <h>]` · `direction --text "…" | --clear` · `open` · `stop`.

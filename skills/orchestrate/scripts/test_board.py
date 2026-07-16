@@ -204,6 +204,51 @@ class Runtime(unittest.TestCase):
                 f.write(board.BUILD)
             self.assertTrue(board._server_is_current(d))
 
+    def test_superseded_record_retires_server(self):
+        """Field case (refcheck 07-17): an open tab's polling defeats the idle reap,
+        so a stale server lives forever unless it notices the record moved on."""
+        with tempfile.TemporaryDirectory() as d:
+            self.assertFalse(board._superseded(d, 55555))     # no record: standalone run
+            with open(board.versionfile(d), "w") as f:
+                f.write(board.BUILD)
+            with open(board.portfile(d), "w") as f:
+                f.write("55555")
+            self.assertFalse(board._superseded(d, 55555))     # record names us
+            self.assertTrue(board._superseded(d, 55556))      # port moved on
+            with open(board.versionfile(d), "w") as f:
+                f.write("0.0.1+dead")
+            self.assertTrue(board._superseded(d, 55555))      # build moved on
+
+    def test_reclaim_kills_only_a_proven_board_zombie(self):
+        """A zombie whose pidfile generation was lost holds the derived port; reclaim
+        must free it — but only after the process answers as THIS root's board, so an
+        innocent squatter on the port is never shot. Real subprocess, real socket."""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        with tempfile.TemporaryDirectory() as d:
+            root = os.path.join(d, "zomb")
+            os.makedirs(os.path.join(root, ".claude"))
+            port = board.pick_port(root)
+            z = subprocess.Popen([sys.executable, os.path.join(script_dir, "board.py"),
+                                  "serve", "--root", root, "--port", str(port)],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                for _ in range(100):
+                    if not board.port_free(port):
+                        break
+                    time.sleep(0.05)
+                self.assertFalse(board.port_free(port))
+                other = os.path.join(d, "innocent")
+                os.makedirs(other)
+                board._reclaim_port(port, other)              # wrong root: must NOT kill
+                self.assertFalse(board.port_free(port))
+                board._reclaim_port(port, root)               # right root: reclaimed
+                self.assertTrue(board.port_free(port))
+            finally:
+                try:
+                    z.kill()
+                except Exception:
+                    pass
+
     def test_derive_port_is_deterministic_and_in_range(self):
         with tempfile.TemporaryDirectory() as d:
             p1 = board.derive_port(d)
