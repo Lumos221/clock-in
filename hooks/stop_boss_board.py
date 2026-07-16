@@ -48,12 +48,12 @@ def run(data, text=None):
             board.board_add(root, dept, "needs", ask, task=task)
         except Exception:
             pass
-    for token in markers["dones"]:
+    for token, outcome in markers["dones"]:
         try:
             if "-" in token and board.board_get(root, token):
-                board.board_done(root, token)
+                board.board_done(root, token, outcome)
             else:
-                e, opens = board.board_resolve_dept(root, token)
+                e, opens = board.board_resolve_dept(root, token, outcome)
                 if not e and len(opens) > 1:
                     # An ambiguous @BOSS-DONE[<dept>] used to be swallowed silently — the
                     # dept believes it resolved while its asks stay open forever. Which ask

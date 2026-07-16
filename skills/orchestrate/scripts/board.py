@@ -60,12 +60,24 @@ def list_entries(store, dept=None):
     return [e for e in store["entries"] if dept is None or e["dept"] == dept]
 
 
-def set_status(store, eid, status, now):
+def set_status(store, eid, status, now, sum=None):
     e = get_entry(store, eid)
     if e:
         e["status"] = status
         e["updated"] = now
+        if sum:
+            e["sum"] = sum  # one-line outcome — the answered row's collapsed face
     return e
+
+
+def set_direction(store, text, now):
+    """The standing product-direction banner above the panel (e.g. a launch
+    checklist). One slot, whole-text replace; empty text clears it."""
+    if (text or "").strip():
+        store["direction"] = {"text": text.strip(), "updated": now}
+    else:
+        store.pop("direction", None)
+    return store.get("direction")
 
 
 def open_for_dept(store, dept):
@@ -76,14 +88,13 @@ def open_notices(store, dept):
     return [e for e in open_for_dept(store, dept) if e.get("notice")]
 
 
-def resolve_by_dept(store, dept, now):
+def resolve_by_dept(store, dept, now, sum=None):
     # Ambiguity notices describe the queue — counting them as part of it made each
     # notice amplify the next ("2 asks open" begets "3 asks open" listing the first
     # notice) and left a dept-level DONE permanently ambiguous once one existed.
     opens = [e for e in open_for_dept(store, dept) if not e.get("notice")]
     if len(opens) == 1:
-        opens[0]["status"] = "resolved"
-        opens[0]["updated"] = now
+        set_status(store, opens[0]["id"], "resolved", now, sum)
         for n in open_notices(store, dept):   # queue is unambiguous again — notice is moot
             n["status"] = "resolved"
             n["updated"] = now
@@ -187,18 +198,21 @@ def _locked_mutate(root, mutator):
 # card so the panel can show the task's context next to the ask. Bare `@BOSS[<dept>]:`
 # stays valid (non-task asks, and every pre-0.7.0 dept brief).
 RAISE_RE = re.compile(r"@BOSS\[([^\]\s#]+)(?:#([A-Za-z0-9_-]+))?\]:\s*(.+)")
-DONE_RE = re.compile(r"@BOSS-DONE\[([^\]\s]+)\]")
+# `@BOSS-DONE[<dept>|<id>]: <one-line outcome>` — the optional outcome becomes the
+# answered row's collapsed line on the panel (an essay ask folds to its result).
+DONE_RE = re.compile(r"@BOSS-DONE\[([^\]\s]+)\](?::\s*(.+))?")
 
 
 def parse_markers(text):
-    """raises = (dept, task_id-or-None, ask). `misses` = lines that mention @BOSS but
-    match neither regex — the hook logs them (marker-misses.log) so a malformed marker
-    doesn't vanish without a trace."""
+    """raises = (dept, task_id-or-None, ask); dones = (dept-or-id, outcome-or-None).
+    `misses` = lines that mention @BOSS but match neither regex — the hook logs them
+    (marker-misses.log) so a malformed marker doesn't vanish without a trace."""
     raises, dones, misses = [], [], []
     for line in (text or "").splitlines():
         m = DONE_RE.search(line)
         if m:
-            dones.append(m.group(1).split("#")[0])  # tolerate a symmetric #task suffix
+            # tolerate a symmetric #task suffix on the token
+            dones.append((m.group(1).split("#")[0], (m.group(2) or "").strip() or None))
             continue
         m = RAISE_RE.search(line)
         if m:
@@ -529,6 +543,23 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
 .parked .dot2 { background: #cbc6b9; }
 .answered .row { opacity: .72; }
 .answered .dot2 { background: #6b9e5f; }
+/* Answered is history, not work — collapsed by default (count stays visible);
+   click/Enter on the header to peek. The fold class lives on the static h3, so
+   it survives the per-poll re-render of the list inside. */
+.col.answered h3 { cursor: pointer; }
+.col.answered h3::after { content: '▸'; margin-left: auto; color: #87867f; font-size: .82em; }
+.col.answered h3.x::after { content: '▾'; }
+.col.answered h3:not(.x) + div { display: none; }
+/* Direction banner — the product's standing "where we're heading" slot, set via
+   `orchestrate-board direction`; hidden entirely when unset. */
+.dircard { display: flex; gap: 10px; border: 1px solid #dfdacc; border-left: 3px solid #c15f3c;
+           border-radius: 8px; padding: 10px 12px; background: #faf9f5;
+           font-size: .84rem; line-height: 1.5; box-shadow: 0 1px 2px rgba(31,30,29,.05); }
+.dircard .dirtext { flex: 1; min-width: 0; }
+/* An answered row with a one-line outcome folds to it; the original ask sits
+   behind the click, quoted under a hairline. */
+.rx .orig { margin: 4px 0 2px; padding-left: 8px; border-left: 2px solid #e2ddd0;
+            color: #6b6a62; }
 .colempty { text-align: center; padding: 12px 6px 16px; }
 .glyph { color: #b6b2a4; margin: .45em 0 .05em; }
 html.dark .glyph { color: #6f6d66; }
@@ -589,6 +620,10 @@ html.dark .k-needs { background: #e08262; }
 html.dark .k-discuss { background: #8fa9c4; }
 html.dark .parked .dot2 { background: #5c5b57; }
 html.dark .answered .dot2 { background: #7fae72; }
+html.dark .col.answered h3::after { color: #a3a199; }
+html.dark .dircard { background: #30302e; border-color: #3e3d3a; border-left-color: #d97757;
+                     box-shadow: none; }
+html.dark .rx .orig { border-left-color: #4a4945; color: #b8b5ac; }
 html.dark .col.c-todo { background: #2c312a; }
 html.dark .col.c-prog { background: #363023; }
 html.dark .col.c-done { background: #322e37; }
@@ -621,13 +656,14 @@ html.dark [data-k]:focus-visible { outline-color: #d97757; }
   <h1 id='proj'>—</h1>
   <div class='stamp' id='stamp'>—</div>
 </header>
+<div id='dir'></div>
 <h2>On your desk</h2>
 <div class='board top'>
   <div class='col'><h3><span class='dot' style='border-color:#c15f3c'></span>Needs you
     <span class='count' id='askn'>0</span></h3><div id='asks'></div></div>
   <div class='col parked'><h3><span class='dot' style='border-color:#cbc6b9'></span>Parked
     <span class='count' id='parkn'>0</span></h3><div id='parked'></div></div>
-  <div class='col answered'><h3><span class='dot' style='border-color:#6b9e5f'></span>Answered
+  <div class='col answered'><h3 data-k='anscol' tabindex='0' onclick='tog(this)'><span class='dot' style='border-color:#6b9e5f'></span>Answered
     <span class='count' id='ansn'>0</span></h3><div id='answered'></div></div>
 </div>
 <h2>Current iteration</h2>
@@ -706,13 +742,17 @@ function askRow(e, T, ts){
   // break each onto its own line so the expanded wall scans as a list. The lookahead
   // keeps inline REFERENCES ("chain ①②③④ COMPLETE") intact: only a digit that starts
   // a clause (preceded by space, not followed by another digit) breaks.
-  const rt = md(e.text).replace(/\s([①-⑳])(?![①-⑳])/g,'<br>$1');
+  const brk = t => md(t).replace(/\s([①-⑳])(?![①-⑳])/g,'<br>$1');
+  // A resolved ask with a recorded outcome wears the outcome as its face; the essay
+  // it answered is quoted behind the click. Reopening shows the full ask again.
+  const sum = e.status==='resolved' && e.sum;
+  const rt = brk(sum ? e.sum : e.text);
   return `<div class="row${xc(e.id)}" data-k="${esc(e.id)}" tabindex="0" onclick="tog(this)">
     <span class="dot2 k-${esc(e.kind)}"></span>
     <div class="rc">
       <div class="rt">${rt}</div>
       <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
-      <div class="rx">${linked.map(chip).join('')}</div>
+      <div class="rx">${sum?`<div class='orig'>${brk(e.text)}</div>`:''}${linked.map(chip).join('')}</div>
     </div>
     <span class="rage">${a}</span></div>`;
 }
@@ -745,7 +785,7 @@ async function tick(){
     document.title = proj + ' · Boss Board';
     // Re-render ONLY when the data changed — a rebuild every poll would collapse
     // whatever the Boss just expanded and churn the DOM for nothing.
-    const raw = JSON.stringify([s.entries, s.taskboard]);
+    const raw = JSON.stringify([s.entries, s.taskboard, s.direction]);
     fails = 0;
     document.body.style.opacity = "";   // clear a stale "disconnected" dim on reconnect
     if (raw === lastRaw){
@@ -754,6 +794,9 @@ async function tick(){
       return;
     }
     lastRaw = raw;
+    const dir = s.direction;
+    document.getElementById('dir').innerHTML = (dir && dir.text)
+      ? `<h2>Direction</h2><div class='dircard'><div class='dirtext'>${md(dir.text)}</div><span class='rage'>${age(dir.updated)}</span></div>` : '';
     const es = s.entries || [];
     const tb = s.taskboard || {tasks:[], shipped:[]};
     const T = {list: tb.tasks, byId: {}};
@@ -780,16 +823,20 @@ async function tick(){
     const prog = tb.tasks.filter(t=>['doing','review'].includes(t.status));
     const doneT = tb.tasks.filter(t=>t.status==='done');
     const shipped = tb.shipped||[];
-    // Done shows the 6 most recent entries only — it's a glance at momentum, not the
-    // archive (that's BACKLOG.md). done-status cards first (still on the live board),
-    // then the shipped tail (already newest-first).
+    // Done is a glance at momentum, not the archive (that's BACKLOG.md): the 5 most
+    // recent entries — but a hot day must not vanish behind the cap, so when today
+    // ships more than 5 the cap stretches to keep every today-stamped row. done-status
+    // cards first (still on the live board), then the shipped tail (newest-first).
     const doneAll = doneT.map(tCard).concat(
         shipped.map(x=>`<div class='done-line${xc('s:'+x)}' data-k="${esc('s:'+x)}" tabindex="0" onclick="tog(this)"><div class='dl'>${md(x)}</div></div>`));
-    const more = doneAll.length - 6;
+    const d = new Date();
+    const today = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const cap = Math.max(5, doneT.length + shipped.filter(x=>x.trim().startsWith(today)).length);
+    const more = doneAll.length - cap;
     document.getElementById('board').innerHTML =
         col('Todo', '#6b9e5f', 'c-todo', todo.map(tCard).join(''), todo.length)
       + col('In progress', '#c08b2d', 'c-prog', prog.map(tCard).join(''), prog.length)
-      + col('Done', '#9c87c9', 'c-done', doneAll.slice(0,6).join('') +
+      + col('Done', '#9c87c9', 'c-done', doneAll.slice(0,cap).join('') +
             (more>0?`<p class='empty'>+${more} more → BACKLOG.md</p>`:''), doneT.length+shipped.length);
     document.getElementById('stamp').textContent =
       open.length + " open · updated " + new Date().toLocaleTimeString();
@@ -973,12 +1020,18 @@ def board_notice(root, dept, text):
     return e
 
 
-def board_resolve_dept(root, dept):
-    return _locked_mutate(root, lambda store: resolve_by_dept(store, dept, _now()))
+def board_resolve_dept(root, dept, sum=None):
+    return _locked_mutate(root, lambda store: resolve_by_dept(store, dept, _now(), sum))
 
 
-def board_done(root, eid):
-    return _locked_mutate(root, lambda store: set_status(store, eid, "resolved", _now()))
+def board_done(root, eid, sum=None):
+    return _locked_mutate(root, lambda store: set_status(store, eid, "resolved", _now(), sum))
+
+
+def board_direction(root, text):
+    d = _locked_mutate(root, lambda store: set_direction(store, text, _now()))
+    _surface(root)
+    return d
 
 
 def board_park(root, eid):
@@ -1027,7 +1080,23 @@ def main():
                       _opt(argv, "--task"))
         print(e["id"])
     elif cmd == "done":
-        e = board_done(root, argv[1]); print(e["id"] if e else "not found")
+        e = board_done(root, argv[1], _opt(argv, "--sum")); print(e["id"] if e else "not found")
+    elif cmd == "direction":
+        if "--clear" in argv:
+            board_direction(root, "")
+            print("cleared")
+        elif _opt(argv, "--text", "").strip():
+            board_direction(root, _opt(argv, "--text"))
+            print("set")
+        elif len(argv) > 1:
+            # Positional text matches no flag — same flags-only foot-gun as `add`:
+            # silently printing the current banner would read as "it worked".
+            sys.stderr.write("direction is flags-only:\n"
+                             "  orchestrate-board direction --text \"...\" | --clear\n")
+            sys.exit(2)
+        else:
+            d = load_store(_store_path(root)).get("direction")
+            print(d["text"] if d else "(none)")
     elif cmd == "resolve":
         e, opens = board_resolve_dept(root, _opt(argv, "--dept", ""))
         if e:
@@ -1054,7 +1123,7 @@ def main():
             port = board_open(root)
             print(board_url(port) if port else "(server skipped)")
     else:
-        sys.stderr.write("usage: orchestrate-board add|done|resolve|park|reopen|get|list|open|stop\n")
+        sys.stderr.write("usage: orchestrate-board add|done|resolve|park|reopen|get|list|direction|open|stop\n")
 
 
 if __name__ == "__main__":

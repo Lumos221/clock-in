@@ -7,9 +7,10 @@ The Boss works solo and multi-pane; the one message that needs the Boss gets bur
 
 ## How an ask is raised / resolved
 - **A pane needs the Boss:** end the turn with `@BOSS[<dept>#<task_id>]: <ask>` — the `#<task_id>` (the platform id on the card) links the ask to its task on the panel; omit it only for non-task asks. **The ask must be decidable from the board alone**: question · options · recommendation, 1–2 lines. The `Stop`/`SubagentStop` hook (`hooks/stop_boss_board.py`) captures it. An unlinked ask falls back to showing the dept's in-flight cards.
-- **The Boss answered, pane moves on:** end with `@BOSS-DONE[<dept>]` (its one open ask) or `@BOSS-DONE[<id>]` (a specific one). Ambiguous dept-level DONE with several asks open → a discuss item surfaces the ambiguity instead of silently resolving nothing.
+- **The Boss answered, pane moves on:** end with `@BOSS-DONE[<dept>]` (its one open ask) or `@BOSS-DONE[<id>]` (a specific one). Append the outcome — `@BOSS-DONE[<id>]: <one-line outcome>` — and the Answered row collapses to that line instead of the ask's opening words (the full ask stays one click behind). Ambiguous dept-level DONE with several asks open → a discuss item surfaces the ambiguity instead of silently resolving nothing.
 - **A revised ask supersedes an old one only by explicit close.** The board never auto-supersedes: dedup is exact-text, so a reworded re-raise is a NEW entry and the stale one stays in Needs-you. The pane must put `@BOSS-DONE[<old-id>]` in the same turn as the new `@BOSS[…]`; fallback, the Boss runs `/board done <old-id>`.
 - **The Boss's own items:** the `/board` command — `/board <text>` adds a discuss item; bare `/board` opens the panel; `/board park <id>` / `done <id>` / `reopen <id>` change status.
+- **Direction banner:** `orchestrate-board direction --text "…"` pins the product's standing direction (a launch checklist, the current battle line) in its own section above *On your desk*; `--clear` removes it. One slot, whole-text replace, set on the Boss's word — rendering is mechanical, so it costs nothing per poll.
 
 ## States & ownership
 `open → resolved`, plus `parked`. Panes drive open→resolved; the **Boss** owns park/reopen. The panel is read-only display.
@@ -22,4 +23,4 @@ The Boss works solo and multi-pane; the one message that needs the Boss gets bur
 A singleton localhost server (port derived from the project path; pidfile = "is it up"). The page polls every ~1.5 s and re-renders. It **self-reaps** when there are no open items and it hasn't been polled for ~10 min; the next `add` respawns it. Stdlib only; degrades to no-op if a browser can't open.
 
 ## CLI (the launcher is `orchestrate-board`, on PATH)
-`add --dept <h> --kind <needs|discuss> --text "…"` · `done <id>` · `resolve --dept <h>` · `park <id>` · `reopen <id>` · `get <id>` · `list [--dept <h>]` · `open` · `stop`.
+`add --dept <h> --kind <needs|discuss> --text "…"` · `done <id> [--sum "…"]` · `resolve --dept <h>` · `park <id>` · `reopen <id>` · `get <id>` · `list [--dept <h>]` · `direction --text "…" | --clear` · `open` · `stop`.

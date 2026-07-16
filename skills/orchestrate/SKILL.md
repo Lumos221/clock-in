@@ -120,7 +120,7 @@ Meetings are **events**, not stored files — outcomes land in `TaskBoard.md` / 
 - **例会** = a CEO status brief + the Boss's direction back; outcomes flow into TaskBoard / `DECISIONS.md`, never archived.
 - **董事会** = pull the Boss for stacked/blocked calls — fire when **decisions stack to ≥N (default 3)** or **the project is blocked on the Boss**. Item kinds: **拍板项** (pick A/B) · **签字项** (准/驳 a 法务部-flagged legal call, §5). Tag 🔴 临时 (pull now) / ⚪ 例行 (batch). Each call → `DECISIONS.md` (format → `templates/DECISIONS.md`).
 - **Morning brief** (overnight runs) — the CEO authors a few fields, `orchestrate-brief` renders PDF/PNG → `reference/meetings.md`.
-- **Boss Board** (live "needs-you" panel, separate from `TaskBoard.md`) — a pane flags with `@BOSS[<dept>#<task_id>]: <ask>` (1–2 lines, decidable: question · options · recommendation) and clears with `@BOSS-DONE[<dept>|<id>]`; **re-raising a revised ask → `@BOSS-DONE[<old-id>]` in the same turn** (the board never auto-supersedes). Boss side: `/board`. Detail → `reference/boss-board.md`.
+- **Boss Board** (live "needs-you" panel, separate from `TaskBoard.md`) — a pane flags with `@BOSS[<dept>#<task_id>]: <ask>` (1–2 lines, decidable: question · options · recommendation) and clears with `@BOSS-DONE[<dept>|<id>]`, appending `: <one-line outcome>` when the answer is known (it becomes the Answered row's collapsed face); **re-raising a revised ask → `@BOSS-DONE[<old-id>]` in the same turn** (the board never auto-supersedes). Boss side: `/board`, incl. `direction` (the standing product-direction banner). Detail → `reference/boss-board.md`.
 
 ---
 

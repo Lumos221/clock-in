@@ -92,6 +92,25 @@ class StoreCore(unittest.TestCase):
         self.assertEqual(board.set_status(s, "Boss-1", "open", NOW)["status"], "open")
         self.assertIsNone(board.set_status(s, "Boss-9", "open", NOW))
 
+    def test_resolve_with_outcome_stores_sum(self):
+        s = {"entries": []}
+        board.add_entry(s, "QA", "needs", "an essay of an ask", NOW)
+        board.set_status(s, "QA-1", "resolved", NOW, "Chose Postgres.")
+        self.assertEqual(board.get_entry(s, "QA-1")["sum"], "Chose Postgres.")
+        board.add_entry(s, "RnD", "needs", "b", NOW)
+        e, _ = board.resolve_by_dept(s, "RnD", NOW, "Approved.")
+        self.assertEqual(e["sum"], "Approved.")
+
+    def test_direction_set_replace_clear(self):
+        s = {"entries": []}
+        self.assertIsNone(board.set_direction(s, "  ", NOW))       # empty -> no banner
+        d = board.set_direction(s, "LAUNCH CHECKLIST → gate", NOW)
+        self.assertEqual(d["text"], "LAUNCH CHECKLIST → gate")
+        d2 = board.set_direction(s, "post-launch: retention", NOW) # one slot, whole replace
+        self.assertEqual(s["direction"]["text"], "post-launch: retention")
+        self.assertIsNone(board.set_direction(s, "", NOW))         # clear
+        self.assertNotIn("direction", s)
+
     def test_load_save_roundtrip(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, ".claude", "boss-board.json")
@@ -114,12 +133,17 @@ class MarkerParse(unittest.TestCase):
 
     def test_done_marker_tolerates_task_suffix(self):
         out = board.parse_markers("@BOSS-DONE[RnD#5]")
-        self.assertEqual(out["dones"], ["RnD"])
+        self.assertEqual(out["dones"], [("RnD", None)])
 
     def test_done_marker_by_dept_and_by_id(self):
         out = board.parse_markers("@BOSS-DONE[QA]\nx\n@BOSS-DONE[RnD-2]")
-        self.assertEqual(out["dones"], ["QA", "RnD-2"])
+        self.assertEqual(out["dones"], [("QA", None), ("RnD-2", None)])
         self.assertEqual(out["raises"], [])
+
+    def test_done_marker_with_outcome_line(self):
+        out = board.parse_markers("@BOSS-DONE[CEO-116]: Launch checklist confirmed.")
+        self.assertEqual(out["dones"], [("CEO-116", "Launch checklist confirmed.")])
+        self.assertEqual(out["raises"], [])  # the `:` suffix must not read as a raise
 
     def test_no_marker_is_empty(self):
         out = board.parse_markers("just a normal message, discuss this later")
@@ -128,7 +152,7 @@ class MarkerParse(unittest.TestCase):
     def test_done_line_is_not_also_a_raise(self):
         out = board.parse_markers("@BOSS-DONE[QA]")
         self.assertEqual(out["raises"], [])
-        self.assertEqual(out["dones"], ["QA"])
+        self.assertEqual(out["dones"], [("QA", None)])
 
     def test_malformed_marker_is_reported_as_miss(self):
         # Marker-shaped but unparseable lines must surface, not vanish silently.
@@ -534,6 +558,27 @@ class HookFlow(unittest.TestCase):
             self.assertEqual(len([e for e in opens if e["kind"] == "needs"]), 2)  # both still open
             flags = [e for e in opens if e["kind"] == "discuss" and "ambiguous" in e["text"]]
             self.assertEqual(len(flags), 1)
+
+    def test_done_with_outcome_lands_on_the_entry(self):
+        # The outcome line becomes the answered row's collapsed face on the panel.
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@BOSS[QA]: Postgres or SQLite? recommend Postgres")
+            self._run_hook(d, "@BOSS-DONE[QA]: Postgres it is.")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            self.assertEqual(store["entries"][0]["status"], "resolved")
+            self.assertEqual(store["entries"][0]["sum"], "Postgres it is.")
+
+    def test_direction_persists_via_wrapper(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            board._SKIP_SERVER = True
+            board.board_direction(d, "LAUNCH CHECKLIST (live) → LAUNCH-GATE")
+            got = board.load_store(os.path.join(d, board.STORE_REL))["direction"]
+            self.assertEqual(got["text"], "LAUNCH CHECKLIST (live) → LAUNCH-GATE")
+            board.board_direction(d, "")
+            self.assertNotIn("direction", board.load_store(os.path.join(d, board.STORE_REL)))
 
     def test_repeated_ambiguous_done_does_not_compound(self):
         # Field case (board screenshot 07-15): Ops-9 read "2 asks open (Ops-7, Ops-8)",
