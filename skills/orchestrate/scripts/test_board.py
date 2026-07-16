@@ -45,6 +45,37 @@ class StoreCore(unittest.TestCase):
         self.assertIsNone(e2)             # two open -> ambiguous
         self.assertEqual(len(opens2), 2)
 
+    def test_notice_never_counts_toward_dept_resolution(self):
+        # Field case (board screenshot 07-15): ambiguity notices were plain open
+        # entries, so each one inflated the next ambiguous DONE's count and a
+        # dept-level DONE could never resolve again once a notice existed.
+        s = {"entries": []}
+        board.add_entry(s, "Ops", "needs", "a", NOW)
+        board.add_entry(s, "Ops", "needs", "b", NOW)
+        board.add_notice(s, "Ops", "2 asks open (Ops-1, Ops-2)", NOW)
+        e, opens = board.resolve_by_dept(s, "Ops", NOW)
+        self.assertIsNone(e)
+        self.assertEqual([o["id"] for o in opens], ["Ops-1", "Ops-2"])  # notice not listed
+
+    def test_fresh_notice_supersedes_stale_unchanged_rerun_dedups(self):
+        s = {"entries": []}
+        n1 = board.add_notice(s, "Ops", "2 asks open (Ops-1, Ops-2)", NOW)
+        n2 = board.add_notice(s, "Ops", "2 asks open (Ops-1, Ops-2)", NOW)
+        self.assertEqual(n1["id"], n2["id"])                 # unchanged re-raise -> same card
+        n3 = board.add_notice(s, "Ops", "3 asks open (Ops-1, Ops-2, Ops-4)", NOW)
+        self.assertEqual(board.get_entry(s, n1["id"])["status"], "resolved")  # superseded
+        self.assertEqual([e["id"] for e in board.open_notices(s, "Ops")], [n3["id"]])
+
+    def test_successful_dept_resolve_sweeps_moot_notice(self):
+        s = {"entries": []}
+        board.add_entry(s, "Ops", "needs", "a", NOW)
+        board.add_entry(s, "Ops", "needs", "b", NOW)
+        n = board.add_notice(s, "Ops", "2 asks open (Ops-1, Ops-2)", NOW)
+        board.set_status(s, "Ops-1", "resolved", NOW)        # Boss answers one by id
+        e, _ = board.resolve_by_dept(s, "Ops", NOW)          # dept DONE now unambiguous
+        self.assertEqual(e["id"], "Ops-2")
+        self.assertEqual(board.get_entry(s, n["id"])["status"], "resolved")  # moot -> swept
+
     def test_get_and_list_filter_by_dept(self):
         s = {"entries": []}
         board.add_entry(s, "QA", "needs", "a", NOW)
@@ -503,6 +534,28 @@ class HookFlow(unittest.TestCase):
             self.assertEqual(len([e for e in opens if e["kind"] == "needs"]), 2)  # both still open
             flags = [e for e in opens if e["kind"] == "discuss" and "ambiguous" in e["text"]]
             self.assertEqual(len(flags), 1)
+
+    def test_repeated_ambiguous_done_does_not_compound(self):
+        # Field case (board screenshot 07-15): Ops-9 read "2 asks open (Ops-7, Ops-8)",
+        # then Ops-10 read "3 asks open" — listing Ops-9, the previous notice, as one
+        # of the asks. Notices must neither stack nor count themselves.
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@BOSS[Ops]: ask one?\n@BOSS[Ops]: ask two?")
+            self._run_hook(d, "@BOSS-DONE[Ops]")
+            self._run_hook(d, "@BOSS-DONE[Ops]")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            flags = [e for e in store["entries"] if e.get("notice") and e["status"] == "open"]
+            self.assertEqual(len(flags), 1)
+            self.assertIn("2 asks open", flags[0]["text"])   # real asks only, no self-count
+            # Boss answers one by id; the dept's next DONE resolves the other and
+            # sweeps the now-moot notice — nothing lingers open.
+            board._SKIP_SERVER = True
+            board.board_done(d, "Ops-1")
+            self._run_hook(d, "@BOSS-DONE[Ops]")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            self.assertEqual([e["id"] for e in store["entries"] if e["status"] == "open"], [])
 
     def test_malformed_marker_lands_in_miss_log(self):
         with tempfile.TemporaryDirectory() as d:

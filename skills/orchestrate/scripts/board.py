@@ -72,13 +72,39 @@ def open_for_dept(store, dept):
     return [e for e in store["entries"] if e["dept"] == dept and e["status"] == "open"]
 
 
+def open_notices(store, dept):
+    return [e for e in open_for_dept(store, dept) if e.get("notice")]
+
+
 def resolve_by_dept(store, dept, now):
-    opens = open_for_dept(store, dept)
+    # Ambiguity notices describe the queue — counting them as part of it made each
+    # notice amplify the next ("2 asks open" begets "3 asks open" listing the first
+    # notice) and left a dept-level DONE permanently ambiguous once one existed.
+    opens = [e for e in open_for_dept(store, dept) if not e.get("notice")]
     if len(opens) == 1:
         opens[0]["status"] = "resolved"
         opens[0]["updated"] = now
+        for n in open_notices(store, dept):   # queue is unambiguous again — notice is moot
+            n["status"] = "resolved"
+            n["updated"] = now
         return opens[0], []
     return None, opens
+
+
+def add_notice(store, dept, text, now):
+    """One open ambiguity notice per dept: an unchanged re-raise keeps the existing
+    card (same dedup contract as add_entry); a changed one supersedes it — the old
+    count/id list is stale the moment the queue moves."""
+    dup = find_open_dup(store, dept, text)
+    if dup:
+        return dup
+    for n in open_notices(store, dept):
+        n["status"] = "resolved"
+        n["updated"] = now
+    e, created = add_entry(store, dept, "discuss", text, now)
+    if created:
+        e["notice"] = True
+    return e
 
 
 def load_store(path):
@@ -664,7 +690,11 @@ const ICONS = {
   inbox: `<svg width="42" height="42" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.9 10.2 4 24v12a4 4 0 0 0 4 4h32a4 4 0 0 0 4-4V24l-6.9-13.8A4 4 0 0 0 33.5 8h-19a4 4 0 0 0-3.6 2.2z"/><polyline points="4 24 16 24 20 30 28 30 32 24 44 24"/></svg>`,
 };
 function chip(t){
-  return `<span class="chip"><b>${md(t.label)}${t.task_id?` · #`+esc(t.task_id):''}</b> · ${md(t.name)} · ${esc(t.status||'?')}</span>`;
+  // Hook-born cards have label "#<id>" and ·-less headings parse label===name —
+  // show each fact once (same guards as tCard).
+  const id = t.task_id && t.label !== '#'+t.task_id ? ` · #`+esc(t.task_id) : '';
+  const nm = t.name && t.name !== t.label ? ` · `+md(t.name) : '';
+  return `<span class="chip"><b>${md(t.label)}${id}</b>${nm} · ${esc(t.status||'?')}</span>`;
 }
 function askRow(e, T, ts){
   // Context for the decision: the explicitly linked task first; else the dept's
@@ -933,6 +963,12 @@ def _surface(root, force_open=False):
 
 def board_add(root, dept, kind, text, task=None):
     e = _locked_mutate(root, lambda store: add_entry(store, dept, kind, text, _now(), task)[0])
+    _surface(root)
+    return e
+
+
+def board_notice(root, dept, text):
+    e = _locked_mutate(root, lambda store: add_notice(store, dept, text, _now()))
     _surface(root)
     return e
 

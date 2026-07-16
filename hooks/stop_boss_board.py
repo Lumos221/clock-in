@@ -58,10 +58,12 @@ def run(data, text=None):
                     # An ambiguous @BOSS-DONE[<dept>] used to be swallowed silently — the
                     # dept believes it resolved while its asks stay open forever. Which ask
                     # the Boss actually answered is unknowable here, so surface the
-                    # ambiguity on the board itself (board_add dedups re-raises).
-                    board.board_add(root, token, "discuss",
-                                    "@BOSS-DONE[%s] was ambiguous — %d asks open (%s); /board done <id> the answered one"
-                                    % (token, len(opens), ", ".join(o["id"] for o in opens)))
+                    # ambiguity on the board itself. board_notice keeps at most one open
+                    # notice per dept and marks it so it never counts as an ask itself —
+                    # plain board_add compounded ("2 asks open" begat "3 asks open").
+                    board.board_notice(root, token,
+                                       "@BOSS-DONE[%s] was ambiguous — %d asks open (%s); /board done <id> the answered one"
+                                       % (token, len(opens), ", ".join(o["id"] for o in opens)))
         except Exception:
             pass
 
