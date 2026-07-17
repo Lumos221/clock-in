@@ -9,16 +9,24 @@ The task tools (`TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet`) are Claude
 - A pane **resumed after its team died** also cannot load them (team infra doesn't rehydrate on `/resume` — documented limitation). Task **data** survives resume on disk (`~/.claude/tasks/session-<8hex>/`); only the tools drop.
 - In a session without the tools AND without a Registrar (below), every task-keyed hook (review gate · completion logger · task-sync) is **dormant, fail-open** — completion runs on the honour system and the board is hand-kept, exactly the pre-0.9.0 discipline. Everything re-arms automatically the day the registry exposes the tools again.
 
-## The Registrar fallback (widget-gated sessions)
+## The Registrar (书记处) — the team's task desk
 
 **Verified working 2026-07-14:** a **haiku teammate of a gated lead gets the full widget** — its session fetches its own model-keyed config, and the task list is shared team state, so its TaskCreate/TaskUpdate calls land on the same list, fire the same sync hooks (in its session — the board updates mechanically), and face the same L2 completion gate. The proxy costs one cheap teammate and a message round-trip per lifecycle batch.
 
-- **When:** the CEO's own ToolSearch genuinely finds no task tools. Not needed otherwise — direct calls beat the hop.
+Two jobs, one desk:
+
+- **CEO proxy** (widget-gated sessions): the CEO drives the full lifecycle through it. Not needed for this when the CEO's own ToolSearch finds the tools — direct calls beat the hop.
+- **Dept claim desk** (any session): depts carry NO task tools (allowlist — and big-model teammates are widget-gated anyway, so granting them wouldn't land). A dept's ONLY lifecycle verb is `CLAIM id=<n>` on a card the CEO pre-ASSIGNed to it (`owner` = its exact handle, status `pending`) — the Registrar verifies owner+status via TaskGet, then flips it `in_progress`. Every other verb from a dept is refused (`REFUSED (CEO-only)`), so **completion stays the CEO's final call mechanically, not by convention**. ASSIGN to the exact live handle: a suffixed respawn (`QA-2`) cannot claim `QA`'s card.
+
+Mechanics:
+
+- **When:** spawn at first need — the CEO's own ToolSearch genuinely finds no task tools, or the first queued dispatch (cards ASSIGNed ahead for depts to pull). It lives until closeout.
 - **Why a teammate, not a one-shot subagent:** verified — an unnamed haiku subagent gets NO task tools (it runs inside the lead's session and shares its gated registry); only a **named teammate** is a separate process that fetches its own model-keyed config.
 - **The agent file's `tools:` allowlist must name the four task tools explicitly** (field bug, 2026-07-14): a teammate's allowlist filters its whole tool surface INCLUDING the deferred registry and ToolSearch — the docs' "task tools are always available to a teammate" does not hold. A Registrar whose list omitted them reported the widget missing on a model that has it.
 - **Spawn:** `Agent(subagent_type:"Registrar", name:"Registrar", model:"haiku", run_in_background:true)` — the standing file `templates/registrar.md` → `.claude/agents/Registrar.md` (recruit copies it at activation). Wait for its `READY tools=loaded` report.
-- **Drive it** with literal commands via `SendMessage(to:"Registrar", …)` — the grammar is strict `key=value` (a loose form costs a MALFORMED round-trip, field-observed): `CREATE subject="…" description="…"` · `ASSIGN id=<id> owner=<name>` · `STATUS id=<id> status=<pending|in_progress>` · `COMPLETE id=<id>` · `LIST` · `GET id=<id>`. Batch several commands per message; it replies one line per command, failures verbatim (a gate-blocked COMPLETE comes back word for word — that's the gate working through the proxy).
-- **Retire it** at closeout — it's project infrastructure, exempt from the per-task teammate lifecycle — or permanently the day the CEO's own session has the tools again.
+- **Drive it** with literal commands via `SendMessage(to:"Registrar", …)` — the grammar is strict `key=value` (a loose form costs a MALFORMED round-trip, field-observed): `CREATE subject="…" description="…"` · `ASSIGN id=<id> owner=<name>` · `STATUS id=<id> status=<pending|in_progress>` · `COMPLETE id=<id>` (all CEO-only) · `CLAIM id=<id>` (dept) · `LIST` · `GET id=<id>`. Batch several commands per message; it replies one line per command **to the sender**, failures verbatim (a gate-blocked COMPLETE comes back word for word — that's the gate working through the proxy).
+- **Sender identity is the message envelope's `teammate_id`** — platform-stamped; a name claimed inside the message body is never trusted. **The ACL can only live at this message layer** (field-probed 2026-07-17): a teammate's session env carries its own `CLAUDE_CODE_SESSION_ID` but NO agent-name var, and the team config maps no member to a session id — so a hook cannot tell whose teammate session it runs in (can't distinguish Registrar from dept), and a hook-level completion ACL is unimplementable without a CEO-written warrant file. Parked: `.ship` warrant (gate requires it beside the `.pass`) if a mechanical backstop is ever wanted.
+- **Retire it** at closeout — it's project infrastructure, exempt from the per-task teammate lifecycle. (Even a future ungated CEO session keeps it while depts hold queues — the claim desk is model-gate-proof by construction.)
 
 ## Tool contract (verified against the CLI binary)
 
