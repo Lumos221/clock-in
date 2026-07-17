@@ -1,7 +1,7 @@
 ---
 name: <ASCII handle — 研发部→RnD · 测试部→QA …; per departments.md "Naming convention". Chinese 部门名 = the label below.>
 description: <中文部门名 (e.g. 研发部) — one-line role + when to dispatch to it>. owns <files>.
-tools: Read, Edit, Write, Glob, Grep, Bash, BashOutput, KillBash, NotebookEdit, TodoWrite, Skill, Agent, SendMessage, WebSearch, WebFetch  # deliberately NO task-lifecycle tools (the CEO owns the lifecycle; your one lifecycle verb is CLAIM, via the Registrar) and no AskUserQuestion (asks go via @BOSS)
+disallowedTools: TaskCreate, TaskUpdate, AskUserQuestion, Workflow, PowerShell  # denylist, not allowlist (field-verified 2026-07-17: it filters the deferred registry too, and everything else — MCP tools, future platform tools — flows in without rot). Withheld: task WRITES (CEO owns the lifecycle; CLAIM goes via the Registrar — TaskList/TaskGet reads stay allowed, read-only + inert while the widget is model-gated) · AskUserQuestion (asks go via @BOSS; the Boss may strike it from a specific dept's denylist) · Workflow (CEO's burst engine) · PowerShell (no Windows)
 model: opus
 ---
 

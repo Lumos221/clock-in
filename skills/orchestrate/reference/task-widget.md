@@ -16,7 +16,7 @@ The task tools (`TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet`) are Claude
 Two jobs, one desk:
 
 - **CEO proxy** (widget-gated sessions): the CEO drives the full lifecycle through it. Not needed for this when the CEO's own ToolSearch finds the tools — direct calls beat the hop.
-- **Dept claim desk** (any session): depts carry NO task tools (allowlist — and big-model teammates are widget-gated anyway, so granting them wouldn't land). A dept's ONLY lifecycle verb is `CLAIM id=<n>` on a card the CEO pre-ASSIGNed to it (`owner` = its exact handle, status `pending`) — the Registrar verifies owner+status via TaskGet, then flips it `in_progress`. Every other verb from a dept is refused (`REFUSED (CEO-only)`), so **completion stays the CEO's final call mechanically, not by convention**. ASSIGN to the exact live handle: a suffixed respawn (`QA-2`) cannot claim `QA`'s card.
+- **Dept claim desk** (any session): depts carry NO task-write tools (`TaskCreate`/`TaskUpdate` denied in the dept template; `TaskList`/`TaskGet` READS are allowed — harmless read-only views, inert while big-model teammates are widget-gated, direct queue visibility the day the gate lifts). A dept's ONLY lifecycle write is `CLAIM id=<n>` via the Registrar, on a card the CEO pre-ASSIGNed to it (`owner` = its exact handle, status `pending`) — the Registrar verifies owner+status via TaskGet, then flips it `in_progress`. Every other write from a dept is refused (`REFUSED (CEO-only)`), so **completion stays the CEO's final call mechanically, not by convention**. ASSIGN to the exact live handle: a suffixed respawn (`QA-2`) cannot claim `QA`'s card.
 
 Mechanics:
 
