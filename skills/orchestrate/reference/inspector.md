@@ -1,9 +1,9 @@
 # 督察 (Inspector) · CEO quick-reference
 
-> The 督察's full contract lives in `.claude/agents/Inspector.md` (copied verbatim from
-> `templates/inspector.md` at activation). This page is the **CEO-facing summary** — when
-> to invoke it and what comes back. Like the 审查官 it is a **standing-file, one-shot
-> subagent**: fresh instance per invocation, never a teammate, never in `roster`.
+> The 督察's full contract lives in the plugin's `agents/Inspector.md` (plugin-scope —
+> ships with clock-in, updates with it, no project copy). This page is the **CEO-facing
+> summary** — when to invoke it and what comes back. Like the 审查官 it is a **plugin-scope,
+> one-shot subagent**: fresh instance per invocation, never a teammate, never in `roster`.
 
 ## Why one-shot, not a standing dept
 Every 督察 job is a bounded single-context judgment — diagnose one stuck task, write one

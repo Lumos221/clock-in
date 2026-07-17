@@ -190,7 +190,7 @@ def context_for(root, cfg, audience="lead", agent_name=None):
                     "via TaskCreate — widget-born tasks stay hook-synced; hand-only cards rot. "
                     "(TaskCreate not loaded? It's deferred — ToolSearch "
                     "select:TaskCreate,TaskUpdate,TaskList,TaskGet first. Genuinely absent — "
-                    "widget-gated session? Spawn the 书记处 Registrar (.claude/agents/Registrar.md, "
+                    "widget-gated session? Spawn the 书记处 Registrar (plugin-scope agent, "
                     "haiku teammate) and route the task lifecycle through it — reference/task-widget.md.)"
                     % (len(live), ", ".join(names[:6]) + ("…" if len(names) > 6 else "")))
             if tomb:
@@ -284,6 +284,51 @@ def housekeep_flag(root, cfg):
         return None
 
 
+STANDING_AGENTS = ("Auditor", "Inspector", "Registrar")
+
+
+def standing_shadow_flag(root):
+    """One line when legacy project copies of the plugin-scope standing agents exist
+    (.claude/agents/Auditor.md · Inspector.md · Registrar.md). Project scope shadows
+    plugin scope, so a leftover copy pins the contract of whatever plugin version
+    wrote it — silently immune to every later update. The recruit upgrade pass
+    archives them (diffing for project-local drift first). None when clean."""
+    found = [n for n in STANDING_AGENTS
+             if os.path.exists(os.path.join(root, ".claude", "agents", "%s.md" % n))]
+    if not found:
+        return None
+    return ("⚠ legacy standing-agent cop%s in .claude/agents/ (%s) shadow the plugin-scope "
+            "version%s and pin outdated contracts. Run the /recruit upgrade pass — it diffs "
+            "each for project-local drift (reported to the Boss, never dropped), then "
+            "archives the cop%s under .claude/agents/archive/."
+            % ("y" if len(found) == 1 else "ies", ", ".join(found),
+               "" if len(found) == 1 else "s", "y" if len(found) == 1 else "ies"))
+
+
+def briefs_stamp_flag(root, cfg):
+    """One line when dept briefs were generated from an older department template
+    than the plugin now ships. recruit stamps `briefs_template_hash` (sha256[:12]
+    of templates/department.md) into orchestrate.json at generation; this compares
+    it against the template on disk. Silent when no stamp exists (pre-0.9.16
+    project — regenerating its briefs is part of the same /recruit pass the shadow
+    flag already prescribes) or when current. Doctrine (department-sop.md) is NOT
+    stamped — depts read it live via `orchestrate-sop`, so it can't go stale."""
+    stamp = str(cfg.get("briefs_template_hash") or "")
+    if not stamp:
+        return None
+    tpl = os.path.join(HERE, "..", "skills", "orchestrate", "templates", "department.md")
+    try:
+        import hashlib
+        cur = hashlib.sha256(open(tpl, "rb").read()).hexdigest()[:12]
+    except Exception:
+        return None
+    if stamp == cur:
+        return None
+    return ("⚠ dept briefs predate the current department template (stamp %s ≠ %s) — "
+            "run the /recruit upgrade pass, then restart (agent files load only at "
+            "session start)." % (stamp, cur))
+
+
 def pane_flags(root, data):
     """Lingering-pane sentinel (lead session only): one line naming live teammates
     that hold no open task, or [] when clean/undeterminable. Liveness from the team
@@ -370,7 +415,7 @@ def main():
         import stop_idle_nudge
         name, setting, team = stop_idle_nudge.identity(data.get("transcript_path") or "")
         if team and name and name != "team-lead":
-            if (setting or name).startswith("Registrar"):
+            if (setting or name).split(":")[-1].startswith("Registrar"):  # plugin-scope setting is namespaced
                 return
             audience, agent_name = "dept", name
     except Exception:
@@ -384,9 +429,10 @@ def main():
     if audience == "lead":
         try:
             flags = pane_flags(root, data)
-            hk = housekeep_flag(root, cfg)
-            if hk:
-                flags = flags + [hk]
+            for f in (standing_shadow_flag(root), briefs_stamp_flag(root, cfg),
+                      housekeep_flag(root, cfg)):
+                if f:
+                    flags = flags + [f]
             if flags:
                 out = (out or "") + "\n".join(flags) + "\n"
         except Exception:

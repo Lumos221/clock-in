@@ -2,8 +2,8 @@
 
 Recruit only the few a project needs — not all of them every time. Each 部门 owns **non-overlapping files** (boundary = responsibility).
 - **CEO** = this session (not in the table — that's you).
-- **审查官** = the independent reviewer (`Auditor`). A **standing-file subagent**: `.claude/agents/Auditor.md` is created at activation (verbatim from `templates/auditor.md`), but it's invoked **without a `name`** (one-shot, fresh each review) — so it's **not a 部门/teammate** and is **not** in `roster`. Its full L1+L2 contract (bars + markers) lives in its file.
-- **督察** = the independent inspector (`Inspector`) — same standing-file-subagent pattern (`templates/inspector.md` → `.claude/agents/Inspector.md`, one-shot, not in `roster`): 复盘 on stuck tasks · roster audits · authors dept/expert agent files (see `inspector.md`).
+- **审查官** = the independent reviewer (`Auditor`). A **plugin-scope subagent** (the plugin's `agents/Auditor.md` — ships with clock-in, updates with it, never copied into the project), invoked **without a `name`** (one-shot, fresh each review) — so it's **not a 部门/teammate** and is **not** in `roster`. Its full L1+L2 contract (bars + markers) lives in its file.
+- **督察** = the independent inspector (`Inspector`) — same plugin-scope one-shot pattern (the plugin's `agents/Inspector.md`, not in `roster`): 复盘 on stuck tasks · roster audits · authors dept/expert agent files (see `inspector.md`).
 
 ## Naming convention
 

@@ -281,6 +281,69 @@ class StaleIdDetach(unittest.TestCase):
             self.assertEqual(ss.detach_stale_ids(d, cfg, {}), 0)
 
 
+class StandingShadowSentinel(unittest.TestCase):
+    """0.9.16: standing agents ship plugin-scope; a leftover project copy shadows the
+    plugin version and pins whatever contract wrote it. The flag prescribes the
+    /recruit upgrade pass (diff for drift, then archive)."""
+
+    def test_clean_project_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            self.assertIsNone(ss.standing_shadow_flag(d))
+
+    def test_legacy_copies_flagged_by_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            os.makedirs(os.path.join(d, ".claude", "agents"))
+            for n in ("Registrar", "Auditor"):
+                with open(os.path.join(d, ".claude", "agents", "%s.md" % n), "w") as f:
+                    f.write("legacy")
+            flag = ss.standing_shadow_flag(d)
+            self.assertIn("Auditor", flag)
+            self.assertIn("Registrar", flag)
+            self.assertIn("/recruit", flag)
+            self.assertIn("archive", flag)
+
+    def test_dept_files_do_not_trigger(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            os.makedirs(os.path.join(d, ".claude", "agents"))
+            with open(os.path.join(d, ".claude", "agents", "RnD.md"), "w") as f:
+                f.write("dept brief")
+            self.assertIsNone(ss.standing_shadow_flag(d))
+
+
+class BriefsStampSentinel(unittest.TestCase):
+    """0.9.16: recruit stamps briefs_template_hash at generation; a mismatch against
+    the shipped department.md template means briefs predate it. No stamp = silent
+    (pre-0.9.16 project — the shadow flag owns that migration)."""
+
+    def _tpl_hash(self):
+        import hashlib
+        tpl = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                           "skills", "orchestrate", "templates", "department.md")
+        return hashlib.sha256(open(tpl, "rb").read()).hexdigest()[:12]
+
+    def test_no_stamp_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            self.assertIsNone(ss.briefs_stamp_flag(d, {"active": True}))
+
+    def test_current_stamp_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            cfg = {"active": True, "briefs_template_hash": self._tpl_hash()}
+            self.assertIsNone(ss.briefs_stamp_flag(d, cfg))
+
+    def test_stale_stamp_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            cfg = {"active": True, "briefs_template_hash": "deadbeef0123"}
+            flag = ss.briefs_stamp_flag(d, cfg)
+            self.assertIn("/recruit", flag)
+            self.assertIn("restart", flag)
+
+
 class Gating(unittest.TestCase):
     def test_inactive_marker_silent(self):
         with tempfile.TemporaryDirectory() as d:

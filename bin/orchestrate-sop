@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# orchestrate-sop — print the 部门 operating contract (department-sop.md).
+# Every dept head runs this at spawn (its agent brief says so); the doctrine ships
+# with the plugin, so updates propagate at the next spawn — no re-recruit, no restart.
+# Resolves the file relative to ITS OWN location — works from any cwd / worktree.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec cat "$here/../skills/orchestrate/reference/department-sop.md"

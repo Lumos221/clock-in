@@ -99,7 +99,7 @@ def run(data, text):
     name, setting, team = identity(transcript)
     if not team or not name or name == "team-lead":
         return None
-    if (setting or name).startswith("Registrar"):
+    if (setting or name).split(":")[-1].startswith("Registrar"):  # plugin-scope setting is namespaced (clock-in:Registrar)
         return None
     if hooklib is None:
         return None
