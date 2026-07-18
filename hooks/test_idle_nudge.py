@@ -90,6 +90,33 @@ class NudgeCondition(unittest.TestCase):
             self.assertIn("SendMessage", first or "")
             self.assertIsNone(nudge.run(_data(d, tp), ""))       # capped for this epoch
 
+    def test_readonly_bash_after_report_is_clean(self):
+        # Marketing field case 2026-07-18: report → verify HEAD (git log) → idle
+        # must NOT draw the unreported-work nudge
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            tp = _transcript(d, [REPORT,
+                                 _tool("Bash", command="git log --oneline -3 && git status"),
+                                 _tool("Bash", command="cat docs/SoT.md | head -20")])
+            self.assertIsNone(nudge.run(_data(d, tp), ""))
+
+    def test_mutating_bash_after_report_nudges(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            tp = _transcript(d, [REPORT, _tool("Bash", command="git commit -am wip")])
+            self.assertIn("SendMessage", nudge.run(_data(d, tp), "") or "")
+
+    def test_bash_readonly_classifier(self):
+        ro = nudge.bash_readonly
+        self.assertTrue(ro("git log --oneline -5"))
+        self.assertTrue(ro("git -C /x rev-parse --short HEAD"))
+        self.assertTrue(ro("ls -la; grep -rn foo src | wc -l"))
+        self.assertFalse(ro("git checkout -b feature"))       # mutating git
+        self.assertFalse(ro("git log > out.txt"))             # redirect
+        self.assertFalse(ro("python3 build.py"))              # unlisted head
+        self.assertFalse(ro("cat a.md && rm b.md"))           # mutator in chain
+        self.assertFalse(ro(""))
+
     def test_report_after_work_is_clean(self):
         with tempfile.TemporaryDirectory() as d:
             _proj(d)

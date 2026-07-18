@@ -14,7 +14,8 @@ never match, so the hook is a no-op everywhere but dept panes of an armed projec
 
 Nudge condition: work tool calls (Edit/Write/NotebookEdit/Bash/Agent) appear AFTER the
 last SendMessage(to:"team-lead") — i.e. something changed that the CEO never heard
-about. Suppressed while `.claude/boss-in-pane.json` marks this dept (the Boss is
+about. Read-only inspection Bash (git log/status, ls, cat, …) does NOT count as work:
+post-report verification is normal and must not draw the nudge (see bash_readonly). Suppressed while `.claude/boss-in-pane.json` marks this dept (the Boss is
 iterating in the pane — orchestrate-pane start/end), when the turn ends on a pending
 @BOSS[...] board ask (idling on the Boss is legitimate), and after one nudge per
 report-epoch (the cap is keyed on the last-report offset: a teammate that ignores the
@@ -35,6 +36,45 @@ except Exception:
     board = None
 
 WORK_TOOLS = {"Edit", "Write", "NotebookEdit", "Bash", "Agent"}
+# A Bash call whose every segment is one of these (and that redirects nothing) is
+# inspection, not work — a dept that verifies HEAD right after reporting must not be
+# nudged for "unreported work" (field case 2026-07-18: Marketing report → `git log`
+# check → idle → false nudge → wasted rebuttal turn). Anything unlisted counts as
+# work; the fallback for a missed nudge stays the CEO's manual prompt.
+READONLY_CMDS = {"ls", "cat", "head", "tail", "grep", "rg", "find", "wc", "pwd",
+                 "echo", "diff", "stat", "file", "which", "tree", "du", "df"}
+GIT_READONLY = {"status", "log", "show", "diff", "rev-parse", "describe",
+                "ls-files", "blame", "shortlog"}
+
+
+def _git_sub(toks):
+    """git's subcommand, skipping global flags and their arguments (-C <path> …)."""
+    i = 1
+    while i < len(toks):
+        t = toks[i]
+        if t in ("-C", "-c", "--git-dir", "--work-tree"):
+            i += 2
+        elif t.startswith("-"):
+            i += 1
+        else:
+            return t
+    return ""
+
+
+def bash_readonly(cmd):
+    """True only when the whole command is clearly read-only inspection."""
+    if not cmd or ">" in cmd:
+        return False
+    for seg in re.split(r"\|\||&&|[|;]", cmd):
+        toks = seg.strip().split()
+        if not toks:
+            continue
+        if toks[0] == "git":
+            if _git_sub(toks) not in GIT_READONLY:
+                return False
+        elif toks[0] not in READONLY_CMDS:
+            return False
+    return True
 HEAD_LINES = 25   # identity fields appear from line 1; cap the scan anyway
 NUDGE = ('You are going idle with unreported work. If a work leg (or a Boss pane '
          'session) just ended, send your 4-line report now — SendMessage(to:"team-lead", '
@@ -83,6 +123,8 @@ def scan(transcript_path):
                     if name == "SendMessage" and (b.get("input") or {}).get("to") == "team-lead":
                         rep = i
                     elif name in WORK_TOOLS:
+                        if name == "Bash" and bash_readonly((b.get("input") or {}).get("command", "")):
+                            continue
                         work = i
     except Exception:
         return -1, -1

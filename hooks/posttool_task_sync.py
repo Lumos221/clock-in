@@ -2,7 +2,12 @@
 """PostToolUse hook — TaskBoard.md follows the platform task list (the widget), not
 the other way round. `TaskCreate` births the card with `task_id` pre-filled (no hand
 registration to forget — the field-report staleness: cards without ids, ids without
-cards); `TaskUpdate` mirrors the coarse lifecycle back onto the card (pending→todo ·
+cards); a hand-written card is FILLED, not duplicated — matched by exact name, by the
+human card number its subject leads with (#NNN — the durable bridge onto
+session-scoped platform ids), or by normalised name (0.9.20; the exact-only match
+left `task_id: —` on real cards while appending hook-dup minimal ones, so completions
+retired the wrong card — refcheck field report); `TaskUpdate` mirrors the coarse
+lifecycle back onto the card (pending→todo ·
 in_progress→doing · owner fills an empty dept) and retires the card on a
 cancelled/deleted task (forward-proofing — the CLI's status enum is currently just
 pending/in_progress/completed, verified in 2.1.206). Fine states (review/blocked) stay dept-written prose — the
@@ -32,6 +37,20 @@ except Exception:
 
 STATUS_MAP = {"pending": "todo", "in_progress": "doing"}
 RETIRE = {"deleted", "cancelled"}
+
+
+def _norm(s):
+    """Normalise a card name / CREATE subject for matching: strip a leading card
+    number (#NNN), treat the heading separator as whitespace, collapse runs,
+    casefold. '#130 · REDEEM — X' and '#130 REDEEM — X' become the same string."""
+    s = re.sub(r"^#\d+\s*", "", (s or "").strip())
+    return re.sub(r"\s+", " ", s.replace("·", " ")).strip().casefold()
+
+
+def _card_number(head):
+    """The human card number from a heading ('#130 · SUBJECT' → '130'), else None."""
+    m = re.match(r"#(\d+)\b", head)
+    return m.group(1) if m else None
 
 
 def extract_id(resp):
@@ -105,15 +124,37 @@ def on_create(root, cfg, ti, resp):
         hooklib.log_marker_misses(root, "task-sync", [
             "task_id %s recycled by TaskCreate '%s' — stale card detached" % (tid, subject)])
 
-    # the CEO hand-wrote this card first, then registered it → fill, don't duplicate
+    # the CEO hand-wrote this card first, then registered it → fill, don't duplicate.
+    # Match tiers: ① exact name/head equality (historic behaviour) ② the human card
+    # number — a subject leading with #NNN fills the sole unregistered card headed
+    # #NNN (the field norm: durable card numbers bridge to session-scoped platform
+    # ids) ③ normalised equality (separator/space/case drift). ②③ require exactly
+    # one candidate — ambiguity falls through to an append, never a guess.
+    unregistered = []
     for a, b in hooklib.tb_card_spans(text):
         block = text[a:b]
         head = block.splitlines()[0][4:].strip()
         name = head.split("·", 1)[-1].strip() if "·" in head else head
         m = re.search(r"\*\*task_id:\*\*\s*([^\n]*)", block)
         registered = hooklib.tb_clean(m.group(1)) if m else ""
-        if not registered and subject and (name == subject or head == subject):
+        if registered:
+            continue
+        if subject and (name == subject or head == subject):
             hooklib.tb_write(tb, hooklib.tb_set_field_at(text, (a, b), "task_id", tid))
+            return
+        unregistered.append(((a, b), head, name))
+    sub_num = _card_number(subject)
+    if sub_num:
+        hits = [span for span, head, _ in unregistered if _card_number(head) == sub_num]
+        if len(hits) == 1:
+            hooklib.tb_write(tb, hooklib.tb_set_field_at(text, hits[0], "task_id", tid))
+            return
+    sub_norm = _norm(subject)
+    if sub_norm:
+        hits = [span for span, head, name in unregistered
+                if sub_norm in (_norm(head), _norm(name))]
+        if len(hits) == 1:
+            hooklib.tb_write(tb, hooklib.tb_set_field_at(text, hits[0], "task_id", tid))
             return
 
     desc = (ti.get("description") or ti.get("activeForm") or subject).strip()

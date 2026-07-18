@@ -119,6 +119,21 @@ class RecentlyShipped(unittest.TestCase):
 
 
 class EndToEnd(unittest.TestCase):
+    def test_completion_matching_no_card_logs_a_miss(self):
+        # task_id never filled at CREATE → nothing to retire; the drift must leave
+        # a trace instead of hiding (refcheck field case)
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            os.makedirs(os.path.join(d, "docs"), exist_ok=True)
+            with open(os.path.join(d, "docs", "TaskBoard.md"), "w") as f:
+                f.write(TASKBOARD)
+            _run_hook(d, task_id="99")
+            misses = open(os.path.join(d, ".claude", "marker-misses.log"),
+                          encoding="utf-8").read()
+            self.assertIn("completion #99 matched no card", misses)
+            board = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
+            self.assertIn("### TASK-001", board)  # nothing wrongly retired
+
     def test_completion_appends_backlog_row_and_retires_pass(self):
         with tempfile.TemporaryDirectory() as d:
             _proj(d)

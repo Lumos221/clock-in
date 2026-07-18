@@ -154,6 +154,14 @@ def main():
             dept, name = card_for(open(tb, encoding="utf-8").read(), task_id)
         except Exception:
             pass
+        if name is None:
+            # a completion no card claims retires nothing — leave a trace instead of
+            # letting the drift hide (field case: task_id never filled at CREATE)
+            try:
+                hooklib.log_marker_misses(root, "task-sync", [
+                    "completion #%s matched no card (task_id never filled at CREATE?) — no card retired" % task_id])
+            except Exception:
+                pass
     sha = ""
     try:
         sha = subprocess.run(["git", "-C", root, "rev-parse", "--short", "HEAD"],

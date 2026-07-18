@@ -119,6 +119,57 @@ class Create(unittest.TestCase):
             self.assertIn("- **task_id:** 9", text)
             self.assertNotIn("### #9 ·", text)
 
+    def test_card_number_fills_hand_card(self):
+        # the refcheck field norm: heading '### #130 · NAME — detail', CREATE subject
+        # '#130 NAME — other detail' — the leading number alone must bridge them
+        board_md = TASKBOARD.replace(
+            "### TASK-003 · hand-written, unregistered",
+            "### #130 · REDEEM-MODAL-CHROME — X close missing (REPEAT report)")
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, taskboard=board_md)
+            ts.run(_payload(d, "TaskCreate",
+                            {"subject": "#130 REDEEM-MODAL-CHROME — X close + action row"},
+                            {"id": "15"}))
+            text = _board(d)
+            self.assertIn("- **task_id:** 15", text)
+            self.assertEqual(text.count("REDEEM-MODAL-CHROME"), 1)  # filled, no dup
+
+    def test_card_number_ambiguity_appends(self):
+        # two unregistered cards headed #7 → never guess, append a fresh card
+        board_md = TASKBOARD.replace(
+            "### TASK-003 · hand-written, unregistered",
+            "### #7 · first seven\n- **task_id:** —\n\n### #7 · second seven")
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, taskboard=board_md)
+            ts.run(_payload(d, "TaskCreate", {"subject": "#7 refit the thing"}, {"id": "15"}))
+            text = _board(d)
+            self.assertIn("### #15 · #7 refit the thing", text)  # appended, neither filled
+            self.assertNotIn("- **task_id:** 15\n\n### #7", text)
+
+    def test_normalised_name_fills_hand_card(self):
+        board_md = TASKBOARD.replace(
+            "### TASK-003 · hand-written, unregistered",
+            "### #90 · LEGAL-EINVOICE — feasibility")
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, taskboard=board_md)
+            ts.run(_payload(d, "TaskCreate",
+                            {"subject": "LEGAL-EINVOICE   —  feasibility"}, {"id": "15"}))
+            text = _board(d)
+            self.assertIn("- **task_id:** 15", text)
+            self.assertEqual(text.count("LEGAL-EINVOICE"), 1)
+
+    def test_registered_card_never_refilled_by_number(self):
+        # a card already holding a task_id is not a fill candidate even on number match
+        board_md = TASKBOARD.replace(
+            "### TASK-003 · hand-written, unregistered\n- **dept:** QA\n- **task_id:** —",
+            "### #130 · already registered\n- **dept:** QA\n- **task_id:** 4")
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, taskboard=board_md)
+            ts.run(_payload(d, "TaskCreate", {"subject": "#130 something else"}, {"id": "15"}))
+            text = _board(d)
+            self.assertIn("- **task_id:** 4", text)          # untouched
+            self.assertIn("### #15 · #130 something else", text)  # appended instead
+
     def test_recycled_id_detaches_stale_card(self):
         with tempfile.TemporaryDirectory() as d:
             _proj(d)
