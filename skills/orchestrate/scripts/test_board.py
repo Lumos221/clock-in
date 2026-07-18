@@ -121,6 +121,65 @@ class StoreCore(unittest.TestCase):
             self.assertEqual(board.load_store(p)["entries"][0]["id"], "QA-1")
 
 
+class SupersedeCollision(unittest.TestCase):
+    """0.9.21: a new decision ask about the same task as an older OPEN one (same dept,
+    same kind) FLAGS the new entry (`collides`) — nothing auto-resolves; the Stop hook
+    turns the flag into a one-time nudge so the raiser closes the old ask itself."""
+
+    def test_same_dept_kind_task_field_flags_across_turns(self):
+        s = {"entries": []}
+        old, _ = board.add_entry(s, "CEO", "sign", "sign the string", NOW, task="129", batch="t1")
+        new, _ = board.add_entry(s, "CEO", "sign", "sign the FINAL screens", NOW, task="129", batch="t2")
+        self.assertEqual(old["status"], "open")          # never auto-resolved
+        self.assertEqual(new["collides"], [old["id"]])
+
+    def test_title_hash_number_is_the_fallback_key(self):
+        # the CEO-143/144 field case: no task field, titles lead with #129
+        s = {"entries": []}
+        old, _ = board.add_entry(s, "CEO", "sign", "SIGN: #129 zh body line (then #127 remains)", NOW)
+        new, _ = board.add_entry(s, "CEO", "sign", "GLANCE: #129 final screens per your marks", NOW)
+        self.assertEqual(new["collides"], [old["id"]])
+
+    def test_detail_numbers_do_not_key(self):
+        # #NNN only counts in the TITLE (before ::) — detail references are context
+        s = {"entries": []}
+        board.add_entry(s, "QA", "needs", "pick a DB :: relates to #129 evidence", NOW)
+        new, _ = board.add_entry(s, "QA", "needs", "pick a cache :: also touches #129", NOW)
+        self.assertNotIn("collides", new)
+
+    def test_cross_kind_and_info_and_keyless_never_flag(self):
+        s = {"entries": []}
+        board.add_entry(s, "CEO", "needs", "#129 pick option A/B", NOW)
+        b, _ = board.add_entry(s, "CEO", "sign", "#129 sign the string", NOW)      # kind differs
+        i, _ = board.add_entry(s, "CEO", "info", "#129 merged and deployed", NOW)  # info never
+        c, _ = board.add_entry(s, "CEO", "needs", "budget call, no task ref", NOW)   # keyless
+        self.assertNotIn("collides", b)
+        self.assertNotIn("collides", i)
+        self.assertNotIn("collides", c)
+
+    def test_same_batch_marker_lines_coexist_next_turn_flags_both(self):
+        # one turn = one batch: separate decisions on the same task never flag each
+        # other; the NEXT turn's revision flags against both
+        s = {"entries": []}
+        a, _ = board.add_entry(s, "QA", "needs", "#7 pick the DB", NOW, batch="turn1")
+        b, _ = board.add_entry(s, "QA", "needs", "#7 pick the cache", NOW, batch="turn1")
+        self.assertNotIn("collides", a)
+        self.assertNotIn("collides", b)
+        c, _ = board.add_entry(s, "QA", "needs", "#7 revised: one combined pick", NOW, batch="turn2")
+        self.assertEqual(sorted(c["collides"]), sorted([a["id"], b["id"]]))
+        self.assertEqual(a["status"], "open")
+        self.assertEqual(b["status"], "open")
+
+    def test_notices_neither_flag_nor_get_flagged(self):
+        s = {"entries": []}
+        n = board.add_notice(s, "QA", "#9 DONE ambiguous — 2 open", NOW)
+        old, _ = board.add_entry(s, "QA", "needs", "#9 the real ask", NOW, batch="t1")
+        self.assertNotIn("collides", old)                # notice is not a collider
+        new, _ = board.add_entry(s, "QA", "needs", "#9 a revised ask", NOW, batch="t2")
+        self.assertEqual(new["collides"], [old["id"]])   # the real ask is
+        self.assertEqual(n["status"], "open")
+
+
 class MarkerParse(unittest.TestCase):
     def test_raise_marker_extracts_dept_and_one_line_ask(self):
         out = board.parse_markers("blah\n@BOSS[QA]: Postgres or SQLite?\nmore")
@@ -689,10 +748,8 @@ class HookFlow(unittest.TestCase):
             self.assertIn("wrong brackets", open(log, encoding="utf-8").read())
 
 
-class AskNudge(unittest.TestCase):
-    """0.9.18 unmarked-trailing-ask nudge (stop_boss_board.run returns a block string):
-    a lead WORK turn (used tools) ending on a question with no @BOSS marker blocks the
-    stop once; conversational turns, marker-carrying turns and repeats pass."""
+class _NudgeFixture(unittest.TestCase):
+    """Shared fixture for the stop_boss_board block-string nudges."""
 
     @classmethod
     def setUpClass(cls):
@@ -732,6 +789,11 @@ class AskNudge(unittest.TestCase):
             if env is None:
                 os.environ.pop("BOSS_BOARD_SKIP_SERVER", None)
 
+class AskNudge(_NudgeFixture):
+    """0.9.18 unmarked-trailing-ask nudge (stop_boss_board.run returns a block string):
+    a lead WORK turn (used tools) ending on a question with no @BOSS marker blocks the
+    stop once; conversational turns, marker-carrying turns and repeats pass."""
+
     def test_work_turn_trailing_question_blocks_once(self):
         with tempfile.TemporaryDirectory() as d:
             self._proj(d)
@@ -766,6 +828,42 @@ class AskNudge(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self._proj(d)
             self.assertTrue(self._run(d, text="收尾。\n邀请门槛还等 #116 吗？"))
+
+
+class CollisionNudge(_NudgeFixture):
+    """0.9.21 supersede collision nudge: a fresh ask on the same task as an older open
+    same-dept+kind ask blocks the stop ONCE with the close-or-keep instruction — the
+    nudge lands BEFORE anything supersedes (Boss's call: the raiser handles it)."""
+
+    def test_second_turn_revision_blocks_once_then_capped(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            self.assertIsNone(self._run(d, text="@BOSS[CEO#129]: sign the string :: v1"))
+            ret = self._run(d, text="@BOSS[CEO#129]: sign the FINAL screens :: v2")
+            self.assertIn("@BOSS-DONE", ret or "")       # nudged with the fix
+            self.assertIn("CEO-1", ret or "")            # names the open collider
+            store = json.load(open(os.path.join(d, ".claude", "boss-board.json")))
+            self.assertTrue(all(e["status"] == "open" for e in store["entries"]))  # nothing auto-resolved
+            ret2 = self._run(d, text="@BOSS[CEO#129]: sign the FINAL screens :: v2")
+            self.assertIsNone(ret2)                      # once per collision set
+
+    def test_done_in_same_turn_passes_clean(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            self.assertIsNone(self._run(d, text="@BOSS[CEO#129]: sign the string :: v1"))
+            ret = self._run(d, text="@BOSS-DONE[CEO-1]: superseded by v2\n"
+                                    "@BOSS[CEO#129]: sign the FINAL screens :: v2")
+            self.assertIsNone(ret)                       # old closed this turn → no nudge
+            store = json.load(open(os.path.join(d, ".claude", "boss-board.json")))
+            by = {e["id"]: e for e in store["entries"]}
+            self.assertEqual(by["CEO-1"]["status"], "resolved")
+            self.assertEqual(by["CEO-2"]["status"], "open")
+
+    def test_same_turn_batch_never_nudges(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            ret = self._run(d, text="@BOSS[QA#7]: pick the DB :: a\n@BOSS[QA#7]: pick the cache :: b")
+            self.assertIsNone(ret)
 
 
 class SurfaceOpen(unittest.TestCase):

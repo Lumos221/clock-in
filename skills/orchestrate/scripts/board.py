@@ -37,7 +37,21 @@ def find_open_dup(store, dept, text):
     return None
 
 
-def add_entry(store, dept, kind, text, now, task=None):
+ASK_TASK_RE = re.compile(r"#(\d+)\b")
+
+
+def ask_key(text, task=None):
+    """The task an ask is ABOUT: the explicit task field, else the first #NNN its
+    TITLE (text before '::') references, else None. The fallback matters in the
+    field — asks raised without the #task linkage still lead their title with the
+    card number (refcheck CEO-143/144). No key → never auto-superseded."""
+    if task:
+        return str(task)
+    m = ASK_TASK_RE.search((text or "").split("::", 1)[0])
+    return m.group(1) if m else None
+
+
+def add_entry(store, dept, kind, text, now, task=None, batch=None, supersede=True):
     dup = find_open_dup(store, dept, text)
     if dup:
         return dup, False
@@ -45,6 +59,28 @@ def add_entry(store, dept, kind, text, now, task=None):
          "kind": kind, "status": "open", "created": now, "updated": now}
     if task:
         e["task"] = str(task)  # platform task_id — lets the panel show the ask's task card
+    if batch:
+        e["batch"] = batch  # same-turn marker batch — batch-mates never supersede each other
+    # Supersede COLLISION detection: a NEW decision ask about the same task as an
+    # older open one (same dept, same kind) flags the new entry — the Stop hook turns
+    # the flag into a ONE-TIME nudge so the raiser closes the old ask WITH a real
+    # outcome, or deliberately keeps both (field failures cured: CEO-27/28,
+    # CEO-143/144 — a revised re-raise leaving both open). The Boss's call (0.9.21):
+    # CEO-in-the-loop BEFORE any supersede — nothing here auto-resolves. Conservative
+    # by construction: info and notices never flag; cross-kind never; same-batch (one
+    # turn's marker lines = deliberate separate decisions) never; keyless asks never.
+    if supersede and kind != "info":
+        key = ask_key(text, task)
+        if key:
+            for old in store["entries"]:
+                if old["status"] != "open" or old.get("notice"):
+                    continue
+                if old["dept"] != dept or old.get("kind") != kind:
+                    continue
+                if batch and old.get("batch") == batch:
+                    continue
+                if ask_key(old.get("text"), old.get("task")) == key:
+                    e.setdefault("collides", []).append(old["id"])
     store["entries"].append(e)
     return e, True
 
@@ -112,7 +148,7 @@ def add_notice(store, dept, text, now):
     for n in open_notices(store, dept):
         n["status"] = "resolved"
         n["updated"] = now
-    e, created = add_entry(store, dept, "discuss", text, now)
+    e, created = add_entry(store, dept, "discuss", text, now, supersede=False)
     if created:
         e["notice"] = True
     return e
@@ -943,11 +979,12 @@ async function tick(){
     const tb = s.taskboard || {tasks:[], shipped:[]};
     const T = {list: tb.tasks, byId: {}};
     tb.tasks.forEach(t=>{ if(t.task_id) T.byId[t.task_id]=t; });
-    // Oldest first — the queue drains top-down, and what's waited longest never sinks.
+    // Needs-you drains oldest-first (what's waited longest never sinks); Information
+    // reads newest-first (it's a feed, not a queue — the freshest fact sits on top).
     const bywait = (a,b)=>(a.created||'').localeCompare(b.created||'');
     const open = es.filter(e=>e.status==='open').sort(bywait);
     const needsOpen = open.filter(e=>!isInfo(e));
-    const infoOpen  = open.filter(isInfo);
+    const infoOpen  = open.filter(isInfo).reverse();
     const parked = es.filter(e=>e.status==='parked').sort(bywait);
     const resolved = es.filter(e=>e.status==='resolved')
                        .sort((a,b)=>(b.updated||'').localeCompare(a.updated||''));
@@ -1194,8 +1231,9 @@ def _surface(root, force_open=False):
     return port
 
 
-def board_add(root, dept, kind, text, task=None):
-    e = _locked_mutate(root, lambda store: add_entry(store, dept, kind, text, _now(), task)[0])
+def board_add(root, dept, kind, text, task=None, batch=None):
+    e = _locked_mutate(root, lambda store: add_entry(store, dept, kind, text, _now(),
+                                                     task, batch=batch)[0])
     _surface(root)
     return e
 

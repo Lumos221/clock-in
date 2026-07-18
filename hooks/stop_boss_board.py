@@ -9,7 +9,7 @@ Normally invoked via stop_dispatch.py; runs standalone too. Fail-open: any
 error -> no-op. Acts only inside an active .claude/orchestrate.json project.
 Blocks a turn in exactly one case (once per prompt): a lead work turn trailing
 an unanswered question to the Boss with no marker — the unmarked-ask nudge."""
-import sys, os, json, hashlib
+import sys, os, json, hashlib, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -104,13 +104,20 @@ def run(data, text=None):
         return
     markers = board.parse_markers(text)
     hooklib.log_marker_misses(root, "boss-board", markers.get("misses"))
+    # One batch id per capture: a single turn's marker lines are deliberate separate
+    # decisions (one-decision-per-marker doctrine) — the supersede collision check
+    # must only fire ACROSS turns, never within one.
+    batch = uuid.uuid4().hex[:12]
+    collisions = []
     for dept, task, ask in markers["raises"]:
         try:
             # The Inspector's @BOSS channel carries verdicts/复盘 reads, never asks —
             # they file as information (Boss's call, 2026-07-18: verdicts were
             # crowding Needs-you). Unfiltered stands: the CEO still can't touch them.
             kind = "info" if dept.split("-")[0].lower() == "inspector" else "needs"
-            board.board_add(root, dept, kind, ask, task=task)
+            e = board.board_add(root, dept, kind, ask, task=task, batch=batch)
+            if e and e.get("collides"):
+                collisions.append((e["id"], e["collides"]))
         except Exception:
             pass
     for dept, task, fact in markers.get("infos", []):
@@ -136,6 +143,33 @@ def run(data, text=None):
                                        % (token, len(opens), ", ".join(o["id"] for o in opens)))
         except Exception:
             pass
+    # ---- supersede collision (any pane): a fresh ask targets the same task as an
+    # older still-open ask from the same dept+kind — nudge BEFORE anything supersedes
+    # (Boss's call, 0.9.21: the raiser handles it correctly — a real @BOSS-DONE
+    # outcome, or a deliberate keep-both), once per collision set.
+    if collisions:
+        live = []
+        for new, olds in collisions:  # this turn's @BOSS-DONE lines ran above — only
+            try:                      # colliders STILL open after them deserve a nudge
+                olds = [o for o in olds
+                        if (board.board_get(root, o) or {}).get("status") == "open"]
+            except Exception:
+                olds = []
+            if olds:
+                live.append((new, olds))
+        collisions = live
+    if collisions:
+        key = "collide:" + hashlib.md5(
+            json.dumps(sorted(collisions)).encode("utf-8")).hexdigest()
+        if _nudge_once(root, key):
+            lines = "; ".join("%s targets the same task as your still-open %s"
+                              % (new, ", ".join(olds)) for new, olds in collisions)
+            return ("🛑 boss-board: ask collision — %s (same dept + kind). If the new ask "
+                    "REPLACES the old, re-end this turn adding `@BOSS-DONE[<old-id>]: "
+                    "<one-line outcome>` so the register closes with the real outcome. If "
+                    "they are genuinely separate decisions, end the turn again unchanged — "
+                    "both stay open. (One-time notice.)" % lines)
+
     # ---- unmarked trailing ask (lead session): prose is transport, the BOARD is the
     # register. Field case 2026-07-18: the CEO ended a work burst with "Still open for
     # you: … ?" — no marker, so the board never saw it and the question died in
