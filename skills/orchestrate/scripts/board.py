@@ -780,9 +780,21 @@ function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 // a link click from toggling the row/card it sits in.
 const PATH_RE = /(^|[^\w.\-\/一-鿿])((?:[\w.\-一-鿿]+\/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5}|[\w\-一-鿿][\w.\-一-鿿]*\.(?:png|jpe?g|gif|webp|pdf|svg|md|txt|csv|json|log|html?|ya?ml|toml))\b/g;
 // The path charset admits no HTML-escapable characters, so `p` is safe raw in
-// both href (encoded) and label — for matches on escaped AND unescaped text.
+// href (encoded), label AND the inline onclick string.
+// Two click behaviours (Boss's ask, 2026-07-18): types the browser renders
+// natively (images/PDF — mockups, marked shots) open in the tab as before;
+// everything it would dump as plain text (.md, logs, csv …) opens in the OS
+// default app via /open — the CLI-click behaviour. The /file href stays on
+// both, so right-click / middle-click still gives the raw view.
+const VIEW_RE = /\.(png|jpe?g|gif|webp|pdf)$/i;
+function openLocal(ev, p){
+  ev.stopPropagation(); ev.preventDefault();
+  fetch('/open?p='+encodeURIComponent(p), {headers:{'X-Board':'1'}}).catch(()=>{});
+}
 function flink(p){
-  return `<a href="/file?p=${encodeURIComponent(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${p}</a>`;
+  if (VIEW_RE.test(p))
+    return `<a href="/file?p=${encodeURIComponent(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${p}</a>`;
+  return `<a href="/file?p=${encodeURIComponent(p)}" title="opens in default app · right-click for raw" onclick="openLocal(event,'${p}')">${p}</a>`;
 }
 function paths(h){ return h.replace(PATH_RE, (m,pre,p)=>pre+flink(p)); }
 // Every file path an ask mentions, deduped in order — rendered as the expansion's
@@ -1063,6 +1075,23 @@ def resolve_file(root, p):
     return None
 
 
+def _launch_default(full):
+    """Hand a resolved file to the OS default app — the CLI-click behaviour the Boss
+    expects for text-y files the browser would only dump as plain text. Test/verify
+    runs set BOARD_SKIP_LAUNCH=1 to exercise routing without apps popping up."""
+    if os.environ.get("BOARD_SKIP_LAUNCH"):
+        return
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", full])
+        elif os.name == "nt":
+            os.startfile(full)  # noqa: no-cover — windows only
+        else:
+            subprocess.Popen(["xdg-open", full])
+    except Exception:
+        pass
+
+
 def serve(root, port):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
@@ -1086,6 +1115,25 @@ def serve(root, port):
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(body)
+            elif self.path.startswith("/open"):
+                from urllib.parse import urlparse, parse_qs
+                # Side-effect endpoint (launches the default app), so it demands a
+                # custom header: a cross-origin page can't send one without a CORS
+                # preflight this server never grants — kills drive-by CSRF. Path
+                # resolution shares every /file guard (realpath pin, worktrees,
+                # bare-name search).
+                if self.headers.get("X-Board") != "1":
+                    self.send_response(403)
+                    self.end_headers()
+                    return
+                p = parse_qs(urlparse(self.path).query).get("p", [""])[0]
+                got = resolve_file(root, p)
+                if got:
+                    _launch_default(got[0])
+                    self.send_response(204)
+                else:
+                    self.send_response(404)
+                self.end_headers()
             elif self.path.startswith("/file"):
                 from urllib.parse import urlparse, parse_qs
                 p = parse_qs(urlparse(self.path).query).get("p", [""])[0]

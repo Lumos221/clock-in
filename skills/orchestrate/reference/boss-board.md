@@ -14,6 +14,9 @@ The Boss works solo and multi-pane; the one message that needs the Boss gets bur
 - **The Boss's own items:** the `/board` command — `/board <text>` adds a discuss item; bare `/board` opens the panel; `/board park <id>` / `done <id>` / `reopen <id>` change status.
 - **Direction banner:** `orchestrate-board direction --text "…"` pins the product's standing direction (a launch checklist, the current battle line) in its own section above *On your desk*; `--clear` removes it. One slot, whole-text replace, set on the Boss's word — rendering is mechanical, so it costs nothing per poll.
 
+## File links — two click behaviours
+Types the browser renders natively (png/jpg/gif/webp/pdf — mockups, marked shots) open in the tab via `/file`. Everything else (`.md`, logs, csv, …) opens in the **OS default app** via `/open` — the CLI-click behaviour (Boss's ask, 2026-07-18: a text dump in the tab is never what you want for a `.md`). The `/file` href stays on every link, so right-click/middle-click still gives the raw view. `/open` is a side-effect endpoint: it demands the `X-Board: 1` header (cross-origin pages can't send one without a CORS preflight the server never grants — no drive-by CSRF) and runs the same path guards as `/file`.
+
 ## States & ownership
 `open → resolved`, plus `parked`. Panes drive open→resolved; the **Boss** owns park/reopen. The panel is read-only display.
 
