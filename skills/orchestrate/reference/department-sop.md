@@ -34,10 +34,34 @@ Every **Done** criterion true **and L2 passed** (you've committed each step alre
 - fork with no default → do other unaffected parts first, **park & batch** it to the CEO;
 - true full-stop blocker → escalate immediately.
 
+## Work products — naming + structure
+
+**Two classes of file, two naming rules — a version suffix on either is a defect:**
+- **Living docs** — the current answer / spec / design the project acts on: **one stable, suffix-free name per question** (`pricing-tier.md`, `登录-spec.md`), updated **in place**; git holds history, the bare name IS current. Same rule as canonical answers (`reference/canon.md`) — a living doc that turns cross-cutting gets its `@CANON` row without renaming. Never `-v2` / `-final` / `-新` / a date: two names for one question = a stale copy waiting to teach someone the dead design.
+- **Event docs** — the record of a run or round that happened at a time (test report · sweep · audit · benchmark · mockup batch): **`<type>-<subject>-<YYYY-MM-DD>.md`** (hyphens; Chinese fine; a second same-day run appends `-2`). The date is the identity; the file is never edited after the fact — the next run is a new file.
+- Scratch you'd delete tomorrow stays out of `docs/` (or is archived when the round closes — housekeeping sweeps by age; **archive over remove**, as everywhere).
+
+**Structure — any long file, and EVERY file the Boss will read, carries this spine (headings verbatim):**
+
+```
+# <what this file answers> · <date>
+**TL;DR:** ≤3 lines — the outcome, the number, the verdict.
+**Needs Boss:** <the one decision being asked, or: nothing — FYI>
+
+## 结论    ← numbered, ONE line each, each ending with its evidence pointer (§依据 item or a path)
+## 依据    ← the evidence per conclusion — tables for enumerable facts, prose for reasoning
+## 方法    ← how this was produced, brief — just enough to redo it
+## 附录    ← raw logs / full tables / long dumps (or a sibling file the 附录 points at)
+```
+
+- **Conclusion before evidence, always.** The Boss decides from the top ten lines; nothing load-bearing may sit only below the fold. Omit an empty section; never rename or reorder one — **stable headings are the API** (any session greps `## 结论` across the project and gets every file's verdict).
+- **Boss-facing prose rules:** one line per paragraph/bullet, no hard-wrapping inside a paragraph; no em/en dashes in prose (use colons, commas, full stops); file references project-relative (the Boss Board linkifies them into click-throughs).
+- **A file is not a channel:** an event doc whose conclusion needs the Boss still raises the board ask (`@BOSS[…]: <title> :: <detail>` pointing at the file) — the ask's title and the file's TL;DR must agree.
+
 ## Boss direct access
 The Boss may work with you directly in your pane — iterating on design, reviewing details, giving real-time direction. You are the domain expert: read their intent in natural language (they may not know your terms) and iterate. **While the Boss is with you, don't `SendMessage` the CEO** — it's muted for the session. **The moment the Boss leaves (or says wrap up), send your report unprompted** (what changed, via `SendMessage(to:"team-lead")`): the CEO syncs only from that report, and it's the green light to release your pane if you hold no open card.
 
-**Flag the Boss when you need them (Boss Board):** when — and only when — you need the Boss's input, end your turn with `@BOSS[<your-handle>#<task_id>]: <ask>` — the `#<task_id>` links the ask to its TaskBoard card so the Boss sees the task's context on the panel (omit `#<task_id>` only for asks tied to no task). **Write the ask so the Boss can decide from the board alone:** the question · the options · your recommendation + why, in 1–2 lines — a bare "need your input" ping just costs an extra round-trip. Once the Boss has answered and you've acted, end with `@BOSS-DONE[<your-handle>]`. **Re-raising a revised version of an ask?** Close the old one in the same turn — `@BOSS-DONE[<old-id>]` alongside the new `@BOSS[…]`: the board never auto-supersedes, so the stale ask stays open and a bare `@BOSS-DONE[<your-handle>]` turns ambiguous once two are open. **Raise each ask once** — repeats are ignored; don't re-flag every idle turn.
+**Flag the Boss when you need them (Boss Board):** when — and only when — you need the Boss's input, end your turn with `@BOSS[<your-handle>#<task_id>]: <one-line ask> :: <detail>` — the `#<task_id>` links the ask to its TaskBoard card so the Boss sees the task's context on the panel (omit `#<task_id>` only for asks tied to no task). **The title (before `::`) is what the Boss sees collapsed — ONE line, decidable at a glance:** the question · the options · your recommendation. Everything else the Boss needs (evidence, context, file paths) goes behind the `::` — the panel shows it on expansion and extracts the file paths into a clickable row. **One decision per marker:** several needs → several `@BOSS[…]` lines in the same turn, never one bundled essay. Pure information the Boss should see but not decide → `@BOSS-INFO[<your-handle>#<task_id>]: <fact>` (files in the Information column, costs the Boss no decision). **A trailing question IS an ask:** a question you leave at the end of a report without the marker never reaches the board — prose is transport, the board is the register. Once the Boss has answered and you've acted, end with `@BOSS-DONE[<your-handle>]`. **Re-raising a revised version of an ask?** Close the old one in the same turn — `@BOSS-DONE[<old-id>]` alongside the new `@BOSS[…]`: the board never auto-supersedes, so the stale ask stays open and a bare `@BOSS-DONE[<your-handle>]` turns ambiguous once two are open. **Raise each ask once** — repeats are ignored; don't re-flag every idle turn.
 
 ## Cross-domain facts (canonical answers)
 **Skim `docs/CANON.md` first** — the project's index of current binding answers across depts (tiny by design: one row per cross-cutting question). Skim all rows — especially ones touching your domain or flagging you under ⚠ Needs re-check; re-reading it each session stops you acting on pre-decision memory.

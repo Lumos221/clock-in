@@ -201,18 +201,28 @@ RAISE_RE = re.compile(r"@BOSS\[([^\]\s#]+)(?:#([A-Za-z0-9_-]+))?\]:\s*(.+)")
 # `@BOSS-DONE[<dept>|<id>]: <one-line outcome>` — the optional outcome becomes the
 # answered row's collapsed line on the panel (an essay ask folds to its result).
 DONE_RE = re.compile(r"@BOSS-DONE\[([^\]\s]+)\](?::\s*(.+))?")
+# `@BOSS-INFO[<dept>#<task_id>]: <fact>` — information for the Boss that needs NO
+# decision (verdicts, 复盘 outcomes, FYI status). Lands in the panel's Information
+# column, never in Needs-you (Boss's call, 2026-07-18: verdicts were crowding the
+# decision queue).
+INFO_RE = re.compile(r"@BOSS-INFO\[([^\]\s#]+)(?:#([A-Za-z0-9_-]+))?\]:\s*(.+)")
 
 
 def parse_markers(text):
-    """raises = (dept, task_id-or-None, ask); dones = (dept-or-id, outcome-or-None).
-    `misses` = lines that mention @BOSS but match neither regex — the hook logs them
-    (marker-misses.log) so a malformed marker doesn't vanish without a trace."""
-    raises, dones, misses = [], [], []
+    """raises = (dept, task_id-or-None, ask); dones = (dept-or-id, outcome-or-None);
+    infos = (dept, task_id-or-None, fact). `misses` = lines that mention @BOSS but
+    match no marker — the hook logs them (marker-misses.log) so a malformed marker
+    doesn't vanish without a trace."""
+    raises, dones, infos, misses = [], [], [], []
     for line in (text or "").splitlines():
         m = DONE_RE.search(line)
         if m:
             # tolerate a symmetric #task suffix on the token
             dones.append((m.group(1).split("#")[0], (m.group(2) or "").strip() or None))
+            continue
+        m = INFO_RE.search(line)
+        if m:
+            infos.append((m.group(1), m.group(2), m.group(3).strip()))
             continue
         m = RAISE_RE.search(line)
         if m:
@@ -220,7 +230,7 @@ def parse_markers(text):
             continue
         if "@BOSS" in line:
             misses.append(line)
-    return {"raises": raises, "dones": dones, "misses": misses}
+    return {"raises": raises, "dones": dones, "infos": infos, "misses": misses}
 
 
 # ---------------------------------------------------------------- taskboard view
@@ -590,6 +600,7 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
 .dot2 { width: 9px; height: 9px; border-radius: 50%%; margin-top: .45em; flex: none; }
 .k-needs { background: #be4b32; }
 .k-discuss { background: #6e8ca8; }
+.k-info { background: #5b7fa6; }
 .rc { flex: 1; min-width: 0; }
 .rt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 /* expanded essays need air: looser leading + a gap before the meta line */
@@ -604,15 +615,20 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
         font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .parked .row { opacity: .6; }
 .parked .dot2 { background: #cbc6b9; }
-.answered .row { opacity: .72; }
-.answered .dot2 { background: #6b9e5f; }
-/* Answered is history, not work — collapsed by default (count stays visible);
-   click/Enter on the header to peek. The fold class lives on the static h3, so
-   it survives the per-poll re-render of the list inside. */
-.col.answered h3 { cursor: pointer; }
-.col.answered h3::after { content: '▸'; margin-left: auto; color: #87867f; font-size: .82em; }
-.col.answered h3.x::after { content: '▾'; }
-.col.answered h3:not(.x) + div { display: none; }
+/* Information: fresh verdicts/FYIs stay visible (they're why the column exists);
+   resolved history dims and folds behind the History sub-header — collapsed by
+   default, fold class on the static h4 so it survives the per-poll re-render. */
+.info #hist .row { opacity: .72; }
+.info #hist .dot2 { background: #6b9e5f; }
+.info h4.hist { font-size: .68rem; margin: .55em 0 .15em; display: flex; align-items: center;
+                gap: 6px; color: #87867f; cursor: pointer; text-transform: uppercase;
+                letter-spacing: .06em; }
+.info h4.hist::after { content: '▸'; margin-left: auto; font-size: .82em; }
+.info h4.hist.x::after { content: '▾'; }
+.info h4.hist:not(.x) + div { display: none; }
+/* Structured asks: the detail body lives in the expansion; extracted file paths
+   get their own quiet row under a hairline so the Boss never hunts inside prose. */
+.rx .files { margin-top: 6px; padding-top: 5px; border-top: 1px solid #e9e5d8; font-size: .74rem; }
 /* Direction band — the product's standing compass, set via `orchestrate-board
    direction`; hidden entirely when unset. Deliberately UNBOXED: every card below
    is work, this is the thesis the work serves — so it reads as the masthead's
@@ -625,7 +641,7 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
 .dkick .rage { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 400; }
 .dstate { font-family: "Tiempos Text", ui-serif, Georgia, "Songti SC", serif;
           font-size: 1.04rem; line-height: 1.6; margin-top: 7px; max-width: 75ch;
-          text-wrap: pretty; }
+          text-wrap: pretty; white-space: pre-line; }
 .dstate .dlabel { color: #a2542f; font-weight: 600; letter-spacing: .02em; }
 /* An answered row with a one-line outcome folds to it; the original ask sits
    behind the click, quoted under a hairline. */
@@ -689,9 +705,11 @@ html.dark .row { border-top-color: #3a3936; }
 html.dark .row:hover { background: rgba(217,119,87,.07); }
 html.dark .k-needs { background: #e08262; }
 html.dark .k-discuss { background: #8fa9c4; }
+html.dark .k-info { background: #7f9cc0; }
 html.dark .parked .dot2 { background: #5c5b57; }
-html.dark .answered .dot2 { background: #7fae72; }
-html.dark .col.answered h3::after { color: #a3a199; }
+html.dark .info #hist .dot2 { background: #7fae72; }
+html.dark .info h4.hist { color: #a3a199; }
+html.dark .rx .files { border-top-color: #3a3936; }
 html.dark .dirband { border-bottom-color: #3e3d3a; }
 html.dark .dkick { color: #d97757; }
 html.dark .dstate .dlabel { color: #e08262; }
@@ -735,8 +753,10 @@ html.dark [data-k]:focus-visible { outline-color: #d97757; }
     <span class='count' id='askn'>0</span></h3><div id='asks'></div></div>
   <div class='col parked'><h3><span class='dot' style='border-color:#cbc6b9'></span>Parked
     <span class='count' id='parkn'>0</span></h3><div id='parked'></div></div>
-  <div class='col answered'><h3 data-k='anscol' tabindex='0' onclick='tog(this)'><span class='dot' style='border-color:#6b9e5f'></span>Answered
-    <span class='count' id='ansn'>0</span></h3><div id='answered'></div></div>
+  <div class='col info'><h3><span class='dot' style='border-color:#5b7fa6'></span>Information
+    <span class='count' id='infon'>0</span></h3><div id='infos'></div>
+    <h4 class='hist' data-k='histcol' tabindex='0' onclick='tog(this)'>History
+    <span class='count' id='histn'>0</span></h4><div id='hist'></div></div>
 </div>
 <h2>Current iteration</h2>
 <div class='board' id='board'></div>
@@ -758,9 +778,26 @@ function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 // outside the path charset (or start) anchors both, so URL innards (host/a.png)
 // never match; trailing punctuation stays outside via the \b. stopPropagation keeps
 // a link click from toggling the row/card it sits in.
-function paths(h){
-  return h.replace(/(^|[^\w.\-\/一-鿿])((?:[\w.\-一-鿿]+\/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5}|[\w\-一-鿿][\w.\-一-鿿]*\.(?:png|jpe?g|gif|webp|pdf|svg|md|txt|csv|json|log|html?|ya?ml|toml))\b/g,
-    (m,pre,p)=>pre+`<a href="/file?p=${encodeURIComponent(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${p}</a>`);
+const PATH_RE = /(^|[^\w.\-\/一-鿿])((?:[\w.\-一-鿿]+\/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5}|[\w\-一-鿿][\w.\-一-鿿]*\.(?:png|jpe?g|gif|webp|pdf|svg|md|txt|csv|json|log|html?|ya?ml|toml))\b/g;
+// The path charset admits no HTML-escapable characters, so `p` is safe raw in
+// both href (encoded) and label — for matches on escaped AND unescaped text.
+function flink(p){
+  return `<a href="/file?p=${encodeURIComponent(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${p}</a>`;
+}
+function paths(h){ return h.replace(PATH_RE, (m,pre,p)=>pre+flink(p)); }
+// Every file path an ask mentions, deduped in order — rendered as the expansion's
+// own files row so the Boss clicks a list, never hunts inside prose.
+function filesOf(t){
+  const out = [];
+  (' '+(t||'')).replace(PATH_RE, (m,pre,p)=>{ if(!out.includes(p)) out.push(p); return m; });
+  return out;
+}
+// Structured ask: `<title> :: <body>` — title is the one-line decision (the row's
+// collapsed face), body is the detail behind the click. Legacy asks (no `::`)
+// keep the whole text as face, exactly the old behaviour.
+function splitAsk(t){
+  const i = (t||'').indexOf('::');
+  return i < 0 ? [t||'', ''] : [(t.slice(0,i)).trim(), t.slice(i+2).trim()];
 }
 function md(s){
   return paths(esc(s).replace(/^\*\*\s+/,'')                 // "** " used as a bullet, not bold
@@ -797,16 +834,29 @@ const ICONS = {
   crab: `<svg width="50" height="44" viewBox="0 0 52 46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="26" cy="29" rx="11" ry="8"/><path d="M21 22L19 16"/><circle cx="18.6" cy="13.6" r="1.8"/><path d="M31 22l2-6"/><circle cx="33.4" cy="13.6" r="1.8"/><path d="M15 26c-5-1-8-5-7-10"/><path d="M8 16l-3-2.5M8 16l3.5-2"/><path d="M37 26c5-1 8-5 7-10"/><path d="M44 16l3-2.5M44 16l-3.5-2"/><path d="M16 33.5l-6 2.5M18.5 36.5l-5 4M33.5 36.5l5 4M36 33.5l6 2.5"/></svg>`,
   inbox: `<svg width="42" height="42" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.9 10.2 4 24v12a4 4 0 0 0 4 4h32a4 4 0 0 0 4-4V24l-6.9-13.8A4 4 0 0 0 33.5 8h-19a4 4 0 0 0-3.6 2.2z"/><polyline points="4 24 16 24 20 30 28 30 32 24 44 24"/></svg>`,
 };
+// Long texts enumerate with circled digits (① hand test… ② the batch…) — break
+// each onto its own line so the wall scans as a list. The lookahead keeps inline
+// REFERENCES ("chain ①②③④ COMPLETE") intact: only a digit that starts a clause
+// (preceded by space, not followed by another digit) breaks.
+function brk(t){ return md(t).replace(/\s([①-⑳])(?![①-⑳])/g,'<br>$1'); }
 function dirBand(d){
   // A short leading "LABEL:" (≤30 chars, colon+space) becomes the statement's
   // coral head — the CEO's texts naturally carry one (LAUNCH LINE: · 主攻方向：).
   const m = /^([^:：\n]{2,30})[:：]\s+/.exec(d.text);
   const label = m ? `<span class='dlabel'>${md(m[1])}:</span> ` : '';
-  const rest = m ? d.text.slice(m[0].length) : d.text;
+  let rest = m ? d.text.slice(m[0].length) : d.text;
+  // A checklist that begins right after the label gets the head line to itself —
+  // otherwise item ① hangs off the label while ②③④ sit on their own lines.
+  if (label && /^[①-⑳]/.test(rest)) rest = '\n' + rest;
   const rose = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2.6 5.4-4.4 1.6 2.6-5.4z"/></svg>`;
   return `<div class='dirband'><div class='dkick'>${rose} Direction<span class='rage'>${age(d.updated)}</span></div>
-    <div class='dstate'>${label}${md(rest)}</div></div>`;
+    <div class='dstate'>${label}${brk(rest)}</div></div>`;
 }
+// Information ≠ decisions: info-kind entries never sit in Needs-you — they get the
+// third column, fresh ones visible, history folded. Legacy Inspector entries (posted
+// as needs/discuss by pre-0.9.18 stores) route by DEPT so live boards migrate on
+// render, no store surgery.
+function isInfo(e){ return e.kind==='info' || /^inspector/i.test(e.dept||''); }
 function chip(t){
   // Hook-born cards have label "#<id>" and ·-less headings parse label===name —
   // show each fact once (same guards as tCard).
@@ -820,21 +870,20 @@ function askRow(e, T, ts){
   let linked = (e.task && T.byId[e.task]) ? [T.byId[e.task]]
     : T.list.filter(t=>t.dept===e.dept && ['doing','review','blocked'].includes(t.status)).slice(0,2);
   const a = age(ts || e.created);
-  // Long asks enumerate with circled digits (① button label… ② the view… ③ the N…) —
-  // break each onto its own line so the expanded wall scans as a list. The lookahead
-  // keeps inline REFERENCES ("chain ①②③④ COMPLETE") intact: only a digit that starts
-  // a clause (preceded by space, not followed by another digit) breaks.
-  const brk = t => md(t).replace(/\s([①-⑳])(?![①-⑳])/g,'<br>$1');
-  // A resolved ask with a recorded outcome wears the outcome as its face; the essay
+  // A resolved ask with a recorded outcome wears the outcome as its face; the ask
   // it answered is quoted behind the click. Reopening shows the full ask again.
+  // A structured ask (`title :: body`) wears the title; the body waits in the
+  // expansion, above the task chips, with its file paths extracted to a files row.
   const sum = e.status==='resolved' && e.sum;
-  const rt = brk(sum ? e.sum : e.text);
+  const [title, body] = splitAsk(e.text);
+  const rt = brk(sum ? e.sum : (title || e.text));
+  const files = filesOf(e.text);
   return `<div class="row${xc(e.id)}" data-k="${esc(e.id)}" tabindex="0" onclick="tog(this)">
     <span class="dot2 k-${esc(e.kind)}"></span>
     <div class="rc">
       <div class="rt">${rt}</div>
       <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
-      <div class="rx">${sum?`<div class='orig'>${brk(e.text)}</div>`:''}${linked.map(chip).join('')}</div>
+      <div class="rx">${!sum && body?`<div class='body'>${brk(body)}</div>`:''}${sum?`<div class='orig'>${brk(e.text)}</div>`:''}${linked.map(chip).join('')}${files.length?`<div class='files'>${files.map(flink).join(' · ')}</div>`:''}</div>
     </div>
     <span class="rage">${a}</span></div>`;
 }
@@ -872,7 +921,7 @@ async function tick(){
     document.body.style.opacity = "";   // clear a stale "disconnected" dim on reconnect
     if (raw === lastRaw){
       document.getElementById('stamp').textContent =
-        (s.entries||[]).filter(e=>e.status==='open').length + " open · updated " + new Date().toLocaleTimeString();
+        (s.entries||[]).filter(e=>e.status==='open' && !isInfo(e)).length + " open · updated " + new Date().toLocaleTimeString();
       return;
     }
     lastRaw = raw;
@@ -885,21 +934,27 @@ async function tick(){
     // Oldest first — the queue drains top-down, and what's waited longest never sinks.
     const bywait = (a,b)=>(a.created||'').localeCompare(b.created||'');
     const open = es.filter(e=>e.status==='open').sort(bywait);
+    const needsOpen = open.filter(e=>!isInfo(e));
+    const infoOpen  = open.filter(isInfo);
     const parked = es.filter(e=>e.status==='parked').sort(bywait);
     const resolved = es.filter(e=>e.status==='resolved')
                        .sort((a,b)=>(b.updated||'').localeCompare(a.updated||''));
-    document.getElementById('askn').textContent = open.length;
+    document.getElementById('askn').textContent = needsOpen.length;
     document.getElementById('parkn').textContent = parked.length;
-    document.getElementById('ansn').textContent = resolved.length;
-    document.getElementById('asks').innerHTML = open.length
-      ? open.map(e=>askRow(e,T)).join('')
+    document.getElementById('infon').textContent = infoOpen.length;
+    document.getElementById('histn').textContent = resolved.length;
+    document.getElementById('asks').innerHTML = needsOpen.length
+      ? needsOpen.map(e=>askRow(e,T)).join('')
       : `<div class='colempty'><div class='glyph'>${ICONS.clear}</div><p class='empty'>Nothing waiting on you.</p></div>`;
     document.getElementById('parked').innerHTML = parked.length
       ? parked.map(e=>askRow(e,T)).join('')
       : `<div class='colempty'><div class='glyph'>${ICONS.crab}</div><p class='empty'>Nothing parked — the crab keeps the seat warm.</p></div>`;
-    document.getElementById('answered').innerHTML = resolved.length
+    document.getElementById('infos').innerHTML = infoOpen.length
+      ? infoOpen.map(e=>askRow(e,T)).join('')
+      : `<div class='colempty'><div class='glyph'>${ICONS.inbox}</div><p class='empty'>Verdicts and FYIs land here.</p></div>`;
+    document.getElementById('hist').innerHTML = resolved.length
       ? resolved.slice(0,5).map(e=>askRow(e,T,e.updated)).join('')
-      : `<div class='colempty'><div class='glyph'>${ICONS.inbox}</div><p class='empty'>Resolved asks land here.</p></div>`;
+      : `<p class='empty'>—</p>`;
     const todo = tb.tasks.filter(t=>['todo','blocked'].includes(t.status)||!t.status);
     const prog = tb.tasks.filter(t=>['doing','review'].includes(t.status));
     const doneT = tb.tasks.filter(t=>t.status==='done');
@@ -920,7 +975,7 @@ async function tick(){
       + col('Done', '#9c87c9', 'c-done', doneAll.slice(0,cap).join('') +
             (more>0?`<p class='empty'>+${more} more → BACKLOG.md</p>`:''), doneT.length+shipped.length);
     document.getElementById('stamp').textContent =
-      open.length + " open · updated " + new Date().toLocaleTimeString();
+      needsOpen.length + " open · updated " + new Date().toLocaleTimeString();
   }catch(e){
     // A restarting/reaped server recovers within a poll or two — keep the view.
     // Past that the server is gone: a frozen tab must not impersonate a live board.
@@ -1155,7 +1210,7 @@ def main():
             # Positional args match no flag → an empty card would post (same
             # flags-only foot-gun as canon.py `set`). Refuse loudly instead.
             sys.stderr.write("add is flags-only — need --text:\n"
-                             "  orchestrate-board add --dept <handle> --kind <needs|discuss>"
+                             "  orchestrate-board add --dept <handle> --kind <needs|discuss|info>"
                              " --text \"...\" [--task <id>]\n")
             sys.exit(2)
         e = board_add(root, _opt(argv, "--dept", "Boss"),

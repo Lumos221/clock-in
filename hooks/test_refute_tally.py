@@ -81,6 +81,8 @@ class L2PerTask(unittest.TestCase):
             self.assertEqual(len(items), 1)
             self.assertIn("督察", items[0]["text"])
             self.assertIn("task 5", items[0]["text"])
+            # CEO-directed process flag → Information column, not Needs-you (0.9.19)
+            self.assertEqual(items[0]["kind"], "info")
             tally_mod.tally(d, TH)                             # no duplicate
             self.assertEqual(len(_open_items(d, "RnD")), 1)
 

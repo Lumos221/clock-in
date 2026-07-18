@@ -41,6 +41,8 @@ A dept produces its outputs under its **own work-product folder**, `docs/<其领
 
 **Orchestration files are off-limits to every dept** (no carve-out list to forget): `docs/SoT.md`, `docs/TaskBoard.md`, `docs/BACKLOG.md`, `docs/DECISIONS.md`, `docs/CANON.md` (read-first, but **machine-written** — never hand-edit), `docs/reviews/`, `docs/复盘.md`, `docs/handover-*.md`. These are owned by the **CEO / 审查官 / 督察** per their roles — a 部门 only edits **its own task card's `status`** on `TaskBoard.md`, nothing else there.
 
+**Naming + in-file structure standard** (two file classes: living = suffix-free updated in place · event = `<type>-<subject>-<date>`; the fixed report spine TL;DR→结论→依据→方法→附录) → `department-sop.md` "Work products".
+
 **Canonical file — which output "matters" (earns a `docs/CANON.md` row):** the current authoritative answer to a question the project acts on, superseding the dept's rounds. Test: *would an outsider redo work, or lose a depended-on conclusion, if it vanished?* One row per answered question; not every dept has one; a **key binding decision** (no file) earns a row the same way (pointer `DECISIONS`). Mechanism + dept-facing how-to → `reference/canon.md`.
 ## 专家 (experts — reusable subagents)
 

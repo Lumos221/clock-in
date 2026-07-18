@@ -205,14 +205,19 @@ def context_for(root, cfg, audience="lead", agent_name=None):
             pass
     if board is not None:
         try:
-            fat = [(e["id"], len(e.get("text", ""))) for e in board.board_list(root)
-                   if e.get("status") == "open" and len(e.get("text", "")) > ASK_MAX_CHARS]
+            # A structured ask (`title :: body`) is judged on its TITLE — the body
+            # legitimately carries the detail behind the click. Only the collapsed
+            # face must stay decidable at a glance.
+            fat = [(e["id"], len(e.get("text", "").split("::", 1)[0].strip()))
+                   for e in board.board_list(root)
+                   if e.get("status") == "open"
+                   and len(e.get("text", "").split("::", 1)[0].strip()) > ASK_MAX_CHARS]
             if fat:
                 parts.append(
-                    "⚠ %d open Boss-Board ask(s) are essays (%s) — the Boss reads a 2-line "
-                    "clamp, and an essay isn't decidable. Re-raise each as question · options "
-                    "· recommendation (1–2 lines; detail → a file/card the ask points at) + "
-                    "`@BOSS-DONE[<old-id>]` in the same turn."
+                    "⚠ %d open Boss-Board ask(s) have essay faces (%s) — the Boss reads a "
+                    "one-line title. Re-raise each as `<one-line ask> :: <detail>` (title = "
+                    "question · options · recommendation; detail + file paths behind the "
+                    "`::`) + `@BOSS-DONE[<old-id>]` in the same turn; one decision per marker."
                     % (len(fat), ", ".join("%s: %d chars" % f for f in fat[:4])
                        + ("…" if len(fat) > 4 else "")))
         except Exception:
@@ -282,6 +287,24 @@ def housekeep_flag(root, cfg):
                 "(reference-safe, reversible; /housekeep for detail)." % (n, b / 1e6))
     except Exception:
         return None
+
+
+def regime_arm(data):
+    """One loud line arming the Fable brain regime (lead audience only), or None.
+    SessionStart is the ONLY hook event that carries `model` (optional per docs;
+    absent → None and the SKILL.md prose switch stays the fallback). Field cause
+    (Boss, 2026-07-18): the prose regime switch was skipped twice after restarts —
+    Fable planned under parity rules and spawned depts without the model override.
+    The arm fires on startup, resume AND post-compact (every SessionStart source),
+    exactly the moments the miss happened. Parity sessions cost zero tokens."""
+    model = str(data.get("model") or "")
+    if not model.startswith("claude-fable"):
+        return None
+    return ("🧠 REGIME SWITCH (mechanical): this session's model is Fable — the BRAIN REGIME "
+            "applies. Read the orchestrate skill's reference/brain-regime.md BEFORE planning "
+            "or dispatching anything. Binding even before you read it: dept teammates spawn "
+            "with an EXPLICIT model (default model:\"sonnet\"; a Boss-designated tier passes "
+            "too) and your pane holds NO code — diagnose and spec from artefacts.")
 
 
 STANDING_AGENTS = ("Auditor", "Inspector", "Registrar")
@@ -426,6 +449,13 @@ def main():
         except Exception:
             pass
     out = context_for(root, cfg, audience, agent_name)
+    if audience == "lead":
+        try:
+            arm = regime_arm(data)
+            if arm:
+                out = arm + "\n\n" + (out or "")
+        except Exception:
+            pass
     if audience == "lead":
         try:
             flags = pane_flags(root, data)

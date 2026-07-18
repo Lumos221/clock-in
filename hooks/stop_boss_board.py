@@ -7,8 +7,9 @@ board.py). Lines that look like a marker but don't parse land in
 .claude/marker-misses.log (the channel is otherwise fail-open end to end).
 Normally invoked via stop_dispatch.py; runs standalone too. Fail-open: any
 error -> no-op. Acts only inside an active .claude/orchestrate.json project.
-Never blocks a turn (always exit 0)."""
-import sys, os, json
+Blocks a turn in exactly one case (once per prompt): a lead work turn trailing
+an unanswered question to the Boss with no marker — the unmarked-ask nudge."""
+import sys, os, json, hashlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -18,6 +19,66 @@ try:
     import hooklib
 except Exception:
     board = hooklib = None
+
+
+def _turn_used_tools(transcript_path):
+    """True when the just-ended turn contains a tool_use block — the 'work turn'
+    proxy. A pure conversational reply (锁需求 interrogation, live dialogue with the
+    Boss) never trips the unmarked-ask nudge; a work burst that trails a question
+    does. Scan the tail backwards: assistant entries belong to the turn until the
+    real user prompt that started it (tool_result user entries are inside the turn)."""
+    try:
+        with open(transcript_path, encoding="utf-8") as f:
+            lines = f.readlines()[-400:]
+    except Exception:
+        return False
+    for line in reversed(lines):
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        t = obj.get("type")
+        msg = obj.get("message", {})
+        content = msg.get("content") if isinstance(msg, dict) else None
+        if t == "assistant":
+            if isinstance(content, list) and any(
+                    isinstance(b, dict) and b.get("type") == "tool_use" for b in content):
+                return True
+            continue
+        if t == "user":
+            if isinstance(content, list) and any(
+                    isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+                continue  # a tool result — still inside this turn
+            return False  # the prompt that started the turn — scan ends
+    return False
+
+
+def _trailing_question(text):
+    """True when the turn's final non-empty line reads as a question."""
+    for line in reversed((text or "").splitlines()):
+        s = line.strip().strip("*_` ")
+        if not s:
+            continue
+        return s.endswith("?") or s.endswith("？")
+    return False
+
+
+def _nudge_once(root, key):
+    """True the first time `key` is seen (and record it) — the nudge fires once per
+    prompt; the re-ended turn passes whether or not the model added the marker."""
+    p = os.path.join(root, ".claude", "ask-nudge-state")
+    try:
+        if open(p, encoding="utf-8").read().strip() == key:
+            return False
+    except Exception:
+        pass
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(key)
+    except Exception:
+        pass
+    return True
 
 
 def run(data, text=None):
@@ -45,7 +106,16 @@ def run(data, text=None):
     hooklib.log_marker_misses(root, "boss-board", markers.get("misses"))
     for dept, task, ask in markers["raises"]:
         try:
-            board.board_add(root, dept, "needs", ask, task=task)
+            # The Inspector's @BOSS channel carries verdicts/复盘 reads, never asks —
+            # they file as information (Boss's call, 2026-07-18: verdicts were
+            # crowding Needs-you). Unfiltered stands: the CEO still can't touch them.
+            kind = "info" if dept.split("-")[0].lower() == "inspector" else "needs"
+            board.board_add(root, dept, kind, ask, task=task)
+        except Exception:
+            pass
+    for dept, task, fact in markers.get("infos", []):
+        try:
+            board.board_add(root, dept, "info", fact, task=task)
         except Exception:
             pass
     for token, outcome in markers["dones"]:
@@ -66,6 +136,33 @@ def run(data, text=None):
                                        % (token, len(opens), ", ".join(o["id"] for o in opens)))
         except Exception:
             pass
+    # ---- unmarked trailing ask (lead session): prose is transport, the BOARD is the
+    # register. Field case 2026-07-18: the CEO ended a work burst with "Still open for
+    # you: … ?" — no marker, so the board never saw it and the question died in
+    # scrollback while the panel showed nothing waiting. A work turn whose final line
+    # is a question, with no raise/info marker → block the stop once with the fix.
+    if markers["raises"] or markers.get("infos"):
+        return
+    try:
+        import stop_idle_nudge
+        name, _, team = stop_idle_nudge.identity(data.get("transcript_path") or "")
+        if team and name and name != "team-lead":
+            return  # teammate pane — dept ask discipline lives in its SOP (nudge is lead-only)
+    except Exception:
+        pass
+    if not _trailing_question(text):
+        return
+    if not _turn_used_tools(data.get("transcript_path") or ""):
+        return
+    key = str(data.get("prompt_id") or hashlib.md5(text.encode("utf-8", "replace")).hexdigest())
+    if not _nudge_once(root, key):
+        return
+    return ("🛑 boss-board: this work turn ends on an unanswered question to the Boss, but no "
+            "board ask was raised — scrollback is transport, the BOARD is the register (the "
+            "Boss may be away, and an unmarked trailing question dies in the scroll). Re-end "
+            "the turn keeping your prose AND adding "
+            "`@BOSS[<dept>#<task>]: <one-line ask> :: <detail>` — or, if the question was "
+            "rhetorical or aimed at a teammate, simply end the turn again (this fires once).")
 
 
 def main():
@@ -73,7 +170,10 @@ def main():
         data = json.load(sys.stdin)
     except Exception:
         return
-    run(data)
+    ret = run(data)
+    if isinstance(ret, str) and ret:  # standalone parity with stop_dispatch's block path
+        sys.stderr.write(ret)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

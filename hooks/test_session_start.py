@@ -344,6 +344,37 @@ class BriefsStampSentinel(unittest.TestCase):
             self.assertIn("restart", flag)
 
 
+class RegimeArm(unittest.TestCase):
+    """0.9.18: the Fable brain regime arms mechanically from SessionStart's `model`
+    field (the prose switch was field-skipped twice). Parity/absent-model → silent."""
+
+    def test_fable_model_arms(self):
+        arm = ss.regime_arm({"model": "claude-fable-5"})
+        self.assertIn("BRAIN REGIME", arm)
+        self.assertIn("brain-regime.md", arm)
+        self.assertIn("EXPLICIT model", arm)
+
+    def test_parity_and_absent_model_silent(self):
+        self.assertIsNone(ss.regime_arm({"model": "claude-opus-4-8"}))
+        self.assertIsNone(ss.regime_arm({"model": "claude-sonnet-5"}))
+        self.assertIsNone(ss.regime_arm({}))
+
+    def test_arm_opens_the_lead_injection(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            hook = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session_start.py")
+            payload = {"cwd": d, "model": "claude-fable-5"}
+            r = subprocess.run([sys.executable, hook], input=json.dumps(payload),
+                               text=True, capture_output=True, timeout=20)
+            self.assertTrue(r.stdout.startswith("🧠 REGIME SWITCH"))
+            self.assertIn("CEO orchestration mode", r.stdout)   # normal injection follows
+            payload = {"cwd": d, "model": "claude-opus-4-8"}
+            r = subprocess.run([sys.executable, hook], input=json.dumps(payload),
+                               text=True, capture_output=True, timeout=20)
+            self.assertNotIn("REGIME SWITCH", r.stdout)
+
+
 class Gating(unittest.TestCase):
     def test_inactive_marker_silent(self):
         with tempfile.TemporaryDirectory() as d:

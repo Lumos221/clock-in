@@ -84,6 +84,85 @@ class SpawnGuard(unittest.TestCase):
         self.assertIsNone(guard.team_config(SID))
 
 
+class TierGuard(unittest.TestCase):
+    """0.9.18 brain-regime tier guard: a Fable-CEO session blocks NAMED teammate
+    spawns that carry no model: param; any explicit tier passes; parity sessions
+    and one-shots are untouched. Session model comes from the transcript tail."""
+
+    def setUp(self):
+        self._env = os.environ.get("CLAUDE_CONFIG_DIR")
+        self.cfg = tempfile.mkdtemp()
+        os.environ["CLAUDE_CONFIG_DIR"] = self.cfg
+
+    def tearDown(self):
+        if self._env is None:
+            os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        else:
+            os.environ["CLAUDE_CONFIG_DIR"] = self._env
+
+    def _transcript(self, d, model):
+        p = os.path.join(d, "t.jsonl")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "user", "message": {"content": "hi"}}) + "\n")
+            f.write(json.dumps({"type": "assistant",
+                                "message": {"model": model, "content": []}}) + "\n")
+        return p
+
+    def _run(self, d, model, tool_input):
+        import subprocess
+        hook = os.path.join(HERE, "pretool_spawn_guard.py")
+        payload = {"cwd": d, "session_id": SID, "tool_name": "Agent",
+                   "transcript_path": self._transcript(d, model),
+                   "tool_input": tool_input}
+        env = dict(os.environ)
+        r = subprocess.run([sys.executable, hook], input=json.dumps(payload),
+                           text=True, capture_output=True, env=env, timeout=20)
+        return r.returncode, r.stderr
+
+    def test_fable_named_spawn_without_model_blocked(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [])
+            code, err = self._run(d, "claude-fable-5",
+                                  {"name": "RnD", "subagent_type": "RnD"})
+            self.assertEqual(code, 2)
+            self.assertIn("EXPLICIT model", err)
+            self.assertIn("designated", err)   # Boss-designated tiers named as first-class
+
+    def test_fable_spawn_with_any_explicit_tier_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [])
+            for tier in ("sonnet", "fable", "opus", "haiku"):
+                code, _ = self._run(d, "claude-fable-5",
+                                    {"name": "Mkt", "subagent_type": "Mkt", "model": tier})
+                self.assertEqual(code, 0, tier)
+
+    def test_parity_session_untouched(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [])
+            code, _ = self._run(d, "claude-opus-4-8",
+                                {"name": "RnD", "subagent_type": "RnD"})
+            self.assertEqual(code, 0)
+
+    def test_one_shot_untouched_even_on_fable(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            _team(self.cfg, [])
+            code, _ = self._run(d, "claude-fable-5", {"subagent_type": "clock-in:Auditor"})
+            self.assertEqual(code, 0)
+
+    def test_session_model_reads_last_stamp(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "t.jsonl")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(json.dumps({"message": {"model": "claude-opus-4-8"}}) + "\n")
+                f.write(json.dumps({"message": {"model": "claude-fable-5"}}) + "\n")
+            self.assertEqual(guard.session_model(p), "claude-fable-5")
+            self.assertEqual(guard.session_model(os.path.join(d, "missing.jsonl")), "")
+
+
 class PaneSentinel(unittest.TestCase):
     def setUp(self):
         self._env = os.environ.get("CLAUDE_CONFIG_DIR")

@@ -31,14 +31,16 @@ def _sentinel(root, key):
     return os.path.join(root, "docs", "reviews", ".tally", key)
 
 
-def _flag_once(root, key, dept, text):
+def _flag_once(root, key, dept, text, kind="needs"):
     """Raise a Boss-Board item once per sentinel key — idempotent across turns even if
-    the Boss dismisses the item; board dedup covers the still-open case."""
+    the Boss dismisses the item; board dedup covers the still-open case. kind="info"
+    files it in the panel's Information column (CEO-directed process flags the Boss
+    only reads, never decides)."""
     sent = _sentinel(root, key)
     if os.path.exists(sent):
         return
     try:
-        board.board_add(root, dept, "needs", text)
+        board.board_add(root, dept, kind, text)
         os.makedirs(os.path.dirname(sent), exist_ok=True)
         open(sent, "w").close()
     except Exception:
@@ -133,8 +135,11 @@ def tally(root, thresholds, roster=None):
             _flag_once(root, esc_key, dept,
                        "task %s (%s) 已连续 %d 次 L2 封驳 — 复盘后仍卡: Boss decision (re-scope / drop / take over)" % (tid, dept, n))
         elif n >= diagnose_t:
+            # CEO-directed process flag — the Boss reads it, decides nothing → info
+            # column, not Needs-you (Boss's call, 2026-07-18).
             _flag_once(root, diag_key, dept,
-                       "task %s (%s) 已连续 %d 次 L2 封驳 — 停止盲目返工: CEO invoke the 督察 (Inspector) to 复盘 now" % (tid, dept, n))
+                       "task %s (%s) 已连续 %d 次 L2 封驳 — 停止盲目返工: CEO invoke the 督察 (Inspector) to 复盘 now" % (tid, dept, n),
+                       kind="info")
         if n < diagnose_t:
             _unflag(root, diag_key)
         if n < escalate_t:

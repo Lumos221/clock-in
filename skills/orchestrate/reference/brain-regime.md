@@ -11,7 +11,7 @@ The parity CORE RULE ("you do NOT dictate method") rests on craft parity: opus C
 ## Org under brain regime
 
 - **CEO (Fable)** — the brain: translate the Boss, root-cause, spec, judge outcomes.
-- **Depts — spawn at sonnet:** pass `model:"sonnet"` on each 部门 spawn (the per-spawn override beats the roster file's opus pin; the same roster serves both regimes, no re-recruit). With piece-level specs the head's planning job is gone — sonnet executes, reviews staff (haiku for script-shaped pieces, the model-routing test unchanged), invokes L2, reports evidence.
+- **Depts — spawn at an EXPLICIT tier, default sonnet:** pass `model:"sonnet"` on each 部门 spawn (the per-spawn override beats the roster file's opus pin; the same roster serves both regimes, no re-recruit). **A Boss-designated tier overrides the default** (e.g. a dept the Boss pins to Fable spawns `model:"fable"`) — but the tier is still explicit on the call: a spawn guard blocks the silent omission (any explicit tier passes), and a session-start line arms this regime mechanically when the harness reports the model. With piece-level specs the head's planning job is gone — sonnet executes, reviews staff (haiku for script-shaped pieces, the model-routing test unchanged), invokes L2, reports evidence.
 - **审查官 · 督察 — opus, unchanged.** The top routable tier stays on the independent gate; verification is cheaper than generation, so an opus gate meaningfully audits Fable designs. **Your judgment complements L2, never replaces it** — you wrote the spec, so you and the spec share blind spots; the gate doesn't.
 
 ## The loop (marked-image round, the common case)

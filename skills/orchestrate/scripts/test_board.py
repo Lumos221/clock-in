@@ -147,7 +147,16 @@ class MarkerParse(unittest.TestCase):
 
     def test_no_marker_is_empty(self):
         out = board.parse_markers("just a normal message, discuss this later")
-        self.assertEqual(out, {"raises": [], "dones": [], "misses": []})
+        self.assertEqual(out, {"raises": [], "dones": [], "infos": [], "misses": []})
+
+    def test_info_marker_with_and_without_task_link(self):
+        out = board.parse_markers("@BOSS-INFO[Inspector#76]: root cause = CEO review-window drift\n"
+                                  "@BOSS-INFO[QA]: nightly suite green 3 days running")
+        self.assertEqual(out["infos"], [("Inspector", "76", "root cause = CEO review-window drift"),
+                                        ("QA", None, "nightly suite green 3 days running")])
+        self.assertEqual(out["raises"], [])   # an INFO line must not double as a raise
+        self.assertEqual(out["dones"], [])
+        self.assertEqual(out["misses"], [])
 
     def test_done_line_is_not_also_a_raise(self):
         out = board.parse_markers("@BOSS-DONE[QA]")
@@ -615,6 +624,29 @@ class HookFlow(unittest.TestCase):
             self.assertEqual(store["entries"][0]["status"], "resolved")
             self.assertEqual(store["entries"][0]["sum"], "Postgres it is.")
 
+    def test_info_marker_files_as_info_kind(self):
+        # @BOSS-INFO lands in the Information column: kind "info", never "needs".
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@BOSS-INFO[QA#7]: nightly suite green 3 days running")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            self.assertEqual(store["entries"][0]["kind"], "info")
+            self.assertEqual(store["entries"][0].get("task"), "7")
+
+    def test_inspector_raise_autofiles_as_info(self):
+        # The Inspector's @BOSS channel carries verdicts, not asks — auto-info
+        # (suffixed respawns like Inspector-2 included); other depts stay "needs".
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            self._run_hook(d, "@BOSS[Inspector-2]: 复盘 #76 verdict: root cause = CEO drift\n"
+                              "@BOSS[QA]: Postgres or SQLite?")
+            store = board.load_store(os.path.join(d, board.STORE_REL))
+            kinds = {e["dept"]: e["kind"] for e in store["entries"]}
+            self.assertEqual(kinds["Inspector-2"], "info")
+            self.assertEqual(kinds["QA"], "needs")
+
     def test_direction_persists_via_wrapper(self):
         with tempfile.TemporaryDirectory() as d:
             os.makedirs(os.path.join(d, ".claude"))
@@ -655,6 +687,85 @@ class HookFlow(unittest.TestCase):
             log = os.path.join(d, ".claude", "marker-misses.log")
             self.assertTrue(os.path.exists(log))
             self.assertIn("wrong brackets", open(log, encoding="utf-8").read())
+
+
+class AskNudge(unittest.TestCase):
+    """0.9.18 unmarked-trailing-ask nudge (stop_boss_board.run returns a block string):
+    a lead WORK turn (used tools) ending on a question with no @BOSS marker blocks the
+    stop once; conversational turns, marker-carrying turns and repeats pass."""
+
+    @classmethod
+    def setUpClass(cls):
+        hooks = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__))))), "hooks")
+        sys.path.insert(0, hooks)
+        import stop_boss_board
+        cls.mod = stop_boss_board
+
+    def _proj(self, d):
+        os.makedirs(os.path.join(d, ".claude"), exist_ok=True)
+        open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+
+    def _transcript(self, d, work=True, final_text="Still open for you: A or B?"):
+        p = os.path.join(d, "t.jsonl")
+        rows = [{"type": "user", "message": {"role": "user", "content": "开始上班"}}]
+        if work:
+            rows.append({"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}]}})
+            rows.append({"type": "user", "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]}})
+        rows.append({"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "text", "text": final_text}]}})
+        with open(p, "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r) + "\n")
+        return p
+
+    def _run(self, d, work=True, text="Progress report.\nStill open for you: A or B?",
+             prompt="p1"):
+        env = os.environ.get("BOSS_BOARD_SKIP_SERVER")
+        os.environ["BOSS_BOARD_SKIP_SERVER"] = "1"
+        try:
+            return self.mod.run({"cwd": d, "transcript_path": self._transcript(d, work),
+                                 "prompt_id": prompt}, text)
+        finally:
+            if env is None:
+                os.environ.pop("BOSS_BOARD_SKIP_SERVER", None)
+
+    def test_work_turn_trailing_question_blocks_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            ret = self._run(d)
+            self.assertIn("@BOSS", ret or "")
+            self.assertIsNone(self._run(d))                    # same prompt → pass
+
+    def test_new_prompt_nudges_again(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            self.assertTrue(self._run(d, prompt="p1"))
+            self.assertIsNone(self._run(d, prompt="p1"))
+            self.assertTrue(self._run(d, prompt="p2"))
+
+    def test_marker_carrying_turn_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            ret = self._run(d, text="@BOSS[CEO#5]: A or B? :: context here\nanything?")
+            self.assertIsNone(ret)
+
+    def test_conversational_turn_never_trips(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            self.assertIsNone(self._run(d, work=False))
+
+    def test_statement_ending_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            self.assertIsNone(self._run(d, text="All dispatched. Waiting on QA."))
+
+    def test_fullwidth_question_mark_counts(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            self.assertTrue(self._run(d, text="收尾。\n邀请门槛还等 #116 吗？"))
 
 
 class SurfaceOpen(unittest.TestCase):

@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
-"""PreToolUse hook (Agent) — spawn-collision guard: block spawning a teammate whose
-base handle already has a LIVE member in this session's team. exit 2 = block (stderr
+"""PreToolUse hook (Agent) — two guards on teammate spawns. exit 2 = block (stderr
 fed to the model); exit 0 = allow. Fail-open (any doubt → allow).
+
+1) Spawn-collision: block spawning a teammate whose base handle already has a LIVE
+   member in this session's team.
+2) Brain-regime tier: in a Fable-CEO session, block a NAMED teammate spawn carrying
+   no `model:` param — the roster's opus pin is parity-only; the brain regime spawns
+   depts at an explicit tier (default sonnet; a Boss-designated tier, e.g. Marketing
+   at Fable, passes just as well — only the SILENT omission is blocked). PreToolUse
+   carries no model field (docs), so the session model comes from the transcript's
+   last assistant `message.model` stamp (field-verified 2026-07-18).
 
 Field case (refcheck, 2026-07-15): the CEO released an opus dept and respawned its
 sonnet replacement in the same breath. A shutdown_request is a polite message a busy
@@ -64,6 +72,29 @@ def live_collision(cfg, name):
     return None
 
 
+def session_model(transcript_path):
+    """The transcript's most recent assistant `message.model` stamp, or "".
+    Tail-read (last 64 KB) — transcripts grow to MBs and the stamp is on every
+    assistant line; a truncated first line simply fails json and is skipped."""
+    try:
+        with open(transcript_path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 65536))
+            chunk = f.read().decode("utf-8", "replace")
+    except Exception:
+        return ""
+    for line in reversed(chunk.splitlines()):
+        try:
+            d = json.loads(line)
+        except Exception:
+            continue
+        m = (d.get("message") or {}).get("model")
+        if m:
+            return str(m)
+    return ""
+
+
 def active(root):
     if not root:
         return False
@@ -100,6 +131,15 @@ def main():
             "truly cannot wait: spawn a suffixed name deliberately and treat the "
             "predecessor's output as void (release it on sight)." % (base(name), hit))
         sys.exit(2)
+    if not (data.get("tool_input", {}) or {}).get("model"):
+        if session_model(data.get("transcript_path") or "").startswith("claude-fable"):
+            sys.stderr.write(
+                "⛔ brain-regime tier guard: a Fable CEO spawns dept teammates with an "
+                "EXPLICIT model — re-issue this spawn with model:\"sonnet\" (the brain-"
+                "regime default; the roster's opus pin is parity-only), or the tier the "
+                "Boss designated for this dept (e.g. model:\"fable\"). Any explicit tier "
+                "passes; only the silent omission is blocked.")
+            sys.exit(2)
     return
 
 
