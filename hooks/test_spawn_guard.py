@@ -141,8 +141,58 @@ class TierGuard(unittest.TestCase):
             code, err = self._run(d, "claude-fable-5",
                                   {"name": "RnD", "subagent_type": "RnD"})
             self.assertEqual(code, 2)
-            self.assertIn("EXPLICIT model", err)
+            self.assertIn("EXPLICIT tier", err)
             self.assertIn("designated", err)   # Boss-designated tiers named as first-class
+
+    def test_fires_before_the_team_config_exists(self):
+        # the 0.9.26 ordering fix: the team config is born by the FIRST teammate
+        # spawn, so the 上岗 batch escaped a guard that sat behind it (field ×3)
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)  # NOTE: no _team() — no config on disk at all
+            code, err = self._run(d, "claude-fable-5",
+                                  {"name": "RnD", "subagent_type": "RnD"})
+            self.assertEqual(code, 2)
+            self.assertIn("tier guard", err)
+
+    def test_named_reviewer_spawn_blocked(self):
+        # field case 2026-07-19: L1-151 / L2-145-146-final sat on the members
+        # roster — the CEO had been naming its Auditor invocations into teammates
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            for st in ("clock-in:Auditor", "Auditor", "clock-in:Inspector"):
+                code, err = self._run(d, "claude-opus-4-8",
+                                      {"name": "L2-151-final", "subagent_type": st})
+                self.assertEqual(code, 2, st)
+                self.assertIn("ONE-SHOT", err)
+            # unnamed reviewer passes untouched (the actual contract)
+            code, _ = self._run(d, "claude-fable-5", {"subagent_type": "clock-in:Auditor"})
+            self.assertEqual(code, 0)
+
+    def test_plugin_agent_pin_covers_registrar_respawn(self):
+        # field false-positive 2026-07-19: the Registrar is plugin-scope (its
+        # haiku pin lives in the PLUGIN's agents/ dir, not the project's) — a
+        # param-less respawn must pass on that pin
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            code, err = self._run(d, "claude-fable-5",
+                                  {"name": "Registrar",
+                                   "subagent_type": "clock-in:Registrar"})
+            self.assertEqual(code, 0, err)
+
+    def test_brief_model_pin_makes_omission_benign(self):
+        # template default `model: sonnet` (0.9.26): the frontmatter tier applies,
+        # so a param-less spawn is exactly the Boss's default — no block
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            os.makedirs(os.path.join(d, ".claude", "agents"), exist_ok=True)
+            with open(os.path.join(d, ".claude", "agents", "RnD.md"), "w") as f:
+                f.write("---\nname: RnD\ndescription: x\nmodel: sonnet\n---\nbody\n")
+            code, _ = self._run(d, "claude-fable-5",
+                                {"name": "RnD", "subagent_type": "RnD"})
+            self.assertEqual(code, 0)
+            code, _ = self._run(d, "claude-fable-5",     # suffixed lane reads base brief
+                                {"name": "RnD-2", "subagent_type": "RnD"})
+            self.assertEqual(code, 0)
 
     def test_fable_spawn_with_any_explicit_tier_passes(self):
         with tempfile.TemporaryDirectory() as d:

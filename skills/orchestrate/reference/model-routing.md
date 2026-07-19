@@ -10,26 +10,28 @@ job well first — token-saving is the byproduct; under-powering a role just buy
 
 ## Two-stage inside each 部门: the head plans, staff implement
 
-A **部门 is a unit of two parts** — its **head** (the teammate/pane, on **opus**) and the **staff** it
+A **部门 is a unit of two parts** — its **head** (the teammate/pane, **default sonnet** — the brief's frontmatter pin, Boss's ruling 2026-07-19) and the **staff** it
 spawns (one-shot subagents, cheap). The head plans its slice, writes a **precise per-piece spec**,
 delegates the *typing* to staff, reviews their output, then reports up. The low-volume judgment
-(planning + review) stays opus; the high-volume typing goes cheap. **Most output tokens should land on
-staff** — if a head's own opus share stays high, the split isn't paying off. (Floor: a one-line edit
-isn't worth a subagent round-trip — the head types it inline.)
+(planning + review) stays on the head's tier; the high-volume typing goes cheap. **Most output tokens
+should land on staff** — if a head's own share stays high, the split isn't paying off. (Floor: a
+one-line edit isn't worth a subagent round-trip — the head types it inline.)
 
 ## Who runs on what
 
 | Role | Model | Where it's pinned |
 |------|-------|-------------------|
 | **CEO** (main session) | the Boss's model | not spawned |
-| **部门 head** — the teammate/pane; every dept incl. 法务部 | **opus** | frontmatter — `department.md` |
+| **部门 head** — the teammate/pane; every dept incl. 法务部 | **sonnet** (default) · a **Boss-designated tier** (e.g. Marketing at fable) | frontmatter — the dept's brief (`model:` pin, written at recruit) |
 | **审查官 · 督察 · experts** — subagents, not 部门 | **opus** | frontmatter — `auditor.md` · `inspector.md` · `expert.md` |
 | **staff** — subagents the head spawns; the typing | **sonnet** / **haiku** (tiering below) | the **head** sets `model:` per one-shot `Agent` call |
 
 **The only per-spawn model decision in the whole org is a head choosing each staff spawn's tier.**
-Every standing role is opus, pinned once at recruit; the CEO orchestrates and makes no model call.
-
-**Brain-regime exception (Fable CEO — `reference/brain-regime.md`):** dept spawns carry `model:"sonnet"` (the per-spawn override beats the opus pin; the roster is unchanged and serves both regimes). 审查官/督察 stay opus. This is the one place the CEO makes a model call.
+Every standing role is pinned in frontmatter at recruit; the CEO makes no model call — a param-less
+dept spawn gets the brief's pin mechanically (Boss's ruling 2026-07-19: the mechanical default IS
+sonnet — three field failures of "pass the param each time" ended the per-spawn discipline). An
+explicit `model:` on the spawn call still overrides for a one-off; the spawn guard blocks a Fable
+CEO's param-less spawn only when the brief carries no pin (a pre-0.9.26 brief — one /recruit pass cures it).
 
 ## The staff tier — per piece (the head's call)
 

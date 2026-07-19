@@ -2,7 +2,7 @@
 name: <ASCII handle — 研发部→RnD · 测试部→QA …; per departments.md "Naming convention". Chinese 部门名 = the label below.>
 description: <中文部门名 (e.g. 研发部) — one-line role + when to dispatch to it>. owns <files>.
 disallowedTools: TaskCreate, TaskUpdate, AskUserQuestion, Workflow, PowerShell
-model: opus
+model: sonnet
 ---
 
 # <部门名>

@@ -88,6 +88,31 @@ def live_collision(cfg, name):
     return None
 
 
+def brief_model(root, name):
+    """The `model:` frontmatter pin governing this handle, or ''. Checked in
+    resolution order: the project brief (`.claude/agents/<base>.md`), then the
+    PLUGIN's own agents/ dir — plugin-scope standing agents (Registrar: haiku)
+    carry their pin there, and missing that dir false-blocked a param-less
+    Registrar respawn (field case 2026-07-19). A pinned tier makes a param-less
+    spawn benign — the frontmatter applies (template default: sonnet, 0.9.26)."""
+    paths = []
+    if root:
+        paths.append(os.path.join(root, ".claude", "agents", "%s.md" % base(name)))
+    paths.append(os.path.join(HERE, "..", "agents", "%s.md" % base(name)))
+    for p in paths:
+        try:
+            head = open(p, encoding="utf-8").read(2048)
+        except Exception:
+            continue
+        if not head.startswith("---"):
+            continue
+        fm = head.split("---", 2)[1] if head.count("---") >= 2 else head
+        m = re.search(r"(?m)^model:\s*(\S+)", fm)
+        if m:
+            return m.group(1)
+    return ""
+
+
 def session_model(transcript_path):
     """The transcript's most recent assistant `message.model` stamp, or "".
     Tail-read (last 64 KB) — transcripts grow to MBs and the stamp is on every
@@ -133,8 +158,40 @@ def main():
     name = (data.get("tool_input", {}) or {}).get("name", "")
     if not name or name == "team-lead":
         return  # one-shot subagent — no collision possible
-    if not active(hooklib.find_root(data.get("cwd") or os.getcwd())):
+    root = hooklib.find_root(data.get("cwd") or os.getcwd())
+    if not active(root):
         return
+    # The reviewers are ONE-SHOT subagents by contract — independence comes from a
+    # fresh instance per invocation, and a named reviewer becomes a teammate that
+    # holds a pane, lands on the members roster and lingers as a corpse (field case
+    # 2026-07-19: L1-151 · L2-145-146-final · L1-153 · L2-151-final all sitting in
+    # the members list). Block the name, keep the invocation.
+    rtype = base(str((data.get("tool_input", {}) or {}).get("subagent_type", ""))
+                 .split(":")[-1]).lower()
+    if rtype in ("auditor", "inspector"):
+        sys.stderr.write(
+            "⛔ reviewer-as-teammate: the 审查官/督察 is a ONE-SHOT subagent — re-issue "
+            "this Agent call WITHOUT `name:` (keep subagent_type + run_in_background "
+            "if you want it non-blocking). A named reviewer squats a pane and the "
+            "members roster; independence comes from the fresh instance, not a name.")
+        sys.exit(2)
+    # Tier guard FIRST — it must not sit behind the team config, which does not
+    # exist until the first teammate spawn completes: the 上岗 batch (exactly the
+    # spawns that matter) escaped the old ordering every time (field case ×3).
+    # A project brief carrying a model: pin (template default sonnet since 0.9.26)
+    # makes the omission benign — the frontmatter tier applies; only a pinless
+    # brief + a Fable session + a silent omission blocks.
+    if not (data.get("tool_input", {}) or {}).get("model"):
+        if not brief_model(root, name) and \
+                session_model(data.get("transcript_path") or "").startswith("claude-fable"):
+            sys.stderr.write(
+                "⛔ brain-regime tier guard: this dept's brief carries no model pin and "
+                "the spawn names no model — a Fable CEO spawns dept teammates at an "
+                "EXPLICIT tier. Re-issue with model:\"sonnet\" (the default), or the "
+                "tier the Boss designated for this dept (e.g. model:\"fable\"). Any "
+                "explicit tier passes; only the silent omission is blocked. (A /recruit "
+                "upgrade pass pins model: sonnet into the brief and retires this nudge.)")
+            sys.exit(2)
     cfg = team_config(data.get("session_id"))
     if cfg is None:
         return
@@ -148,15 +205,6 @@ def main():
             "explicitly suffixed name (e.g. '%s-2') on file-disjoint cards — that "
             "passes this guard." % (name, hit, base(name)))
         sys.exit(2)
-    if not (data.get("tool_input", {}) or {}).get("model"):
-        if session_model(data.get("transcript_path") or "").startswith("claude-fable"):
-            sys.stderr.write(
-                "⛔ brain-regime tier guard: a Fable CEO spawns dept teammates with an "
-                "EXPLICIT model — re-issue this spawn with model:\"sonnet\" (the brain-"
-                "regime default; the roster's opus pin is parity-only), or the tier the "
-                "Boss designated for this dept (e.g. model:\"fable\"). Any explicit tier "
-                "passes; only the silent omission is blocked.")
-            sys.exit(2)
     return
 
 

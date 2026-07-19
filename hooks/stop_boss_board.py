@@ -9,7 +9,7 @@ Normally invoked via stop_dispatch.py; runs standalone too. Fail-open: any
 error -> no-op. Acts only inside an active .claude/orchestrate.json project.
 Blocks a turn in exactly one case (once per prompt): a lead work turn trailing
 an unanswered question to the Boss with no marker — the unmarked-ask nudge."""
-import sys, os, json, hashlib, uuid
+import re, sys, os, json, hashlib, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -53,13 +53,29 @@ def _turn_used_tools(transcript_path):
     return False
 
 
+NEEDS_RE = re.compile(r"^[-—#>*\s]*(?:🔴|⚪)?\s*(?:needs?\s+you|需要你|等你)\b", re.I)
+# "Needs you: nothing." / "nothing right now." / 需要你：无 — a nil declaration, not
+# an ask. Trailing qualifier words allowed; a clause continuing past a comma is not
+# nil ("none of the options work, pick one" IS an ask).
+NEEDS_NIL = re.compile(r"[:：]\s*(?:nothing|none|无|没有|—|-)\b[^,;，；]*$", re.I)
+
+
 def _trailing_question(text):
-    """True when the turn's final non-empty line reads as a question."""
-    for line in reversed((text or "").splitlines()):
-        s = line.strip().strip("*_` ")
-        if not s:
-            continue
-        return s.endswith("?") or s.endswith("？")
+    """True when the turn ends on an ask the board never saw: the final non-empty
+    line reads as a question, OR one of the closing lines is a "Needs you"-style
+    trailer with content (the CEO's reply-shape habit — field case 2026-07-19:
+    "---Needs you: the same two optional items…" ended in a full stop, so the
+    question-mark heuristic slept while the ask lived only in prose). A trailer
+    declaring nothing needed ("Needs you: nothing") is not an ask."""
+    lines = [l.strip().strip("*_` ") for l in (text or "").splitlines()
+             if l.strip().strip("*_` ")]
+    if not lines:
+        return False
+    if lines[-1].endswith("?") or lines[-1].endswith("？"):
+        return True
+    for s in lines[-3:]:
+        if NEEDS_RE.match(s) and not NEEDS_NIL.search(s):
+            return True
     return False
 
 
@@ -235,12 +251,13 @@ def run(data, text=None):
     key = str(data.get("prompt_id") or hashlib.md5(text.encode("utf-8", "replace")).hexdigest())
     if not _nudge_once(root, key):
         return
-    return ("🛑 boss-board: this work turn ends on an unanswered question to the Boss, but no "
-            "board ask was raised — scrollback is transport, the BOARD is the register (the "
-            "Boss may be away, and an unmarked trailing question dies in the scroll). Re-end "
-            "the turn keeping your prose AND adding "
-            "`@BOSS[<dept>#<task>]: <one-line ask> :: <detail>` — or, if the question was "
-            "rhetorical or aimed at a teammate, simply end the turn again (this fires once).")
+    return ("🛑 boss-board: this work turn ends on an ask to the Boss (a trailing question "
+            "or a Needs-you trailer), but no board ask was raised — scrollback is transport, "
+            "the BOARD is the register (the Boss may be away, and a prose-only ask dies in "
+            "the scroll). Re-end the turn keeping your prose AND adding "
+            "`@BOSS[<dept>#<task>]: <one-line ask> :: <detail>` — or, if the items are "
+            "ALREADY open on the board, rhetorical, or aimed at a teammate, simply end the "
+            "turn again (this fires once).")
 
 
 def main():

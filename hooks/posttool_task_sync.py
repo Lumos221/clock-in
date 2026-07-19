@@ -90,16 +90,26 @@ def _read(path):
         return ""
 
 
-def _card_md(tid, subject, dept, what, blocked):
+def _card_md(tid, subject, dept, what, blocked, label=None):
+    """A fresh card. `label` (the heading slot) is the Boss-facing identity —
+    coral pill, shipped-line lead, BACKLOG grep key. on_create promotes the
+    subject's leading #NNN into it when no existing card claims that number
+    (0.9.26; before this a hook-born `### #46 · #151 REDEEM…` wore the session id
+    as its face and demoted the real number into the name); otherwise the
+    platform id keeps the slot and the subject stays whole."""
+    if label:
+        name = re.sub(r"^#\d+\s*[·:—-]*\s*", "", subject).strip() or subject
+    else:
+        label, name = "#%s" % tid, subject
     return (
-        "### #%s · %s\n"
+        "### %s · %s\n"
         "- **dept:** %s\n"
         "- **task_id:** %s\n"
         "- **status:** todo\n"
         "- **blocked_on:** %s\n"
         "- **what:** %s\n"
         "- **done-when:** <CEO fills — acceptance criterion from the dispatch spec>\n"
-        "- **artifacts:** —\n" % (tid, subject, dept or "—", tid, blocked or "—", what)
+        "- **artifacts:** —\n" % (label, name, dept or "—", tid, blocked or "—", what)
     )
 
 
@@ -117,8 +127,11 @@ def on_create(root, cfg, ti, resp):
     span = hooklib.tb_card_span(text, tid)
     if span:
         head = text[span[0]:span[1]].splitlines()[0]
-        if subject and subject in head:
-            return  # same card already born — duplicate/replayed event
+        # duplicate/replayed event — match normalised (the heading may carry the
+        # subject's leading #NNN in the label slot, so byte-contains is too strict)
+        if subject and (subject in head or (_norm(subject)
+                        and _norm(subject) == _norm(re.sub(r"^#{1,6}\s*", "", head)))):
+            return
         # stale card holding a recycled id: detach it so the gate keys stay honest
         text = hooklib.tb_set_field_at(text, span, "task_id", "—")
         hooklib.log_marker_misses(root, "task-sync", [
@@ -131,9 +144,13 @@ def on_create(root, cfg, ti, resp):
     # ids) ③ normalised equality (separator/space/case drift). ②③ require exactly
     # one candidate — ambiguity falls through to an append, never a guess.
     unregistered = []
+    claimed_nums = set()
     for a, b in hooklib.tb_card_spans(text):
         block = text[a:b]
         head = block.splitlines()[0][4:].strip()
+        n = _card_number(head)
+        if n:
+            claimed_nums.add(n)
         name = head.split("·", 1)[-1].strip() if "·" in head else head
         m = re.search(r"\*\*task_id:\*\*\s*([^\n]*)", block)
         registered = hooklib.tb_clean(m.group(1)) if m else ""
@@ -164,7 +181,12 @@ def on_create(root, cfg, ti, resp):
     blocked = ti.get("blockedBy") or ti.get("blocked_by") or []
     blocked = ", ".join("#%s" % b for b in blocked) if isinstance(blocked, list) else ""
     owner = (ti.get("owner") or "").strip()
-    out = hooklib.tb_append_card(text, _card_md(tid, subject, owner, what, blocked))
+    # promote the subject's #NNN into the heading slot only when NO existing card
+    # claims that number — a second card wearing an already-claimed face would make
+    # the durable id ambiguous (then the platform id keeps the slot, old shape)
+    label = "#%s" % sub_num if (sub_num and sub_num not in claimed_nums) else None
+    out = hooklib.tb_append_card(text, _card_md(tid, subject, owner, what, blocked,
+                                                label=label))
     os.makedirs(os.path.dirname(tb) or ".", exist_ok=True)
     hooklib.tb_write(tb, out)
 

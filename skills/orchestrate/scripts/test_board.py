@@ -851,6 +851,27 @@ class AskNudge(_NudgeFixture):
             self._proj(d)
             self.assertTrue(self._run(d, text="收尾。\n邀请门槛还等 #116 吗？"))
 
+    def test_needs_you_trailer_without_marker_blocks(self):
+        # field case 2026-07-19: "---Needs you: …" ends in a full stop, so the
+        # question-mark heuristic slept while the ask lived only in prose
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            ret = self._run(d, text="All merged.\n---Needs you: the raw text glance "
+                                    "and the button render — otherwise nothing.")
+            self.assertIn("@BOSS", ret or "")
+
+    def test_needs_you_nothing_trailer_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            self.assertIsNone(self._run(d, text="All merged.\nNeeds you: nothing."))
+            self.assertIsNone(self._run(d, text="收尾完成。\n需要你：无", prompt="p9"))
+            self.assertIsNone(self._run(d, text="Done.\n---Needs you: nothing right now.",
+                                        prompt="p10"))
+            # a clause continuing past the nil word IS an ask
+            ret = self._run(d, text="Done.\nNeeds you: none of the options work, pick one",
+                            prompt="p11")
+            self.assertIn("@BOSS", ret or "")
+
 
 class CollisionNudge(_NudgeFixture):
     """0.9.21 supersede collision nudge: a fresh ask on the same task as an older open

@@ -119,6 +119,21 @@ class Create(unittest.TestCase):
             self.assertIn("- **task_id:** 9", text)
             self.assertNotIn("### #9 ·", text)
 
+    def test_numbered_subject_births_project_headed_card(self):
+        # 0.9.26 field case: no hand card exists — a CREATE whose subject leads
+        # with the durable #NNN must put THAT in the heading slot (the coral-pill
+        # face), with the platform id in task_id; and the replayed event dedups
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            for _ in range(2):
+                ts.run(_payload(d, "TaskCreate",
+                                {"subject": "#151 REDEEM-BUTTON-RED — redeem modal fix"},
+                                {"id": "46"}))
+            text = _board(d)
+            self.assertEqual(text.count("### #151 · REDEEM-BUTTON-RED — redeem modal fix"), 1)
+            self.assertIn("- **task_id:** 46", text)
+            self.assertNotIn("### #46", text)
+
     def test_card_number_fills_hand_card(self):
         # the refcheck field norm: heading '### #130 · NAME — detail', CREATE subject
         # '#130 NAME — other detail' — the leading number alone must bridge them
