@@ -81,6 +81,58 @@ def _nudge_once(root, key):
     return True
 
 
+def _open_collisions(root):
+    """[(new_id, [open_collider_ids])] for every OPEN entry whose recorded collides
+    list still names open entries — the raiser hasn't handled the collision yet."""
+    out = []
+    try:
+        by = {e["id"]: e for e in board.board_list(root)}
+        for e in by.values():
+            if e.get("status") != "open" or not e.get("collides"):
+                continue
+            olds = [o for o in e["collides"]
+                    if (by.get(o) or {}).get("status") == "open"]
+            if olds:
+                out.append((e["id"], olds))
+    except Exception:
+        return []
+    return sorted(out)
+
+
+def _collide_key(c):
+    return hashlib.md5(json.dumps(c).encode("utf-8")).hexdigest()
+
+
+_COLLIDE_STATE = os.path.join(".claude", "collide-nudge-state")
+
+
+def _collide_nudged(root, key):
+    """Persistent multi-key cap (unlike the single-slot ask-nudge-state, which the
+    trailing-ask nudge shares and would evict — an evicted cap re-nudges forever on
+    an ignored collision)."""
+    try:
+        return key in json.load(open(os.path.join(root, _COLLIDE_STATE),
+                                     encoding="utf-8"))
+    except Exception:
+        return False
+
+
+def _collide_mark(root, key):
+    p = os.path.join(root, _COLLIDE_STATE)
+    try:
+        keys = json.load(open(p, encoding="utf-8"))
+    except Exception:
+        keys = []
+    if key not in keys:
+        keys.append(key)
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(keys[-50:], f)
+    except Exception:
+        pass
+
+
 def run(data, text=None):
     if board is None or hooklib is None:
         return
@@ -108,16 +160,13 @@ def run(data, text=None):
     # decisions (one-decision-per-marker doctrine) — the supersede collision check
     # must only fire ACROSS turns, never within one.
     batch = uuid.uuid4().hex[:12]
-    collisions = []
     for dept, task, ask in markers["raises"]:
         try:
             # The Inspector's @BOSS channel carries verdicts/复盘 reads, never asks —
             # they file as information (Boss's call, 2026-07-18: verdicts were
             # crowding Needs-you). Unfiltered stands: the CEO still can't touch them.
             kind = "info" if dept.split("-")[0].lower() == "inspector" else "needs"
-            e = board.board_add(root, dept, kind, ask, task=task, batch=batch)
-            if e and e.get("collides"):
-                collisions.append((e["id"], e["collides"]))
+            board.board_add(root, dept, kind, ask, task=task, batch=batch)
         except Exception:
             pass
     for dept, task, fact in markers.get("infos", []):
@@ -143,32 +192,27 @@ def run(data, text=None):
                                        % (token, len(opens), ", ".join(o["id"] for o in opens)))
         except Exception:
             pass
-    # ---- supersede collision (any pane): a fresh ask targets the same task as an
-    # older still-open ask from the same dept+kind — nudge BEFORE anything supersedes
-    # (Boss's call, 0.9.21: the raiser handles it correctly — a real @BOSS-DONE
-    # outcome, or a deliberate keep-both), once per collision set.
+    # ---- supersede collision (any add path): a fresh ask targets the same task as
+    # an older still-open ask from the same dept+kind — nudge BEFORE anything
+    # supersedes (Boss's call, 0.9.21: the raiser handles it correctly — a real
+    # @BOSS-DONE outcome, or a deliberate keep-both). 0.9.22: the flag is read from
+    # the STORE, not the capture — the field miss (refcheck CEO-151/152) was a CLI
+    # `orchestrate-board add`, which the marker-only collection never saw. This
+    # turn's @BOSS-DONE lines ran above, so a collider closed in-turn never fires.
+    collisions = _open_collisions(root)
     if collisions:
-        live = []
-        for new, olds in collisions:  # this turn's @BOSS-DONE lines ran above — only
-            try:                      # colliders STILL open after them deserve a nudge
-                olds = [o for o in olds
-                        if (board.board_get(root, o) or {}).get("status") == "open"]
-            except Exception:
-                olds = []
-            if olds:
-                live.append((new, olds))
-        collisions = live
-    if collisions:
-        key = "collide:" + hashlib.md5(
-            json.dumps(sorted(collisions)).encode("utf-8")).hexdigest()
-        if _nudge_once(root, key):
-            lines = "; ".join("%s targets the same task as your still-open %s"
-                              % (new, ", ".join(olds)) for new, olds in collisions)
+        fresh = [c for c in collisions
+                 if not _collide_nudged(root, _collide_key(c))]
+        if fresh:
+            for c in fresh:
+                _collide_mark(root, _collide_key(c))
+            lines = "; ".join("%s targets the same task as the still-open %s"
+                              % (new, ", ".join(olds)) for new, olds in fresh)
             return ("🛑 boss-board: ask collision — %s (same dept + kind). If the new ask "
                     "REPLACES the old, re-end this turn adding `@BOSS-DONE[<old-id>]: "
                     "<one-line outcome>` so the register closes with the real outcome. If "
                     "they are genuinely separate decisions, end the turn again unchanged — "
-                    "both stay open. (One-time notice.)" % lines)
+                    "both stay open. (Once per collision.)" % lines)
 
     # ---- unmarked trailing ask (lead session): prose is transport, the BOARD is the
     # register. Field case 2026-07-18: the CEO ended a work burst with "Still open for

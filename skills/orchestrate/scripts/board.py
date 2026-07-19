@@ -1303,6 +1303,16 @@ def main():
                       _opt(argv, "--kind", "needs"), text,
                       _opt(argv, "--task"))
         print(e["id"])
+        # Surface a collision right at the add — the raiser is mid-turn and can
+        # close the old ask with its real outcome (the Stop-hook nudge is the net
+        # for whoever misses this line). CLI adds carry no batch, so the flag is
+        # the only same-turn signal they get.
+        live = [o for o in e.get("collides") or []
+                if (board_get(root, o) or {}).get("status") == "open"]
+        if live:
+            print("COLLIDES: %s still open on the same task (same dept+kind) — if "
+                  "this ask replaces it: orchestrate-board done %s --sum \"<outcome>\"; "
+                  "if genuinely separate, leave both." % (", ".join(live), live[0]))
     elif cmd == "done":
         e = board_done(root, argv[1], _opt(argv, "--sum")); print(e["id"] if e else "not found")
     elif cmd == "direction":

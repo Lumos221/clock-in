@@ -179,6 +179,28 @@ class SupersedeCollision(unittest.TestCase):
         self.assertEqual(new["collides"], [old["id"]])   # the real ask is
         self.assertEqual(n["status"], "open")
 
+    def test_cli_add_prints_collision_warning(self):
+        # the 0.9.21 field miss: CLI adds (refcheck CEO-151/152) never met the
+        # marker-path nudge — the CLI itself now warns in its own output
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            open(os.path.join(d, ".claude", "orchestrate.json"), "w").write('{"active":true}')
+            argv, cwd = sys.argv, os.getcwd()
+            os.environ["BOSS_BOARD_SKIP_SERVER"] = "1"
+            os.chdir(d)
+            try:
+                for text, in (("#137 GLANCE round 2 :: v1",), ("#137 FINAL GLANCE :: v2",)):
+                    sys.argv = ["board.py", "add", "--dept", "CEO",
+                                "--kind", "discuss", "--text", text]
+                    out = io.StringIO()
+                    with contextlib.redirect_stdout(out):
+                        board.main()
+                self.assertIn("COLLIDES: CEO-1 still open", out.getvalue())
+                self.assertIn("orchestrate-board done CEO-1", out.getvalue())
+            finally:
+                sys.argv, _ = argv, os.chdir(cwd)
+                os.environ.pop("BOSS_BOARD_SKIP_SERVER", None)
+
 
 class MarkerParse(unittest.TestCase):
     def test_raise_marker_extracts_dept_and_one_line_ask(self):
@@ -864,6 +886,23 @@ class CollisionNudge(_NudgeFixture):
             self._proj(d)
             ret = self._run(d, text="@BOSS[QA#7]: pick the DB :: a\n@BOSS[QA#7]: pick the cache :: b")
             self.assertIsNone(ret)
+
+    def test_cli_added_collision_caught_at_stop(self):
+        # the 0.9.21 field miss: asks added via `orchestrate-board add` (no markers
+        # in any pane text) collided in the store but the marker-only nudge never
+        # saw them — the Stop net now reads the flag from the store itself
+        with tempfile.TemporaryDirectory() as d:
+            self._proj(d)
+            os.environ["BOSS_BOARD_SKIP_SERVER"] = "1"
+            try:
+                import board as b
+                b.board_add(d, "CEO", "discuss", "#137 GLANCE round 2 :: v1")
+                b.board_add(d, "CEO", "discuss", "#137 FINAL GLANCE :: v2")
+            finally:
+                os.environ.pop("BOSS_BOARD_SKIP_SERVER", None)
+            ret = self._run(d, text="Round 2 render posted for the Boss.")
+            self.assertIn("CEO-1", ret or "")            # names the open collider
+            self.assertIsNone(self._run(d, text="idle."))  # capped persistently
 
 
 class SurfaceOpen(unittest.TestCase):
