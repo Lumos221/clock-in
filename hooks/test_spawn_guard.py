@@ -54,17 +54,32 @@ class SpawnGuard(unittest.TestCase):
         _team(self.cfg, [_member("RnD", active=True)])
         cfg = guard.team_config(SID)
         self.assertEqual(guard.live_collision(cfg, "RnD"), "RnD")
-        self.assertEqual(guard.live_collision(cfg, "RnD-2"), "RnD")   # suffixed request
+
+    def test_explicit_suffix_is_a_deliberate_lane(self):
+        # Boss's rule 2026-07-19: a second instance of the same dept, explicitly
+        # suffixed, on file-disjoint cards = elastic capacity — passes
+        _team(self.cfg, [_member("RnD", active=True)])
+        cfg = guard.team_config(SID)
+        self.assertIsNone(guard.live_collision(cfg, "RnD-2"))
+        # but an EXACT name collision always blocks (harness would mint -3)
+        _team(self.cfg, [_member("RnD", active=True),
+                         _member("RnD-2", active=False, agent_type="RnD")])
+        cfg = guard.team_config(SID)
+        self.assertEqual(guard.live_collision(cfg, "RnD-2"), "RnD-2")
+        self.assertIsNone(guard.live_collision(cfg, "RnD-3"))         # next lane fine
 
     def test_suffixed_live_member_blocks_base_request(self):
         _team(self.cfg, [_member("RnD-2", active=True, agent_type="RnD")])
         cfg = guard.team_config(SID)
         self.assertEqual(guard.live_collision(cfg, "RnD"), "RnD-2")
 
-    def test_inactive_member_frees_the_name(self):
+    def test_idle_member_still_collides(self):
+        # isActive is a BUSY-flag, not liveness (field-proven 2026-07-19: responsive
+        # Registrar at isActive:false) — an idle live member must still block, else
+        # every between-turns respawn mints a -2 suffix
         _team(self.cfg, [_member("RnD", active=False)])
         cfg = guard.team_config(SID)
-        self.assertIsNone(guard.live_collision(cfg, "RnD"))
+        self.assertEqual(guard.live_collision(cfg, "RnD"), "RnD")
 
     def test_other_dept_no_collision(self):
         _team(self.cfg, [_member("QA", active=True)])
@@ -201,14 +216,20 @@ class PaneSentinel(unittest.TestCase):
             _task(self.cfg, 1, "QA", "in_progress")
             self.assertEqual(self._flags(d), [])
 
-    def test_registrar_and_inactive_and_lead_exempt(self):
+    def test_registrar_and_lead_exempt_idle_dept_flagged(self):
         with tempfile.TemporaryDirectory() as d:
             _proj(d)
             _team(self.cfg, [{"name": "team-lead", "isActive": True},
                              _member("Registrar-2", active=True, agent_type="Registrar"),
                              _member("RnD", active=False)])
             _task(self.cfg, 1, "Nobody", "completed")
-            self.assertEqual(self._flags(d), [])
+            flags = self._flags(d)
+            # isActive:false = idle, NOT gone — the idle taskless dept is exactly
+            # the lingering pane this sentinel exists to catch (2026-07-19 fix:
+            # the old isActive check skipped it, so the sentinel never fired)
+            self.assertEqual(len(flags), 1)
+            self.assertIn("RnD", flags[0])
+            self.assertNotIn("Registrar", flags[0])
 
     def test_boss_in_pane_exempt(self):
         with tempfile.TemporaryDirectory() as d:

@@ -354,10 +354,13 @@ def briefs_stamp_flag(root, cfg):
 
 def pane_flags(root, data):
     """Lingering-pane sentinel (lead session only): one line naming live teammates
-    that hold no open task, or [] when clean/undeterminable. Liveness from the team
-    config's members[].isActive (internal state — read-only, fail-open); open tasks
-    from the platform task store; boss-in-pane-marked depts and the Registrar are
-    exempt. Widget-gated sessions (no task store) stay silent — no data, no flag."""
+    that hold no open task, or [] when clean/undeterminable. Liveness = PRESENCE in
+    members[] (a clean shutdown removes the entry); NOT isActive — that's a
+    busy-flag (field-proven 2026-07-19: responsive Registrar at isActive:false), so
+    the old check skipped every IDLE teammate, i.e. precisely the lingering panes
+    this sentinel exists to flag, which is why it never fired in the field. Open
+    tasks from the platform task store; boss-in-pane-marked depts and the Registrar
+    are exempt. Widget-gated sessions (no task store) stay silent."""
     sid = str(data.get("session_id") or "")
     if not sid:
         return []
@@ -399,8 +402,7 @@ def pane_flags(root, data):
         b = re.sub(r"-\d+$", "", name).lower()
         if name == "team-lead" or b.startswith("registrar"):
             continue
-        if str(m.get("isActive")).lower() != "true":
-            continue
+        # presence = liveness (isActive is a busy-flag — see docstring)
         if name.lower() in owners or b in owners or b in exempt:
             continue
         orphans.append(name)

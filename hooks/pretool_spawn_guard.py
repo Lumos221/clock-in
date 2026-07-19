@@ -19,8 +19,12 @@ and the released pane kept burning opus on a reassigned task. This guard fires a
 moment that mistake is made, BEFORE the duplicate exists.
 
 Only teammate spawns are judged (an `Agent` call carrying `name:`); one-shots pass
-untouched. Liveness comes from the team config's members[].isActive — internal,
-undocumented state, hence read-only and fail-open on any schema surprise."""
+untouched. Liveness = PRESENCE in the team config's members[] — a clean shutdown
+removes the entry, so present = alive-or-zombie, and both deserve the
+shutdown-first flow. NOT members[].isActive: field-proven 2026-07-19 that isActive
+is a busy-flag (the Registrar sat isActive:false while demonstrably responsive),
+so the old isActive check passed every IDLE live teammate — exactly the respawn
+case this guard exists to block, and how the -2 suffix epidemic survived it."""
 import sys, json, os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -55,19 +59,31 @@ def team_config(session_id):
 
 
 def live_collision(cfg, name):
-    """The live member whose base handle collides with `name`, or None."""
-    want = base(name).lower()
-    if not want:
+    """The live member `name` collides with, or None.
+
+    Lane-aware (Boss's rule, 2026-07-19): an EXPLICITLY suffixed request
+    (`Frontend-2`) that matches no live member exactly is a deliberate second
+    lane of the same dept (elastic capacity on file-disjoint cards) — pass. A
+    BARE-name request colliding with a live base is the accidental supersede
+    (respawn without shutting the predecessor down) — block. An exact-name
+    collision always blocks (the harness would auto-mint the next suffix)."""
+    if not (name or "").strip():
         return None
+    want_exact = name.strip().lower()
+    want_base = base(name).lower()
+    explicit_lane = bool(SUFFIX.search(name.strip()))
     for m in cfg.get("members", []):
         if not isinstance(m, dict):
             continue
         mname = m.get("name", "")
         if mname == "team-lead":
             continue
-        if str(m.get("isActive")).lower() != "true":
-            continue
-        if base(mname).lower() == want or base(str(m.get("agentType", ""))).lower() == want:
+        # presence = liveness (isActive is a busy-flag — see module docstring)
+        if mname.strip().lower() == want_exact:
+            return mname
+        if explicit_lane:
+            continue  # distinct suffixed name = deliberate lane, base overlap intended
+        if base(mname).lower() == want_base or base(str(m.get("agentType", ""))).lower() == want_base:
             return mname
     return None
 
@@ -125,11 +141,12 @@ def main():
     hit = live_collision(cfg, name)
     if hit:
         sys.stderr.write(
-            "⛔ spawn-collision: %s already has a LIVE teammate (%s) — likely mid-turn; "
-            "a shutdown request is processed only when its turn ends. Wait for its "
-            "termination, or re-task it via SendMessage instead. If the replacement "
-            "truly cannot wait: spawn a suffixed name deliberately and treat the "
-            "predecessor's output as void (release it on sight)." % (base(name), hit))
+            "⛔ spawn-collision: '%s' collides with the LIVE teammate '%s'. Replacing "
+            "it? Shut it down first (SendMessage shutdown request; processed when its "
+            "turn ends) or re-task it instead — a respawn over a live handle strands "
+            "the predecessor. Adding a deliberate second lane of this dept? Spawn an "
+            "explicitly suffixed name (e.g. '%s-2') on file-disjoint cards — that "
+            "passes this guard." % (name, hit, base(name)))
         sys.exit(2)
     if not (data.get("tool_input", {}) or {}).get("model"):
         if session_model(data.get("transcript_path") or "").startswith("claude-fable"):

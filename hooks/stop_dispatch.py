@@ -27,7 +27,8 @@ def main():
     hooklib = _load("hooklib")
     text = hooklib.last_assistant_text(data.get("transcript_path", "")) if hooklib else None
     block = None
-    for name in ("stop_boss_board", "stop_canon", "stop_refute_tally", "stop_idle_nudge"):
+    for name in ("stop_boss_board", "stop_canon", "stop_refute_tally", "stop_idle_nudge",
+                 "stop_capacity"):
         mod = _load(name)
         if mod is None:
             continue
