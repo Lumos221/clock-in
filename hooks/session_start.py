@@ -328,6 +328,112 @@ def standing_shadow_flag(root):
                "" if len(found) == 1 else "s", "y" if len(found) == 1 else "ies"))
 
 
+TEMPLATE = os.path.join(HERE, "..", "skills", "orchestrate", "templates", "department.md")
+
+
+def _frontmatter_span(text):
+    """(start, end) character span of the frontmatter BODY (between the --- fences),
+    or None. end sits just before the closing fence line."""
+    if not text.startswith("---"):
+        return None
+    close = text.find("\n---", 3)
+    if close < 0:
+        return None
+    return text.index("\n", 0) + 1, close + 1
+
+
+def _template_defaults():
+    """{field: full_line} for the frontmatter fields the shipped template carries
+    with LITERAL values (no <placeholder>) — the auto-patchable schema. Currently
+    disallowedTools + model; future template fields join automatically."""
+    try:
+        text = open(TEMPLATE, encoding="utf-8").read()
+        span = _frontmatter_span(text)
+        out = {}
+        for line in text[span[0]:span[1]].splitlines():
+            m = re.match(r"([A-Za-z][A-Za-z]*):\s*(.+)", line)
+            if m and "<" not in m.group(2):
+                out[m.group(1)] = line
+        return out
+    except Exception:
+        return {}
+
+
+def briefs_autopatch(root, cfg):
+    """Frontmatter auto-migration (Boss's order, 2026-07-19: end schema-migration
+    recruits). For each roster brief, ADD any template frontmatter field the brief
+    lacks (template's literal line, e.g. `model: sonnet`); NEVER overwrite a present
+    field — a Boss-designated pin (`model: fable`) or a hand denylist adjustment is
+    someone's decision, not drift. When every roster brief reaches schema parity,
+    advance `briefs_template_hash` so the stamp flag stops prescribing /recruit —
+    body drift is deliberately unflagged (identity + live-read pointer only; the
+    doctrine itself is never in the brief). Returns notice lines ([] when clean).
+    Fail-open per file; bodies byte-untouched."""
+    defaults = _template_defaults()
+    if not defaults:
+        return []
+    handles = [str(h) for h in (cfg.get("roster") or {})]
+    if not handles:
+        return []
+    patched, parity = [], True
+    for h in handles:
+        p = os.path.join(root, ".claude", "agents", "%s.md" % h)
+        try:
+            text = open(p, encoding="utf-8").read()
+        except Exception:
+            continue  # roster entry without a file — recruit's problem, not ours
+        span = _frontmatter_span(text)
+        if span is None:
+            parity = False
+            continue
+        fm = text[span[0]:span[1]]
+        # purge inline comments from field lines FIRST — the loader parses comment
+        # words as VALUES (the 0.9.18 frontmatter-comment bug: `tools: X # note`
+        # registers "note" as a tool name; field case 2026-07-19: every refcheck
+        # brief carried 0.9.17-era comments on disallowedTools/model lines)
+        purged = re.sub(r"(?m)^((?:tools|disallowedTools|model):[^#\n]*?)\s+#.*$",
+                        r"\1", fm)
+        did_purge = purged != fm
+        have = {m.group(1) for m in re.finditer(r"(?m)^([A-Za-z][A-Za-z]*):", purged)}
+        missing = [f for f in defaults if f not in have]
+        # a pre-0.9.17 `tools:` allowlist is a hand-adjustable surface — never add
+        # the denylist next to it (recruit converts those deliberately)
+        if "tools" in have and "disallowedTools" in missing:
+            missing.remove("disallowedTools")
+            parity = False
+        if not missing and not did_purge:
+            continue
+        add = "".join(defaults[f] + "\n" for f in missing)
+        out = text[:span[0]] + purged + add + text[span[1]:]
+        try:
+            tmp = p + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(out)
+            os.replace(tmp, p)
+            what = ", ".join(["+%s" % f for f in missing] +
+                             (["comments purged"] if did_purge else []))
+            patched.append("%s (%s)" % (h, what))
+        except Exception:
+            parity = False
+    if not patched:
+        return []
+    lines = ["🔧 dept briefs auto-migrated: %s — frontmatter only, bodies untouched; "
+             "pins load at NEXT session start." % " · ".join(patched[:6])]
+    if parity and cfg.get("briefs_template_hash"):
+        try:
+            import hashlib
+            cur = hashlib.sha256(open(TEMPLATE, "rb").read()).hexdigest()[:12]
+            cfg["briefs_template_hash"] = cur
+            cfg_path = os.path.join(root, ".claude", "orchestrate.json")
+            tmp = cfg_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, cfg_path)
+        except Exception:
+            pass
+    return lines
+
+
 def briefs_stamp_flag(root, cfg):
     """One line when dept briefs were generated from an older department template
     than the plugin now ships. recruit stamps `briefs_template_hash` (sha256[:12]
@@ -461,6 +567,13 @@ def main():
     if audience == "lead":
         try:
             flags = pane_flags(root, data)
+            try:
+                # auto-patch BEFORE the stamp flag: parity reached → stamp advanced
+                # in cfg on disk AND in this dict → the /recruit prescription stays
+                # silent for what the patch already cured
+                flags = flags + briefs_autopatch(root, cfg)
+            except Exception:
+                pass
             for f in (standing_shadow_flag(root), briefs_stamp_flag(root, cfg),
                       housekeep_flag(root, cfg)):
                 if f:

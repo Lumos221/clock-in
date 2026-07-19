@@ -389,5 +389,115 @@ class Gating(unittest.TestCase):
             self.assertEqual(r.stdout, "")
 
 
+class BriefsAutopatch(unittest.TestCase):
+    """0.9.27 frontmatter auto-migration: missing template fields are ADDED at
+    session start (never overwriting a present pin); schema parity advances the
+    stamp so the /recruit prescription retires for what the patch cured."""
+
+    OLD_BRIEF = ("---\nname: %s\ndescription: dept\n"
+                 "disallowedTools: TaskCreate, TaskUpdate, AskUserQuestion, Workflow, PowerShell\n"
+                 "---\n\n# body stays byte-identical\n")
+
+    def _armed(self, d, roster, stamp="deadbeef0000"):
+        os.makedirs(os.path.join(d, ".claude", "agents"), exist_ok=True)
+        with open(os.path.join(d, ".claude", "orchestrate.json"), "w") as f:
+            json.dump({"active": True, "roster": roster,
+                       "briefs_template_hash": stamp}, f)
+
+    def _brief(self, d, handle, text):
+        with open(os.path.join(d, ".claude", "agents", "%s.md" % handle), "w",
+                  encoding="utf-8") as f:
+            f.write(text)
+
+    def _read(self, d, handle):
+        return open(os.path.join(d, ".claude", "agents", "%s.md" % handle),
+                    encoding="utf-8").read()
+
+    def _cfg(self, d):
+        return json.load(open(os.path.join(d, ".claude", "orchestrate.json"),
+                              encoding="utf-8"))
+
+    def test_missing_model_added_and_stamp_advanced(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._armed(d, ["RnD", "QA"])
+            for h in ("RnD", "QA"):
+                self._brief(d, h, self.OLD_BRIEF % h)
+            cfg = self._cfg(d)
+            lines = ss.briefs_autopatch(d, cfg)
+            self.assertEqual(len(lines), 1)
+            self.assertIn("RnD (+model)", lines[0])
+            self.assertNotIn("comments", lines[0])
+            for h in ("RnD", "QA"):
+                text = self._read(d, h)
+                self.assertIn("model: sonnet\n", text)
+                self.assertIn("# body stays byte-identical", text)
+                self.assertTrue(text.startswith("---\nname: %s\n" % h))
+            # parity → stamp advanced on disk → the /recruit flag stays silent
+            cur = self._cfg(d)
+            self.assertNotEqual(cur["briefs_template_hash"], "deadbeef0000")
+            self.assertIsNone(ss.briefs_stamp_flag(d, cur))
+
+    def test_present_pin_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._armed(d, ["Marketing"])
+            self._brief(d, "Marketing", self.OLD_BRIEF % "Marketing"
+                        .replace("---\n\n", ""))  # no-op guard for template drift
+            self._brief(d, "Marketing",
+                        "---\nname: Marketing\ndescription: d\n"
+                        "disallowedTools: TaskCreate\nmodel: fable\n---\nbody\n")
+            lines = ss.briefs_autopatch(d, self._cfg(d))
+            self.assertEqual(lines, [])                      # nothing missing
+            self.assertIn("model: fable", self._read(d, "Marketing"))
+
+    def test_legacy_tools_allowlist_blocks_denylist_add_and_parity(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._armed(d, ["Ops"])
+            self._brief(d, "Ops", "---\nname: Ops\ndescription: d\n"
+                                  "tools: Read, Edit, Bash\n---\nbody\n")
+            cfg = self._cfg(d)
+            lines = ss.briefs_autopatch(d, cfg)
+            text = self._read(d, "Ops")
+            self.assertIn("model: sonnet", text)             # model still added
+            self.assertNotIn("disallowedTools", text)        # hand allowlist respected
+            self.assertIn("tools: Read, Edit, Bash", text)
+            self.assertEqual(self._cfg(d)["briefs_template_hash"], "deadbeef0000")
+            self.assertTrue(lines)                           # notice names the patch
+
+    def test_inline_comments_purged_from_field_lines(self):
+        # the 0.9.18 bug class, found live in every refcheck brief (0.9.17-era
+        # generation): the loader parses comment words as values
+        with tempfile.TemporaryDirectory() as d:
+            self._armed(d, ["Marketing"])
+            self._brief(d, "Marketing",
+                        "---\nname: Marketing\ndescription: d # keep this one\n"
+                        "disallowedTools: TaskCreate, PowerShell  # denylist, not allowlist\n"
+                        "model: fable  # Boss pin 2026-07-17\n---\nbody # not frontmatter\n")
+            lines = ss.briefs_autopatch(d, self._cfg(d))
+            text = self._read(d, "Marketing")
+            self.assertIn("disallowedTools: TaskCreate, PowerShell\n", text)
+            self.assertIn("model: fable\n", text)                  # pin kept, comment gone
+            self.assertIn("description: d # keep this one", text)  # non-field lines untouched
+            self.assertIn("body # not frontmatter", text)
+            self.assertIn("comments purged", lines[0])
+
+    def test_clean_briefs_are_untouched_and_silent(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._armed(d, ["RnD"])
+            full = self.OLD_BRIEF % "RnD"
+            full = full.replace("---\n\n#", "model: sonnet\n---\n\n#")
+            self._brief(d, "RnD", full)
+            before = self._read(d, "RnD")
+            self.assertEqual(ss.briefs_autopatch(d, self._cfg(d)), [])
+            self.assertEqual(self._read(d, "RnD"), before)
+
+    def test_empty_roster_or_missing_files_noop(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._armed(d, [])
+            self.assertEqual(ss.briefs_autopatch(d, self._cfg(d)), [])
+        with tempfile.TemporaryDirectory() as d:
+            self._armed(d, ["Ghost"])                        # roster entry, no file
+            self.assertEqual(ss.briefs_autopatch(d, self._cfg(d)), [])
+
+
 if __name__ == "__main__":
     unittest.main()
