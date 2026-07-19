@@ -41,15 +41,20 @@ except Exception:
 
 
 def card_for(taskboard_text, task_id):
-    """(dept, name) for the card whose task_id matches, else (None, None)."""
+    """(dept, name, label) for the card whose task_id matches, else (None,)*3.
+    label = the heading's own number (`#139` in `### #139 · NAME`) — the DURABLE
+    project-wide id the Boss refers to; the platform task_id dies with the session."""
     for block in re.split(r"(?m)^#{2,3}\s+", taskboard_text):
         if re.search(r"task_id:\*\*\s*%s\b" % re.escape(task_id), block):
             first = block.splitlines()[0] if block.splitlines() else ""
-            name = first.split("·", 1)[-1].strip() if "·" in first else first.strip()
+            if "·" in first:
+                label, name = (s.strip() for s in first.split("·", 1))
+            else:
+                label, name = None, first.strip()
             m = re.search(r"dept:\*\*\s*([^\n]+)", block)
             dept = m.group(1).strip().strip("`") if m else None
-            return dept, name
-    return None, None
+            return dept, name, label
+    return None, None, None
 
 
 def _archive(src, arch):
@@ -148,10 +153,10 @@ def main():
         return
     backlog = os.path.join(root, cfg.get("backlog", "docs/BACKLOG.md"))
     tb = os.path.join(root, cfg.get("taskboard", "docs/TaskBoard.md"))
-    dept = name = None
+    dept = name = label = None
     if os.path.exists(tb):
         try:
-            dept, name = card_for(open(tb, encoding="utf-8").read(), task_id)
+            dept, name, label = card_for(open(tb, encoding="utf-8").read(), task_id)
         except Exception:
             pass
         if name is None:
@@ -168,7 +173,12 @@ def main():
                              capture_output=True, text=True, timeout=5).stdout.strip()
     except Exception:
         pass
-    d = {"task_id": task_id, "dept": dept, "task": name, "status": "done", "sha": sha}
+    # The heading's #NNN is the id the Boss refers to (platform ids die per session) —
+    # carry it into both durable records: the BACKLOG task cell and the shipped line.
+    proj = label if label and re.match(r"#\d+$", label) and label != "#" + task_id else None
+    d = {"task_id": task_id, "dept": dept,
+         "task": ("%s %s" % (proj, name)) if proj and name else name,
+         "status": "done", "sha": sha}
     today = datetime.now().strftime("%Y-%m-%d")
     try:
         os.makedirs(os.path.dirname(backlog) or ".", exist_ok=True)
@@ -180,8 +190,16 @@ def main():
     except Exception:
         pass
     try:
-        update_shipped(tb, "- %s · #%s · %s · %s · %s"
-                       % (today, task_id, dept or "—", name or "—", sha or "—"))
+        # `date · #<proj> · #<tid> · dept · name · sha` when the card carries a
+        # project number; the renderer pills the leading ids. Legacy 5-field lines
+        # (no proj) keep the old shape — the renderer handles both.
+        if proj:
+            line = ("- %s · %s · #%s · %s · %s · %s"
+                    % (today, proj, task_id, dept or "—", name or "—", sha or "—"))
+        else:
+            line = ("- %s · #%s · %s · %s · %s"
+                    % (today, task_id, dept or "—", name or "—", sha or "—"))
+        update_shipped(tb, line)
     except Exception:
         pass
     try:

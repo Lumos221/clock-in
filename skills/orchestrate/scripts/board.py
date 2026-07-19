@@ -688,6 +688,12 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
 html.dark .glyph { color: #6f6d66; }
 .chip { display: inline-block; font-size: .72rem; border: 1px solid #d9d4c6; border-radius: 10px;
         padding: 1px 8px; margin: .35em .3em 0 0; color: #6b6a62; }
+/* id pills — .pj = the durable project #NNN (coral), .pt = the session task_id (neutral) */
+.pill { display: inline-block; font: 600 .68rem ui-monospace, "SF Mono", Menlo, monospace;
+        border-radius: 8px; padding: 1px 7px; margin-right: 5px; vertical-align: 1px;
+        font-variant-numeric: tabular-nums; }
+.pill.pj { background: #f0ddd2; color: #a2542f; }
+.pill.pt { background: #eae6d9; color: #6b6a62; }
 .chip b { font-variant-numeric: tabular-nums; }
 code { font: .85em ui-monospace, "SF Mono", Menlo, monospace;
        background: #eae6d9; border-radius: 4px; padding: 0 4px; }
@@ -761,6 +767,8 @@ html.dark .t .sub, html.dark .done-line, html.dark .empty { color: #a3a199; }
 html.dark .rm b, html.dark .t .tid { color: #c2c0b6; }
 html.dark .count { background: #3e3d3a; color: #b8b5ac; }
 html.dark .chip { border-color: #4a4945; color: #b8b5ac; }
+html.dark .pill.pj { background: #453026; color: #e09b78; }
+html.dark .pill.pt { background: #3a3935; color: #b8b5ac; }
 html.dark code { background: #3e3d3a; }
 html.dark a { color: #e08262; text-decoration-color: rgba(224,130,98,.4); }
 html.dark a:hover { text-decoration-color: #e08262; }
@@ -944,8 +952,11 @@ function tCard(t){
   // label "#<id>" (skip the redundant id chip) and ·-less headings parse label===name
   // (skip the redundant body line) — show each fact once.
   const k = 't:' + t.label + '#' + (t.task_id||'');
-  const id = t.task_id && t.label !== '#'+t.task_id ? ` · #`+esc(t.task_id) : '';
-  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${md(t.label)}${id}</span>${badge}
+  // The heading's #NNN (durable, Boss-facing) wears the coral pill; the platform
+  // task_id (session-scoped plumbing) the neutral one. Non-#N labels stay plain.
+  const lab = /^#\d+$/.test(t.label) ? `<span class='pill pj'>${esc(t.label)}</span>` : md(t.label);
+  const id = t.task_id && t.label !== '#'+t.task_id ? `<span class='pill pt'>#${esc(t.task_id)}</span>` : '';
+  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${lab}${id}</span>${badge}
     ${t.name && t.name !== t.label ? `<div class="nm">${md(t.name)}</div>` : ''}
     <div class="sub">${esc(t.dept)}${t.what?` · `+md(t.what):''}</div></div>`;
 }
@@ -1012,8 +1023,14 @@ async function tick(){
     // recent entries — but a hot day must not vanish behind the cap, so when today
     // ships more than 5 the cap stretches to keep every today-stamped row. done-status
     // cards first (still on the live board), then the shipped tail (newest-first).
+    // Shipped-line head: `date · #proj · #tid · …` (6-field, 0.9.24) or legacy
+    // `date · #tid · …` — pill the leading id(s); the two-id replace fires first
+    // and leaves nothing for the one-id pattern to re-match.
+    const pillDone = h => h
+      .replace(/^(\d{4}-\d{2}-\d{2}) · (#\d+) · (#\d+) · /, "$1 <span class='pill pj'>$2</span><span class='pill pt'>$3</span> ")
+      .replace(/^(\d{4}-\d{2}-\d{2}) · (#\d+) · /, "$1 <span class='pill pj'>$2</span> ");
     const doneAll = doneT.map(tCard).concat(
-        shipped.map(x=>`<div class='done-line${xc('s:'+x)}' data-k="${esc('s:'+x)}" tabindex="0" onclick="tog(this)"><div class='dl'>${md(x)}</div></div>`));
+        shipped.map(x=>`<div class='done-line${xc('s:'+x)}' data-k="${esc('s:'+x)}" tabindex="0" onclick="tog(this)"><div class='dl'>${pillDone(md(x))}</div></div>`));
     const d = new Date();
     const today = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const cap = Math.max(5, doneT.length + shipped.filter(x=>x.trim().startsWith(today)).length);

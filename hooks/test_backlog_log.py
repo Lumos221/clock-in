@@ -37,12 +37,17 @@ def _run_hook(root, task_id="3", status="completed"):
 
 
 class CardFor(unittest.TestCase):
-    def test_finds_dept_and_name_by_task_id(self):
-        self.assertEqual(bl.card_for(TASKBOARD, "3"), ("RnD", "login form"))
+    def test_finds_dept_name_and_label_by_task_id(self):
+        self.assertEqual(bl.card_for(TASKBOARD, "3"), ("RnD", "login form", "TASK-001"))
+
+    def test_hash_number_heading_label(self):
+        board = TASKBOARD.replace("TASK-001 · login form", "#139 · INVITE-PDF-REORG — rework")
+        self.assertEqual(bl.card_for(board, "3"),
+                         ("RnD", "INVITE-PDF-REORG — rework", "#139"))
 
     def test_no_prefix_match_on_ids(self):
         self.assertEqual(bl.card_for(TASKBOARD.replace("task_id:** 3", "task_id:** 30"), "3"),
-                         (None, None))
+                         (None, None, None))
 
 
 class ConsumePass(unittest.TestCase):
@@ -133,6 +138,22 @@ class EndToEnd(unittest.TestCase):
             self.assertIn("completion #99 matched no card", misses)
             board = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
             self.assertIn("### TASK-001", board)  # nothing wrongly retired
+
+    def test_hash_headed_card_ships_with_project_number(self):
+        # Boss's ask (0.9.24): the durable #NNN rides the shipped line + BACKLOG
+        # task cell — the platform id alone is unreferenceable next session
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d)
+            os.makedirs(os.path.join(d, "docs", "reviews"))
+            board = TASKBOARD.replace("TASK-001 · login form", "#139 · INVITE-PDF-REORG")
+            with open(os.path.join(d, "docs", "TaskBoard.md"), "w") as f:
+                f.write(board)
+            open(os.path.join(d, "docs", "reviews", "3.pass"), "w").write("ok")
+            _run_hook(d)
+            tb = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
+            self.assertIn("· #139 · #3 · RnD · INVITE-PDF-REORG ·", tb)
+            backlog = open(os.path.join(d, "docs", "BACKLOG.md"), encoding="utf-8").read()
+            self.assertIn("| #139 INVITE-PDF-REORG |", backlog)
 
     def test_completion_appends_backlog_row_and_retires_pass(self):
         with tempfile.TemporaryDirectory() as d:
