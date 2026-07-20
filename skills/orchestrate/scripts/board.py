@@ -910,8 +910,13 @@ const ICONS = {
 // Long texts enumerate with circled digits (① hand test… ② the batch…) — break
 // each onto its own line so the wall scans as a list. The lookahead keeps inline
 // REFERENCES ("chain ①②③④ COMPLETE") intact: only a digit that starts a clause
-// (preceded by space, not followed by another digit) breaks.
-function brk(t){ return md(t).replace(/\s([①-⑳])(?![①-⑳])/g,'<br>$1'); }
+// (preceded by space, not followed by another digit) breaks. nl=true also honours
+// literal newlines (expanded ask bodies / quoted originals — the direction band
+// gets pre-line from CSS); collapsed titles stay flowing, so no nl there.
+function brk(t, nl){
+  const h = md(t).replace(/\s([①-⑳])(?![①-⑳])/g,'<br>$1');
+  return nl ? h.replace(/\n/g,'<br>') : h;
+}
 function dirBand(d){
   // A short leading "LABEL:" (≤30 chars, colon+space) becomes the statement's
   // coral head — the CEO's texts naturally carry one (LAUNCH LINE: · 主攻方向：).
@@ -956,7 +961,7 @@ function askRow(e, T, ts){
     <div class="rc">
       <div class="rt">${rt}</div>
       <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
-      <div class="rx">${!sum && body?`<div class='body'>${brk(body)}</div>`:''}${sum?`<div class='orig'>${brk(e.text)}</div>`:''}${linked.map(chip).join('')}${files.length?`<div class='files'>${files.map(flink).join(' · ')}</div>`:''}</div>
+      <div class="rx">${!sum && body?`<div class='body'>${brk(body,1)}</div>`:''}${sum?`<div class='orig'>${brk(e.text,1)}</div>`:''}${linked.map(chip).join('')}${files.length?`<div class='files'>${files.map(flink).join(' · ')}</div>`:''}</div>
     </div>
     <span class="rage">${a}</span></div>`;
 }

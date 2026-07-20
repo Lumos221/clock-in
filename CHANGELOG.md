@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.37] — 2026-07-20
+### Fixed
+- **Line breaks in Needs-you ask text** (Boss's question: "does the thing in boss-board not support line break?"). It didn't, except in the Direction band (`pre-line` CSS) and before ①…⑳ enumerators: a literal newline in an ask's detail (CLI `--text`, a multi-line marker detail) collapsed into a space and rendered as a wall. `brk()` gains an `nl` mode that also honours literal newlines — applied to the **expanded body** and the **quoted original** only; collapsed titles keep flowing (a multi-line title would wreck the compact row face), the Direction band keeps its CSS path. Verified via headless-Chrome DOM dump on a seeded fixture (newlines + enum breaks both render; default collapsed view byte-identical); refcheck's live daemon hot-swapped.
+
 ## [0.9.36] — 2026-07-20
 ### Fixed
 - **Double-registered ask slips the collision net** (field case, refcheck Boss-13/CEO-166: the trailer nudge fired on an unmarked trailing ask; the CEO registered it via `orchestrate-board add` — `--dept` defaulted to `Boss`, kind `discuss` — AND then re-ended with the `@BOSS[CEO#197]` marker anyway → the same ask twice in Needs-you, and the 0.9.21 collision key required same dept + same kind, which a two-path registration never has). Fixes:
