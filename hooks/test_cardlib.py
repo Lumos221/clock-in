@@ -135,6 +135,20 @@ class Migration(unittest.TestCase):
             self.assertIn("GENERATED SECTION", text)
             self.assertNotIn("~~#7", text)  # tombstone no longer on the digest
 
+    def test_prestaged_dir_never_blocks_migration(self):
+        # a board dir holding only non-card files (Board.base, an Obsidian-created
+        # folder) is NOT a live store — the legacy board must still migrate into it
+        with tempfile.TemporaryDirectory() as d:
+            cfg = _proj(d)
+            bdir = os.path.join(d, "docs", "board")
+            os.makedirs(bdir)
+            open(os.path.join(bdir, "Board.base"), "w").write("views: []\n")
+            bdir2, notice = cardlib.ensure_store(d, cfg)
+            self.assertIn("migrated", notice)
+            self.assertEqual([c["id"] for c in cardlib.load(bdir2)], [130, 131])
+            self.assertEqual([c["id"] for c in cardlib.load(bdir2, "archive")], [7])
+            self.assertTrue(os.path.exists(os.path.join(bdir, "Board.base")))  # kept
+
     def test_existing_store_untouched_and_empty_project_ok(self):
         with tempfile.TemporaryDirectory() as d:
             cfg = _proj(d)

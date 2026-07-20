@@ -4,6 +4,11 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.30] — 2026-07-20
+### Fixed
+- **Migration no longer blocked by a pre-existing board dir.** `ensure_store` keyed "store is live" on directory existence — so a pre-staged `Board.base`, a `.DS_Store`, or a folder Obsidian created would silently veto the legacy-board migration forever. Live = *any card file present* now; migrating into an existing dir moves the built cards in file-by-file (deterministic output makes a racing double-move benign), the atomic whole-dir rename stays as the fast path. Lets a project stage its Obsidian view before its first post-0.9.28 session start.
+- **Branch setup doc: the account mechanism corrected to `claude-swap run`** (session-pinned per-account profile — own `CLAUDE_CONFIG_DIR`, own keychain entry hashed from it, immune to `switch`/autoswitch on the default login; verified from claude-swap's source). `setup-token` + `CLAUDE_CODE_OAUTH_TOKEN` stays as the no-claude-swap fallback; a bare in-place `switch` documented as insufficient (running default-login sessions follow the active account on token refresh).
+
 ## [0.9.29] — 2026-07-20
 ### Added
 - **分公司 (branch-office) lane** (Boss's direction 2026-07-20: Marketing needs claude-in-chrome on its own Claude account for capacity, so it runs as its OWN session — the account boundary is the session boundary; sync rides the 0.9.28 card store). `orchestrate.json` gains an additive `"external": ["Marketing"]` list (entries stay in `roster` — the brief file is the branch's identity). Mechanical guards keep the lane honest: the **spawn guard blocks an in-team teammate under an external dept's name** (bare or suffixed — an in-team twin would double-dispatch the lane); the **task-sync hook refuses to register an external card to the platform widget** (fill-tiers skip them; a CREATE targeting one by number/name traces to marker-misses and births nothing); the **session-start id-less flag skips external cards** (id-less BY DESIGN — the register prescription was wrong for them); the Boss-Board kanban badges external cards with a **分 pill**.

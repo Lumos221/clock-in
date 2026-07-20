@@ -318,12 +318,15 @@ def _legacy_cards(text):
 
 
 def ensure_store(root, cfg):
-    """The per-card store's single entry point: existing store → its path; a legacy
-    board with cards → migrate it now (atomic: built in a tmp dir, renamed in);
-    neither → create the empty dir. None only when migration failed. Returns
+    """The per-card store's single entry point: a store holding any card FILE → its
+    path; a legacy board with cards → migrate it now (built in a tmp dir, renamed —
+    or moved file-by-file when the board dir already exists holding non-card files:
+    a pre-staged Board.base, a folder Obsidian created — mere dir-existence must
+    never block the migration; deterministic output makes a double-move benign);
+    neither → ensure the empty dir. None only when migration failed. Returns
     (bdir, notice) — notice is a one-line human summary when migration ran."""
     bdir = board_dir(root, cfg)
-    if os.path.isdir(bdir):
+    if load(bdir):
         return bdir, None
     tb = os.path.join(root, (cfg or {}).get("taskboard", "docs/TaskBoard.md"))
     try:
@@ -331,6 +334,12 @@ def ensure_store(root, cfg):
     except OSError:
         text = ""
     legacy = _legacy_cards(text)
+    if not legacy:
+        try:
+            os.makedirs(bdir, exist_ok=True)
+        except OSError:
+            return None, None
+        return bdir, None
     tmp = bdir + ".migrating-%d" % os.getpid()
     try:
         os.makedirs(tmp)
@@ -362,7 +371,17 @@ def ensure_store(root, cfg):
                 f.write(render_card(meta, (), body_txt))
             moved += 1
             tombs += 1 if tomb else 0
-        os.rename(tmp, bdir)
+        if not os.path.isdir(bdir):
+            os.rename(tmp, bdir)  # fast path: atomic whole-store appearance
+        else:
+            for base_dir, _, files in os.walk(tmp):
+                rel = os.path.relpath(base_dir, tmp)
+                dst_dir = bdir if rel == "." else os.path.join(bdir, rel)
+                os.makedirs(dst_dir, exist_ok=True)
+                for fn in files:
+                    os.replace(os.path.join(base_dir, fn), os.path.join(dst_dir, fn))
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
     except OSError:
         try:
             import shutil
