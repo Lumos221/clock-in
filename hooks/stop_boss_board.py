@@ -209,12 +209,14 @@ def run(data, text=None):
         except Exception:
             pass
     # ---- supersede collision (any add path): a fresh ask targets the same task as
-    # an older still-open ask from the same dept+kind — nudge BEFORE anything
-    # supersedes (Boss's call, 0.9.21: the raiser handles it correctly — a real
-    # @BOSS-DONE outcome, or a deliberate keep-both). 0.9.22: the flag is read from
-    # the STORE, not the capture — the field miss (refcheck CEO-151/152) was a CLI
-    # `orchestrate-board add`, which the marker-only collection never saw. This
-    # turn's @BOSS-DONE lines ran above, so a collider closed in-turn never fires.
+    # an older still-open ask — regardless of raiser handle or kind (0.9.36: one ask
+    # registered twice, CLI add + marker re-end, wore different dept AND kind and
+    # slipped the old same-dept+kind key) — nudge BEFORE anything supersedes (Boss's
+    # call, 0.9.21: the raiser handles it correctly — a real @BOSS-DONE outcome, or
+    # a deliberate keep-both). 0.9.22: the flag is read from the STORE, not the
+    # capture — the field miss (refcheck CEO-151/152) was a CLI `orchestrate-board
+    # add`, which the marker-only collection never saw. This turn's @BOSS-DONE lines
+    # ran above, so a collider closed in-turn never fires.
     collisions = _open_collisions(root)
     if collisions:
         fresh = [c for c in collisions
@@ -224,8 +226,9 @@ def run(data, text=None):
                 _collide_mark(root, _collide_key(c))
             lines = "; ".join("%s targets the same task as the still-open %s"
                               % (new, ", ".join(olds)) for new, olds in fresh)
-            return ("🛑 boss-board: ask collision — %s (same dept + kind). If the new ask "
-                    "REPLACES the old, re-end this turn adding `@BOSS-DONE[<old-id>]: "
+            return ("🛑 boss-board: ask collision — %s (same task). If the new ask "
+                    "REPLACES the old (or is the SAME ask registered twice — e.g. a CLI "
+                    "add AND a marker), re-end this turn adding `@BOSS-DONE[<old-id>]: "
                     "<one-line outcome>` so the register closes with the real outcome. If "
                     "they are genuinely separate decisions, end the turn again unchanged — "
                     "both stay open. (Once per collision.)" % lines)
@@ -254,10 +257,11 @@ def run(data, text=None):
     return ("🛑 boss-board: this work turn ends on an ask to the Boss (a trailing question "
             "or a Needs-you trailer), but no board ask was raised — scrollback is transport, "
             "the BOARD is the register (the Boss may be away, and a prose-only ask dies in "
-            "the scroll). Re-end the turn keeping your prose AND adding "
-            "`@BOSS[<dept>#<task>]: <one-line ask> :: <detail>` — or, if the items are "
-            "ALREADY open on the board, rhetorical, or aimed at a teammate, simply end the "
-            "turn again (this fires once).")
+            "the scroll). Register through ONE path: re-end the turn keeping your prose AND "
+            "adding `@BOSS[<dept>#<task>]: <one-line ask> :: <detail>` — or, if you already "
+            "registered it (an `orchestrate-board add` this turn counts), it's open on the "
+            "board, rhetorical, or aimed at a teammate, simply end the turn again WITHOUT a "
+            "marker: the marker would register it twice (this fires once).")
 
 
 def main():

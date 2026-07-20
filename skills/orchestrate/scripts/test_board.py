@@ -122,9 +122,11 @@ class StoreCore(unittest.TestCase):
 
 
 class SupersedeCollision(unittest.TestCase):
-    """0.9.21: a new decision ask about the same task as an older OPEN one (same dept,
-    same kind) FLAGS the new entry (`collides`) — nothing auto-resolves; the Stop hook
-    turns the flag into a one-time nudge so the raiser closes the old ask itself."""
+    """0.9.21: a new decision ask about the same task as an older OPEN one FLAGS the
+    new entry (`collides`) — nothing auto-resolves; the Stop hook turns the flag into
+    a one-time nudge so the raiser closes the old ask itself. 0.9.36: the task key
+    alone is the identity — dept and kind no longer gate (one ask registered via CLI
+    AND marker wore different dept and kind, blinding the old key)."""
 
     def test_same_dept_kind_task_field_flags_across_turns(self):
         s = {"entries": []}
@@ -147,15 +149,29 @@ class SupersedeCollision(unittest.TestCase):
         new, _ = board.add_entry(s, "QA", "needs", "pick a cache :: also touches #129", NOW)
         self.assertNotIn("collides", new)
 
-    def test_cross_kind_and_info_and_keyless_never_flag(self):
+    def test_cross_kind_and_dept_flag_info_and_keyless_never(self):
         s = {"entries": []}
-        board.add_entry(s, "CEO", "needs", "#129 pick option A/B", NOW)
-        b, _ = board.add_entry(s, "CEO", "sign", "#129 sign the string", NOW)      # kind differs
+        a, _ = board.add_entry(s, "CEO", "needs", "#129 pick option A/B", NOW)
+        b, _ = board.add_entry(s, "CEO", "sign", "#129 sign the string", NOW)      # kind differs → flags
         i, _ = board.add_entry(s, "CEO", "info", "#129 merged and deployed", NOW)  # info never
         c, _ = board.add_entry(s, "CEO", "needs", "budget call, no task ref", NOW)   # keyless
-        self.assertNotIn("collides", b)
+        self.assertEqual(b["collides"], [a["id"]])
         self.assertNotIn("collides", i)
         self.assertNotIn("collides", c)
+
+    def test_cli_plus_marker_double_registration_flags(self):
+        # the Boss-13/CEO-166 field case: the trailer nudge fired, the CEO registered
+        # via `orchestrate-board add` (dept defaulted to Boss, kind discuss, key from
+        # the title's #197) AND re-ended with the @BOSS[CEO#197] marker — two rows,
+        # different dept AND kind, same ask
+        s = {"entries": []}
+        cli, _ = board.add_entry(s, "Boss", "discuss",
+                                 "Confirm reading of order ② (#197 Ops shapes)", NOW)
+        mark, _ = board.add_entry(s, "CEO", "needs",
+                                  "Confirm reading :: re-aim if you meant a bug", NOW,
+                                  task="197", batch="turn2")
+        self.assertEqual(mark["collides"], [cli["id"]])
+        self.assertEqual(cli["status"], "open")  # nothing auto-resolves
 
     def test_same_batch_marker_lines_coexist_next_turn_flags_both(self):
         # one turn = one batch: separate decisions on the same task never flag each

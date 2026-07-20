@@ -4,6 +4,13 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.36] — 2026-07-20
+### Fixed
+- **Double-registered ask slips the collision net** (field case, refcheck Boss-13/CEO-166: the trailer nudge fired on an unmarked trailing ask; the CEO registered it via `orchestrate-board add` — `--dept` defaulted to `Boss`, kind `discuss` — AND then re-ended with the `@BOSS[CEO#197]` marker anyway → the same ask twice in Needs-you, and the 0.9.21 collision key required same dept + same kind, which a two-path registration never has). Fixes:
+  - **Collision identity = the task key alone.** `add_entry` flags any open non-info ask sharing the `ask_key` (explicit task, else the title's first `#NNN`), regardless of raiser handle or kind. Unchanged guards: info (either side) · notices · same-batch · keyless never flag; nothing auto-resolves — the once-per-set Stop nudge still puts the raiser in the loop (`@BOSS-DONE` the old, or end unchanged to keep both), now naming the registered-twice case explicitly.
+  - **Trailer nudge teaches ONE register path**: after an `orchestrate-board add` this turn, end again WITHOUT a marker — the marker would register it twice.
+  - CLI `COLLIDES` line and the collision nudge drop the stale "(same dept+kind)" wording. The CLI's `--dept` default stays `Boss` (her own quick adds carry no handle); a CEO add should pass `--dept CEO`, and the widened key makes the mislabel harmless to detection either way.
+
 ## [0.9.35] — 2026-07-20
 ### Added
 - **Boss-signed content review scope** (Boss's field question on refcheck #196: "why does it require a L2 when it doesn't need one?"). The L2 round on a Boss-signed artefact still runs — a verdict certifies a tree and her sign-off changed it, and the self-merge guard keys on the `.pass` — but it is now scoped doctrine in three places (Auditor · branch skill §6 · dept SOP): the producer cites the signature in the invocation (where the signed text lives); the Auditor reviews **transcription** (file on disk = signed text — hand-derived numbers are where slips live) + **守界** + **可追溯**, full five bars only for what she did NOT sign; the signed content itself is canon — a `.fail` against it is a doctrine violation; a material error spotted in signed content goes in the report for the CEO to raise with her, never a bounce.

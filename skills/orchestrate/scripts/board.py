@@ -62,20 +62,21 @@ def add_entry(store, dept, kind, text, now, task=None, batch=None, supersede=Tru
     if batch:
         e["batch"] = batch  # same-turn marker batch — batch-mates never supersede each other
     # Supersede COLLISION detection: a NEW decision ask about the same task as an
-    # older open one (same dept, same kind) flags the new entry — the Stop hook turns
-    # the flag into a ONE-TIME nudge so the raiser closes the old ask WITH a real
-    # outcome, or deliberately keeps both (field failures cured: CEO-27/28,
-    # CEO-143/144 — a revised re-raise leaving both open). The Boss's call (0.9.21):
-    # CEO-in-the-loop BEFORE any supersede — nothing here auto-resolves. Conservative
-    # by construction: info and notices never flag; cross-kind never; same-batch (one
-    # turn's marker lines = deliberate separate decisions) never; keyless asks never.
+    # older open one flags the new entry — the Stop hook turns the flag into a
+    # ONE-TIME nudge so the raiser closes the old ask WITH a real outcome, or
+    # deliberately keeps both (field failures cured: CEO-27/28, CEO-143/144 — a
+    # revised re-raise leaving both open). The Boss's call (0.9.21): CEO-in-the-loop
+    # BEFORE any supersede — nothing here auto-resolves. 0.9.36 dropped the
+    # same-dept+kind requirement: one ask registered through BOTH paths (CLI add +
+    # marker re-end, field case Boss-13/CEO-166) wore a different raiser AND kind,
+    # blinding the detector — the task key alone is the identity. Still never flags:
+    # info (either side) · notices · same-batch (one turn's marker lines = deliberate
+    # separate decisions) · keyless asks.
     if supersede and kind != "info":
         key = ask_key(text, task)
         if key:
             for old in store["entries"]:
-                if old["status"] != "open" or old.get("notice"):
-                    continue
-                if old["dept"] != dept or old.get("kind") != kind:
+                if old["status"] != "open" or old.get("notice") or old.get("kind") == "info":
                     continue
                 if batch and old.get("batch") == batch:
                     continue
@@ -1348,7 +1349,7 @@ def main():
         live = [o for o in e.get("collides") or []
                 if (board_get(root, o) or {}).get("status") == "open"]
         if live:
-            print("COLLIDES: %s still open on the same task (same dept+kind) — if "
+            print("COLLIDES: %s still open on the same task — if "
                   "this ask replaces it: orchestrate-board done %s --sum \"<outcome>\"; "
                   "if genuinely separate, leave both." % (", ".join(live), live[0]))
     elif cmd == "done":
