@@ -209,5 +209,106 @@ class Digest(unittest.TestCase):
             self.assertTrue(cardlib.digest_stale(d, cfg))
 
 
+class CanonicalStatus(unittest.TestCase):
+    def test_first_keyword_wins(self):
+        self.assertEqual(cardlib.canonical_status("review — waiting on the Auditor"), "review")
+        self.assertEqual(cardlib.canonical_status("blocked on #3 · #7"), "blocked")
+        self.assertEqual(cardlib.canonical_status("doing"), "doing")
+
+    def test_ship_and_start_speak_synonyms(self):
+        self.assertEqual(cardlib.canonical_status(
+            "MERGED 07-20 — L2 PASS Frontend.check760.1.pass, FF ce66fd02"), "done")
+        self.assertEqual(cardlib.canonical_status("COMPLETE — all three legs landed"), "done")
+        self.assertEqual(cardlib.canonical_status("active — Boss ordered the rewrite"), "doing")
+        self.assertEqual(cardlib.canonical_status("parked — after the bug lane"), "todo")
+        self.assertEqual(cardlib.canonical_status("pending L2 pass"), "todo")  # appearance order
+
+    def test_unset_left_alone_and_unknown_prose_is_todo(self):
+        self.assertIsNone(cardlib.canonical_status(""))
+        self.assertIsNone(cardlib.canonical_status("—"))
+        self.assertIsNone(cardlib.canonical_status("<CEO fills>"))
+        self.assertEqual(cardlib.canonical_status("boss said hold"), "todo")
+
+
+class Canonicalise(unittest.TestCase):
+    def test_essay_collapses_and_note_keeps_original(self):
+        with tempfile.TemporaryDirectory() as d:
+            cardlib.new_card(d, "X", status="MERGED 07-20 — L2 PASS a.1.pass",
+                             priority="high", body="dept prose stays.\n")
+            traces = cardlib.canonicalise(d, stamp="2026-07-20")
+            self.assertEqual(len(traces), 1)
+            card = cardlib.load(d)[0]
+            self.assertEqual(card["status"], "done")
+            self.assertEqual(card["priority"], "—")
+            self.assertIn("dept prose stays.", card["_body"])
+            self.assertIn("状态注 2026-07-20", card["_body"])
+            self.assertIn('status was "MERGED 07-20 — L2 PASS a.1.pass"', card["_body"])
+            self.assertIn('priority was "high"', card["_body"])
+
+    def test_idempotent_no_rewrite_churn(self):
+        with tempfile.TemporaryDirectory() as d:
+            cardlib.new_card(d, "X", status="doing", priority="P1")
+            self.assertEqual(cardlib.canonicalise(d), [])
+            cardlib.new_card(d, "Y", status="active — go")
+            self.assertEqual(len(cardlib.canonicalise(d)), 1)
+            self.assertEqual(cardlib.canonicalise(d), [])  # second pass finds canon
+
+
+class DedupeIds(unittest.TestCase):
+    def _forge(self, d, cid, name, **fields):
+        """A hand-written collision: same id, different slug — the path new_card's
+        O_EXCL can't guard."""
+        meta = {"id": cid, "name": name}
+        meta.update(fields)
+        path = os.path.join(d, "%d-%s.md" % (cid, cardlib.slugify(name)))
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(cardlib.render_card(meta))
+        return path
+
+    def test_younger_holder_renumbered_with_note(self):
+        with tempfile.TemporaryDirectory() as d:
+            elder = cardlib.new_card(d, "ELDER", status="doing")
+            younger = self._forge(d, 1, "YOUNGER", status="todo")
+            os.utime(elder["_path"], (os.path.getmtime(younger) - 10,) * 2)
+            traces = cardlib.dedupe_ids(d, stamp="2026-07-20")
+            self.assertEqual(len(traces), 1)
+            cards = cardlib.load(d)
+            self.assertEqual([c["id"] for c in cards], [1, 2])
+            self.assertEqual(cards[0]["name"], "ELDER")  # eldest keeps the number
+            moved = cards[1]
+            self.assertEqual(moved["name"], "YOUNGER")
+            self.assertTrue(os.path.basename(moved["_path"]).startswith("2-"))
+            self.assertIn("编号注 2026-07-20", moved["_body"])
+            self.assertFalse(os.path.exists(younger))
+            self.assertEqual(cardlib.dedupe_ids(d), [])  # idempotent
+
+    def test_done_numbers_count_and_next_free_is_global(self):
+        with tempfile.TemporaryDirectory() as d:
+            done = os.path.join(d, "done")
+            os.makedirs(done)
+            self._forge(done, 5, "SHIPPED-EARLIER", status="done")
+            a = cardlib.new_card(d, "FIRST", status="doing")   # mints 6
+            younger = self._forge(d, 6, "SECOND", status="todo")
+            os.utime(a["_path"], (os.path.getmtime(younger) - 10,) * 2)
+            cardlib.dedupe_ids(d)
+            ids = sorted(c["id"] for c in cardlib.load(d)) + \
+                [c["id"] for c in cardlib.load(d, "done")]
+            self.assertEqual(sorted(ids), [5, 6, 7])
+
+    def test_done_holder_keeps_number_over_elder_active(self):
+        # retirement rewrites the file, so a done card's mtime lies about its age;
+        # its number is frozen in BACKLOG history — the active twin must move
+        # (the refcheck 07-20 #190 DIFF-vs-ghost incident)
+        with tempfile.TemporaryDirectory() as d:
+            done = os.path.join(d, "done")
+            os.makedirs(done)
+            shipped = self._forge(done, 3, "SHIPPED", status="done")
+            ghost = self._forge(d, 3, "GHOST", status="todo")
+            os.utime(ghost, (os.path.getmtime(shipped) - 100,) * 2)  # ghost born first
+            cardlib.dedupe_ids(d)
+            self.assertEqual(cardlib.load(d, "done")[0]["id"], 3)
+            self.assertEqual(cardlib.load(d)[0]["id"], 4)
+
+
 if __name__ == "__main__":
     unittest.main()

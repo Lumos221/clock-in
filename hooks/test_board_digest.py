@@ -44,6 +44,25 @@ class DigestFreshener(unittest.TestCase):
             sbd.run({"cwd": d}, None)
             self.assertEqual(os.path.getmtime(tb), before)  # no rewrite churn
 
+    def test_turn_end_heals_essay_status_and_dup_ids(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg, bdir = _proj(d)
+            card = cardlib.new_card(bdir, "ESSAY", task_id="1",
+                                    status="MERGED 07-20 — L2 PASS x.1.pass")
+            with open(os.path.join(bdir, "1-TWIN.md"), "w", encoding="utf-8") as f:
+                f.write(cardlib.render_card({"id": 1, "name": "TWIN", "status": "todo"}))
+            _bump(card["_path"], -10)  # ESSAY is the elder — it keeps #1
+            sbd.run({"cwd": d}, None)
+            cards = cardlib.load(bdir)
+            self.assertEqual([c["id"] for c in cards], [1, 2])
+            self.assertEqual(cards[0]["status"], "done")
+            self.assertIn("状态注", cards[0]["_body"])
+            text = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
+            self.assertIn("- **status:** done", text)  # sweep's writes reach the digest
+            self.assertIn("#2 · TWIN", text)
+            log = open(os.path.join(d, ".claude", "marker-misses.log"), encoding="utf-8").read()
+            self.assertIn("board-hygiene", log)
+
     def test_inactive_or_storeless_projects_inert(self):
         with tempfile.TemporaryDirectory() as d:
             cfg, bdir = _proj(d, active=False)

@@ -151,6 +151,14 @@ def on_create(root, cfg, ti, resp):
             cardlib.set_fields(hits[0], task_id=tid)
             cardlib.regen_digest(root, cfg)
             return
+        if len(hits) > 1:
+            # a duplicated durable number: filling would guess, birthing would
+            # cascade (the 07-20 refcheck incident — dup #189 birthed ghost #190).
+            # dedupe_ids heals the store at turn end; this CREATE just refuses.
+            hooklib.log_marker_misses(root, "task-sync", [
+                "TaskCreate '%s': #%d worn by %d cards — ambiguous, no card filled "
+                "or born; dedupe sweep renumbers at turn end" % (subject, sub_num, len(hits))])
+            return
     sub_norm = _norm(subject)
     if sub_norm:
         hits = [c for c in unregistered

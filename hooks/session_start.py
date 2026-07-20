@@ -580,9 +580,15 @@ def main():
     store_notice = None
     if audience == "lead":
         try:
-            # migrate a legacy board now (one-time, atomic) and freshen the digest
+            # migrate a legacy board now (one-time, atomic), heal id collisions and
+            # essay statuses left by concurrent sessions, then freshen the digest
             # after out-of-session card edits (Obsidian / the 分公司 branch session)
             _, store_notice = cardlib.ensure_store(root, cfg)
+            bdir = cardlib.board_dir(root, cfg)
+            if os.path.isdir(bdir):
+                traces = cardlib.dedupe_ids(bdir) + cardlib.canonicalise(bdir)
+                if traces:
+                    hooklib.log_marker_misses(root, "board-hygiene", traces)
             if cardlib.digest_stale(root, cfg):
                 cardlib.regen_digest(root, cfg)
         except Exception:

@@ -197,7 +197,7 @@ def new_card(bdir, name, want_id=None, body="", **fields):
         for k in FIELDS:
             meta[k] = fields.get(k, "todo" if k == "status" else EMPTY)
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         except FileExistsError:
             taken.add(cid)
             cid = max(taken) + 1
@@ -216,6 +216,113 @@ def find_task(cards, task_id):
         if clean(c.get("task_id", "")) == str(task_id):
             return c
     return None
+
+
+# ------------------------------------------------------------- hygiene sweeps
+
+CANON_RE = re.compile(r"\b(todo|doing|review|blocked|done)\b", re.I)
+# ship-speak and start-speak the sessions keep writing into status: despite
+# doctrine — Bases groups each essay verbatim, parse_taskboard finds no keyword
+# and misfiles the card under Todo (refcheck 2026-07-20 field report, twice)
+SYNONYMS = {"merged": "done", "complete": "done", "completed": "done",
+            "shipped": "done", "closed": "done", "landed": "done",
+            "pass": "done", "passed": "done",
+            "active": "doing", "wip": "doing", "started": "doing",
+            "in-progress": "doing", "in_progress": "doing",
+            "parked": "todo", "pending": "todo", "queued": "todo",
+            "waiting": "blocked"}
+PRIORITY_RE = re.compile(r"P[0-2]$")
+
+
+def canonical_status(s):
+    """The five-keyword canonical form of a status value, or None to leave it
+    alone (empty/placeholder — unset is a state, not drift). First canonical
+    keyword wins (parse_taskboard's own contract); else the first synonym token
+    by order of appearance; else todo — prose naming no recognisable state is a
+    parked wish, not progress."""
+    s0 = clean(s)
+    if not s0:
+        return None
+    m = CANON_RE.search(s0)
+    if m:
+        return m.group(1).lower()
+    for tok in re.findall(r"[A-Za-z][\w-]*", s0):
+        hit = SYNONYMS.get(tok.lower())
+        if hit:
+            return hit
+    return "todo"
+
+
+def canonicalise(bdir, stamp=None):
+    """Mechanical field hygiene over the ACTIVE cards — the sweep doctrine alone
+    keeps failing to be: status collapses to its canonical keyword, junk priority
+    values (anything but P0/P1/P2) to —, the original prose preserved as a dated
+    状态注 body line (the 迁移注 pattern). Idempotent — a canonical card is never
+    rewritten. Returns human-readable trace lines ([] = clean)."""
+    stamp = stamp or datetime.now().strftime("%Y-%m-%d")
+    traces = []
+    for c in load(bdir):
+        notes, updates = [], {}
+        cur = (c.get("status") or "").strip()
+        canon = canonical_status(cur)
+        if canon and cur != canon:
+            updates["status"] = canon
+            notes.append('status was "%s"' % cur)
+        pr = clean(c.get("priority", ""))
+        if pr and not PRIORITY_RE.match(pr):
+            updates["priority"] = EMPTY
+            notes.append('priority was "%s"' % pr)
+        if not updates:
+            continue
+        body = (c.get("_body") or "").rstrip("\n")
+        c["_body"] = ((body + "\n\n") if body else "") + \
+            "> 状态注 %s: %s\n" % (stamp, " · ".join(notes))
+        set_fields(c, **updates)
+        traces.append("#%d %s" % (c["id"], " · ".join(notes)))
+    return traces
+
+
+def dedupe_ids(bdir, stamp=None):
+    """Heal duplicate durable ids. Two sessions minting concurrently — or a hand-
+    written card numbered from conversational memory — can both claim #NNN, and a
+    duplicated number poisons every id-keyed path: task-sync's fill tier turns
+    ambiguous (which then birthed ghost duplicates), gate keys and retirement pick
+    a card at random. Keeper: a done/archive holder outranks an active one (its
+    number is frozen in BACKLOG rows and shipped history — and retirement rewrote
+    the file, so mtime lies about its age), then the eldest file (birth order;
+    lexicographic tie-break); every other holder is renumbered to the next free id
+    with a dated 编号注 body note. Returns trace lines ([] = clean)."""
+    stamp = stamp or datetime.now().strftime("%Y-%m-%d")
+    holders = {}
+    for sub in ("", "done", "archive"):
+        for c in load(bdir, sub):
+            try:
+                key = (1 if sub == "" else 0, os.path.getmtime(c["_path"]),
+                       os.path.basename(c["_path"]))
+            except OSError:
+                key = (1 if sub == "" else 0, 0, os.path.basename(c["_path"]))
+            holders.setdefault(c["id"], []).append((key, c))
+    taken = set(holders)
+    traces = []
+    for cid in sorted(i for i, hs in holders.items() if len(hs) > 1):
+        for _, c in sorted(holders[cid], key=lambda kv: kv[0])[1:]:
+            new = max(taken) + 1
+            taken.add(new)
+            src = c["_path"]
+            body = (c.get("_body") or "").rstrip("\n")
+            c["_body"] = ((body + "\n\n") if body else "") + \
+                "> 编号注 %s: 与 #%d 撞号（并发铸号），改编 #%d\n" % (stamp, cid, new)
+            c["id"] = new
+            c["_path"] = os.path.join(os.path.dirname(src),
+                                      re.sub(r"^\d+", str(new), os.path.basename(src), count=1))
+            save(c)
+            try:
+                os.remove(src)
+            except OSError:
+                pass
+            traces.append("#%d worn twice — %s renumbered to #%d"
+                          % (cid, os.path.basename(src), new))
+    return traces
 
 
 def frontmatter(text):

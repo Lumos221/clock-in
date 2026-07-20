@@ -168,6 +168,26 @@ class Create(unittest.TestCase):
             self.assertEqual(born["name"], "#130 something else")
             self.assertNotEqual(born["id"], 130)
 
+    def test_duplicated_card_number_refuses_fill_and_birth(self):
+        # two cards wearing #7 (concurrent minting) — filling would guess, birthing
+        # would cascade (the 07-20 refcheck ghost-#190 incident): CREATE refuses
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, taskboard=None)
+            bdir = os.path.join(d, "docs", "board")
+            os.makedirs(bdir)
+            for name in ("ALPHA — first claimant", "BETA — second claimant"):
+                path = os.path.join(bdir, "7-%s.md" % cardlib.slugify(name))
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(cardlib.render_card({"id": 7, "name": name, "task_id": "—",
+                                                 "status": "todo"}))
+            ts.run(_payload(d, "TaskCreate", {"subject": "#7 · ALPHA — reworded detail"},
+                            {"id": "15"}))
+            cards = _cards(d)
+            self.assertEqual(len(cards), 2)  # nothing born
+            self.assertTrue(all(cardlib.clean(c.get("task_id", "")) == "" for c in cards))
+            log = open(os.path.join(d, ".claude", "marker-misses.log"), encoding="utf-8").read()
+            self.assertIn("worn by 2 cards", log)
+
     def test_recycled_id_detaches_stale_card(self):
         with tempfile.TemporaryDirectory() as d:
             _proj(d)
