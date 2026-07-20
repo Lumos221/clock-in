@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """PostToolUse hook — on a task's `completed` transition: (1) retire its 审查-pass
 marker, (2) auto-append the finished task to docs/BACKLOG.md, (3) refresh the
-machine-owned *Recently shipped* block on docs/TaskBoard.md, (4) retire the card
-itself from `## Active` (only when its `task_id` field is exactly this one id —
-shared multi-id cards are never touched; see hooklib). Mechanical task-logging:
-no agent has to remember to run a script, and the CEO no longer hand-copies
-shipped lines between the two files or hand-deletes done cards.
+machine-owned *Recently shipped* block on the TaskBoard digest, (4) retire the card
+itself into the per-card store's done/ — stamped shipped-date + sha, so the durable
+#NNN keeps its whole history as one file (only when its `task_id` is exactly this
+one id — shared multi-id cards are never touched). Mechanical task-logging: no agent
+has to remember to run a script, and the CEO no longer hand-copies shipped lines
+between files or hand-deletes done cards.
 
 The pass retirement closes a gate hole: platform task ids are small integers that
 restart with each session, while docs/reviews/ persists — an unconsumed `<id>.pass`
@@ -13,12 +14,14 @@ would satisfy the review gate for a DIFFERENT future task that recycles the id,
 silently voiding the hard gate. Consuming it on completion (archive, never delete)
 keeps the record traceable and the gate honest.
 
-The backlog row reads the task's card from TaskBoard.md (by task_id) for the dept +
-name, stamps the short git sha, and appends via the SHARED `log.py` formatter (so the
-row format has one source of truth). Fail-open and only acts inside an active
-orchestrate project — a hook that errors must never disrupt the run. Pairs with
-pretool_review_gate.py: that one blocks a completion without a 审查-pass; this one
-records the completion once it happens."""
+The backlog row reads the task's card (by task_id) for the dept + name, carries the
+card's durable #NNN (the id the Boss refers to — the platform id dies with the
+session) into the task cell and the shipped line, stamps the short git sha, and
+appends via the SHARED `log.py` formatter (so the row format has one source of
+truth). Fail-open and only acts inside an active orchestrate project — a hook that
+errors must never disrupt the run. Pairs with pretool_review_gate.py: that one
+blocks a completion without a 审查-pass; this one records the completion once it
+happens."""
 import sys, json, os, re, subprocess
 from datetime import datetime
 
@@ -27,9 +30,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "skills", "orchestrate", "scripts"))
 try:
-    import hooklib
+    import hooklib, cardlib
 except Exception:
-    hooklib = None
+    hooklib = cardlib = None
 try:
     import log as tasklog  # shared HEADER + row(); single source of the row format
 except Exception:
@@ -38,23 +41,6 @@ try:
     import board  # only for main_checkout (worktree piercing)
 except Exception:
     board = None
-
-
-def card_for(taskboard_text, task_id):
-    """(dept, name, label) for the card whose task_id matches, else (None,)*3.
-    label = the heading's own number (`#139` in `### #139 · NAME`) — the DURABLE
-    project-wide id the Boss refers to; the platform task_id dies with the session."""
-    for block in re.split(r"(?m)^#{2,3}\s+", taskboard_text):
-        if re.search(r"task_id:\*\*\s*%s\b" % re.escape(task_id), block):
-            first = block.splitlines()[0] if block.splitlines() else ""
-            if "·" in first:
-                label, name = (s.strip() for s in first.split("·", 1))
-            else:
-                label, name = None, first.strip()
-            m = re.search(r"dept:\*\*\s*([^\n]+)", block)
-            dept = m.group(1).strip().strip("`") if m else None
-            return dept, name, label
-    return None, None, None
 
 
 def _archive(src, arch):
@@ -96,7 +82,7 @@ SHIPPED_END = "<!-- SHIPPED:END -->"
 
 
 def update_shipped(tb_path, line, keep=5):
-    """Insert the freshly shipped one-liner at the top of TaskBoard's machine-owned
+    """Insert the freshly shipped one-liner at the top of the digest's machine-owned
     *Recently shipped* block (between the SHIPPED markers), trimming to `keep`.
     No markers (a pre-0.6.1 board, or a hand-restructured one) → no-op: the CEO
     curates that section by hand there. Atomic write; returns True on update."""
@@ -120,7 +106,7 @@ def update_shipped(tb_path, line, keep=5):
 
 
 def main():
-    if hooklib is None:
+    if hooklib is None or cardlib is None:
         return
     try:
         data = json.load(sys.stdin)
@@ -153,29 +139,35 @@ def main():
         return
     backlog = os.path.join(root, cfg.get("backlog", "docs/BACKLOG.md"))
     tb = os.path.join(root, cfg.get("taskboard", "docs/TaskBoard.md"))
+    card = None
+    try:
+        bdir, _ = cardlib.ensure_store(root, cfg)
+        if bdir:
+            card = cardlib.find_task(cardlib.load(bdir), task_id)
+    except Exception:
+        bdir = None
     dept = name = label = None
-    if os.path.exists(tb):
+    if card is not None:
+        dept = cardlib.clean(card.get("dept", "")) or None
+        name, label = card.get("name") or None, "#%d" % card["id"]
+    else:
+        # a completion no card claims retires nothing — leave a trace instead of
+        # letting the drift hide (field case: task_id never filled at CREATE)
         try:
-            dept, name, label = card_for(open(tb, encoding="utf-8").read(), task_id)
+            hooklib.log_marker_misses(root, "task-sync", [
+                "completion #%s matched no card (task_id never filled at CREATE?) — no card retired" % task_id])
         except Exception:
             pass
-        if name is None:
-            # a completion no card claims retires nothing — leave a trace instead of
-            # letting the drift hide (field case: task_id never filled at CREATE)
-            try:
-                hooklib.log_marker_misses(root, "task-sync", [
-                    "completion #%s matched no card (task_id never filled at CREATE?) — no card retired" % task_id])
-            except Exception:
-                pass
     sha = ""
     try:
         sha = subprocess.run(["git", "-C", root, "rev-parse", "--short", "HEAD"],
                              capture_output=True, text=True, timeout=5).stdout.strip()
     except Exception:
         pass
-    # The heading's #NNN is the id the Boss refers to (platform ids die per session) —
-    # carry it into both durable records: the BACKLOG task cell and the shipped line.
-    proj = label if label and re.match(r"#\d+$", label) and label != "#" + task_id else None
+    # The card's durable #NNN is the id the Boss refers to (platform ids die per
+    # session) — carry it into both durable records: the BACKLOG task cell and the
+    # shipped line. Suppressed only when it would just repeat the platform id.
+    proj = label if label and label != "#" + task_id else None
     d = {"task_id": task_id, "dept": dept,
          "task": ("%s %s" % (proj, name)) if proj and name else name,
          "status": "done", "sha": sha}
@@ -190,9 +182,8 @@ def main():
     except Exception:
         pass
     try:
-        # `date · #<proj> · #<tid> · dept · name · sha` when the card carries a
-        # project number; the renderer pills the leading ids. Legacy 5-field lines
-        # (no proj) keep the old shape — the renderer handles both.
+        # `date · #<proj> · #<tid> · dept · name · sha` — the renderer pills the
+        # leading ids. Legacy 5-field lines (no proj) keep the old shape.
         if proj:
             line = ("- %s · %s · #%s · %s · %s · %s"
                     % (today, proj, task_id, dept or "—", name or "—", sha or "—"))
@@ -203,12 +194,12 @@ def main():
     except Exception:
         pass
     try:
-        # card retirement happens HERE, after the card was read for dept/name and the
-        # shipped line landed — never in the sync hook, which would race this one.
-        text = open(tb, encoding="utf-8").read()
-        out = hooklib.tb_remove_card(text, task_id)
-        if out is not None:
-            hooklib.tb_write(tb, out)
+        # card retirement happens HERE, after the card fed dept/name and the shipped
+        # line landed — never in the sync hook, which would race this one. The card
+        # moves to done/ wearing its shipped date + sha: per-card history, one file.
+        if card is not None and bdir:
+            cardlib.retire(card, bdir, "done", status="done", shipped=today, sha=sha or "")
+            cardlib.regen_digest(root, cfg)
     except Exception:
         pass
 

@@ -39,7 +39,7 @@ Departments run as **teammates** (addressable panes), spawned per task and relea
 
 A dept produces its outputs under its **own work-product folder**, `docs/<其领域>/` (e.g. 法务部 → `docs/合规/`, 财务部 → `docs/财务/`, 数据部 → `docs/数据/`). That folder is part of the dept's boundary — peers don't touch it. Code-producing depts (RnD/QA/Ops) work in code dirs; any notes/specs they write go in their `docs/<领域>/`.
 
-**Orchestration files are off-limits to every dept** (no carve-out list to forget): `docs/SoT.md`, `docs/TaskBoard.md`, `docs/BACKLOG.md`, `docs/DECISIONS.md`, `docs/CANON.md` (read-first, but **machine-written** — never hand-edit), `docs/reviews/`, `docs/复盘.md`, `docs/handover-*.md`. These are owned by the **CEO / 审查官 / 督察** per their roles — a 部门 only edits **its own task card's `status`** on `TaskBoard.md`, nothing else there.
+**Orchestration files are off-limits to every dept** (no carve-out list to forget): `docs/SoT.md`, `docs/TaskBoard.md` (generated digest — nobody hand-edits it), `docs/BACKLOG.md`, `docs/DECISIONS.md`, `docs/CANON.md` (read-first, but **machine-written** — never hand-edit), `docs/reviews/`, `docs/复盘.md`, `docs/handover-*.md`. These are owned by the **CEO / 审查官 / 督察** per their roles — a 部门 only edits **its own card file's `status`** in `docs/board/`, nothing else on the board.
 
 **Naming + in-file structure standard** (two file classes: living = suffix-free updated in place · event = `<type>-<subject>-<date>`; the fixed report spine TL;DR→结论→依据→方法→附录) → `department-sop.md` "Work products".
 

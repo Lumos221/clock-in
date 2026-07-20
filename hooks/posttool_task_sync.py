@@ -1,35 +1,38 @@
 #!/usr/bin/env python3
-"""PostToolUse hook — TaskBoard.md follows the platform task list (the widget), not
-the other way round. `TaskCreate` births the card with `task_id` pre-filled (no hand
-registration to forget — the field-report staleness: cards without ids, ids without
-cards); a hand-written card is FILLED, not duplicated — matched by exact name, by the
-human card number its subject leads with (#NNN — the durable bridge onto
-session-scoped platform ids), or by normalised name (0.9.20; the exact-only match
-left `task_id: —` on real cards while appending hook-dup minimal ones, so completions
+"""PostToolUse hook — the board follows the platform task list (the widget), not the
+other way round. Since 0.9.28 the board's truth is the per-card store (cardlib:
+docs/board/<id>-<slug>.md; TaskBoard.md is the generated digest), and this hook is
+its main writer: `TaskCreate` births the card with `task_id` pre-filled AND the
+durable #NNN minted at birth (want the subject's leading #NNN when that number is
+free — the 0.9.26 card-face norm — else the next free number); a hand-written card
+is FILLED, not duplicated — matched by exact name, by the durable card number the
+subject leads with, or by normalised name (0.9.20; the exact-only match left
+`task_id: —` on real cards while appending hook-dup minimal ones, so completions
 retired the wrong card — refcheck field report); `TaskUpdate` mirrors the coarse
-lifecycle back onto the card (pending→todo ·
-in_progress→doing · owner fills an empty dept) and retires the card on a
-cancelled/deleted task (forward-proofing — the CLI's status enum is currently just
-pending/in_progress/completed, verified in 2.1.206). Fine states (review/blocked) stay dept-written prose — the
-widget doesn't know them, and this hook never overwrites what it only half
-understands: all surgery keys on a `**task_id:**` field that cleans to EXACTLY one id
-(shared multi-id cards are left alone, see hooklib). `completed` is NOT handled here —
-posttool_backlog_log.py owns that transition (backlog row + shipped tail + card
-retirement), so the two hooks can never write the board on the same event.
+lifecycle onto the card (pending→todo · in_progress→doing · owner fills an empty
+dept) and retires a cancelled/deleted task's card to archive/ (forward-proofing —
+the CLI's status enum is currently just pending/in_progress/completed, verified in
+2.1.206). Fine states (review/blocked) stay dept-written prose — the widget doesn't
+know them, and this hook never overwrites what it only half understands: task_id
+matching keeps the exactly-one-id contract (shared multi-id cards match nobody).
+`completed` is NOT handled here — posttool_backlog_log.py owns that transition
+(backlog row + shipped tail + card retirement), so the two hooks can never write
+the same card on the same event.
 
-A recycled id (platform ids restart each session; a stale Active card may still hold
-last session's `3`) detaches the old card — its task_id becomes `—`, a trace lands in
-.claude/marker-misses.log — and the new card is appended. Fail-open: any error →
-no-op. Acts only inside an active .claude/orchestrate.json project."""
+A recycled id (platform ids restart each session; a stale active card may still
+hold last session's `3`) detaches the old card — its task_id becomes `—`, a trace
+lands in .claude/marker-misses.log — and a fresh card is born. A legacy single-file
+board migrates lazily on the first actionable event (cardlib.ensure_store).
+Fail-open: any error → no-op. Acts only inside an active orchestrate project."""
 import sys, os, re, json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "skills", "orchestrate", "scripts"))
 try:
-    import hooklib
+    import hooklib, cardlib
 except Exception:
-    hooklib = None
+    hooklib = cardlib = None
 try:
     import board  # only for main_checkout (worktree piercing)
 except Exception:
@@ -37,6 +40,7 @@ except Exception:
 
 STATUS_MAP = {"pending": "todo", "in_progress": "doing"}
 RETIRE = {"deleted", "cancelled"}
+DONE_WHEN_PLACEHOLDER = "<CEO fills — acceptance criterion from the dispatch spec>"
 
 
 def _norm(s):
@@ -47,10 +51,10 @@ def _norm(s):
     return re.sub(r"\s+", " ", s.replace("·", " ")).strip().casefold()
 
 
-def _card_number(head):
-    """The human card number from a heading ('#130 · SUBJECT' → '130'), else None."""
-    m = re.match(r"#(\d+)\b", head)
-    return m.group(1) if m else None
+def _card_number(s):
+    """The leading durable number ('#130 · SUBJECT' → 130), else None."""
+    m = re.match(r"#(\d+)\b", s or "")
+    return int(m.group(1)) if m else None
 
 
 def extract_id(resp):
@@ -79,38 +83,8 @@ def extract_id(resp):
     return None
 
 
-def _tb_path(root, cfg):
-    return os.path.join(root, cfg.get("taskboard", "docs/TaskBoard.md"))
-
-
-def _read(path):
-    try:
-        return open(path, encoding="utf-8").read()
-    except Exception:
-        return ""
-
-
-def _card_md(tid, subject, dept, what, blocked, label=None):
-    """A fresh card. `label` (the heading slot) is the Boss-facing identity —
-    coral pill, shipped-line lead, BACKLOG grep key. on_create promotes the
-    subject's leading #NNN into it when no existing card claims that number
-    (0.9.26; before this a hook-born `### #46 · #151 REDEEM…` wore the session id
-    as its face and demoted the real number into the name); otherwise the
-    platform id keeps the slot and the subject stays whole."""
-    if label:
-        name = re.sub(r"^#\d+\s*[·:—-]*\s*", "", subject).strip() or subject
-    else:
-        label, name = "#%s" % tid, subject
-    return (
-        "### %s · %s\n"
-        "- **dept:** %s\n"
-        "- **task_id:** %s\n"
-        "- **status:** todo\n"
-        "- **blocked_on:** %s\n"
-        "- **what:** %s\n"
-        "- **done-when:** <CEO fills — acceptance criterion from the dispatch spec>\n"
-        "- **artifacts:** —\n" % (label, name, dept or "—", tid, blocked or "—", what)
-    )
+def _head(card):
+    return "#%d · %s" % (card["id"], card.get("name") or "")
 
 
 def on_create(root, cfg, ti, resp):
@@ -121,57 +95,49 @@ def on_create(root, cfg, ti, resp):
     subject = subject[0].strip() if subject else ""
     if not subject:
         subject = "task %s" % tid
-    tb = _tb_path(root, cfg)
-    text = _read(tb)
+    bdir, _ = cardlib.ensure_store(root, cfg)
+    if not bdir:
+        return
+    cards = cardlib.load(bdir)
 
-    span = hooklib.tb_card_span(text, tid)
-    if span:
-        head = text[span[0]:span[1]].splitlines()[0]
-        # duplicate/replayed event — match normalised (the heading may carry the
-        # subject's leading #NNN in the label slot, so byte-contains is too strict)
-        if subject and (subject in head or (_norm(subject)
-                        and _norm(subject) == _norm(re.sub(r"^#{1,6}\s*", "", head)))):
+    holder = cardlib.find_task(cards, tid)
+    if holder:
+        # duplicate/replayed event — same identity, nothing to do
+        if subject and (subject in _head(holder)
+                        or (_norm(subject) and _norm(subject) in (_norm(holder.get("name")),
+                                                                  _norm(_head(holder))))):
             return
         # stale card holding a recycled id: detach it so the gate keys stay honest
-        text = hooklib.tb_set_field_at(text, span, "task_id", "—")
+        cardlib.set_fields(holder, task_id=cardlib.EMPTY)
         hooklib.log_marker_misses(root, "task-sync", [
             "task_id %s recycled by TaskCreate '%s' — stale card detached" % (tid, subject)])
+        cards = cardlib.load(bdir)
 
     # the CEO hand-wrote this card first, then registered it → fill, don't duplicate.
-    # Match tiers: ① exact name/head equality (historic behaviour) ② the human card
-    # number — a subject leading with #NNN fills the sole unregistered card headed
-    # #NNN (the field norm: durable card numbers bridge to session-scoped platform
-    # ids) ③ normalised equality (separator/space/case drift). ②③ require exactly
-    # one candidate — ambiguity falls through to an append, never a guess.
-    unregistered = []
-    claimed_nums = set()
-    for a, b in hooklib.tb_card_spans(text):
-        block = text[a:b]
-        head = block.splitlines()[0][4:].strip()
-        n = _card_number(head)
-        if n:
-            claimed_nums.add(n)
-        name = head.split("·", 1)[-1].strip() if "·" in head else head
-        m = re.search(r"\*\*task_id:\*\*\s*([^\n]*)", block)
-        registered = hooklib.tb_clean(m.group(1)) if m else ""
-        if registered:
-            continue
-        if subject and (name == subject or head == subject):
-            hooklib.tb_write(tb, hooklib.tb_set_field_at(text, (a, b), "task_id", tid))
+    # Match tiers: ① exact name/head equality (historic behaviour) ② the durable card
+    # number the subject leads with — ids are unique in the store, so #NNN names at
+    # most one card ③ normalised equality (separator/space/case drift, exactly one
+    # candidate — ambiguity falls through to a birth, never a guess).
+    unregistered = [c for c in cards if not cardlib.clean(c.get("task_id", ""))]
+    for c in unregistered:
+        if subject and subject in (c.get("name"), _head(c)):
+            cardlib.set_fields(c, task_id=tid)
+            cardlib.regen_digest(root, cfg)
             return
-        unregistered.append(((a, b), head, name))
     sub_num = _card_number(subject)
-    if sub_num:
-        hits = [span for span, head, _ in unregistered if _card_number(head) == sub_num]
+    if sub_num is not None:
+        hits = [c for c in unregistered if c["id"] == sub_num]
         if len(hits) == 1:
-            hooklib.tb_write(tb, hooklib.tb_set_field_at(text, hits[0], "task_id", tid))
+            cardlib.set_fields(hits[0], task_id=tid)
+            cardlib.regen_digest(root, cfg)
             return
     sub_norm = _norm(subject)
     if sub_norm:
-        hits = [span for span, head, name in unregistered
-                if sub_norm in (_norm(head), _norm(name))]
+        hits = [c for c in unregistered
+                if sub_norm in (_norm(c.get("name")), _norm(_head(c)))]
         if len(hits) == 1:
-            hooklib.tb_write(tb, hooklib.tb_set_field_at(text, hits[0], "task_id", tid))
+            cardlib.set_fields(hits[0], task_id=tid)
+            cardlib.regen_digest(root, cfg)
             return
 
     desc = (ti.get("description") or ti.get("activeForm") or subject).strip()
@@ -181,14 +147,17 @@ def on_create(root, cfg, ti, resp):
     blocked = ti.get("blockedBy") or ti.get("blocked_by") or []
     blocked = ", ".join("#%s" % b for b in blocked) if isinstance(blocked, list) else ""
     owner = (ti.get("owner") or "").strip()
-    # promote the subject's #NNN into the heading slot only when NO existing card
-    # claims that number — a second card wearing an already-claimed face would make
-    # the durable id ambiguous (then the platform id keeps the slot, old shape)
-    label = "#%s" % sub_num if (sub_num and sub_num not in claimed_nums) else None
-    out = hooklib.tb_append_card(text, _card_md(tid, subject, owner, what, blocked,
-                                                label=label))
-    os.makedirs(os.path.dirname(tb) or ".", exist_ok=True)
-    hooklib.tb_write(tb, out)
+    # the durable face: the subject's leading #NNN when that number is free (then the
+    # name drops the prefix); a claimed number would fork the Boss's referent, so the
+    # subject stays whole and the card mints the next free number
+    name = subject
+    if sub_num is not None and sub_num not in cardlib.claimed_ids(bdir):
+        name = re.sub(r"^#\d+\s*[·:—-]*\s*", "", subject).strip() or subject
+    cardlib.new_card(bdir, name, want_id=sub_num, task_id=tid,
+                     dept=owner or cardlib.EMPTY, what=what or cardlib.EMPTY,
+                     blocked_on=blocked or cardlib.EMPTY,
+                     **{"done-when": DONE_WHEN_PLACEHOLDER})
+    cardlib.regen_digest(root, cfg)
 
 
 def on_update(root, cfg, ti):
@@ -198,38 +167,31 @@ def on_update(root, cfg, ti):
     status = ti.get("status")
     if status == "completed":
         return  # posttool_backlog_log.py owns the completed transition
-    tb = _tb_path(root, cfg)
-    text = _read(tb)
-    if not text:
+    bdir, _ = cardlib.ensure_store(root, cfg)
+    if not bdir:
+        return
+    card = cardlib.find_task(cardlib.load(bdir), tid)
+    if card is None:
         return
     changed = False
     if status in RETIRE:
-        out = hooklib.tb_remove_card(text, tid)
-        if out is not None:
-            text, changed = out, True
+        cardlib.retire(card, bdir, "archive", status=status)
+        changed = True
     elif status in STATUS_MAP:
-        span = hooklib.tb_card_span(text, tid)
-        if span:
-            target = STATUS_MAP[status]
-            m = re.search(r"\*\*status:\*\*\s*([^\n]*)", text[span[0]:span[1]])
-            current = (m.group(1).strip() if m else "")
-            if not re.match(r"%s\b" % target, current):
-                text = hooklib.tb_set_field_at(text, span, "status", target)
-                changed = True
+        target = STATUS_MAP[status]
+        if not re.match(r"%s\b" % target, (card.get("status") or "").strip()):
+            cardlib.set_fields(card, status=target)
+            changed = True
     owner = (ti.get("owner") or "").strip()
-    if owner:
-        span = hooklib.tb_card_span(text, tid)
-        if span:
-            m = re.search(r"\*\*dept:\*\*\s*([^\n]*)", text[span[0]:span[1]])
-            if m is None or not hooklib.tb_clean(m.group(1)):
-                text = hooklib.tb_set_field_at(text, span, "dept", owner)
-                changed = True
+    if owner and not cardlib.clean(card.get("dept", "")) and card.get("status") not in RETIRE:
+        cardlib.set_fields(card, dept=owner)
+        changed = True
     if changed:
-        hooklib.tb_write(tb, text)
+        cardlib.regen_digest(root, cfg)
 
 
 def run(data):
-    if hooklib is None:
+    if hooklib is None or cardlib is None:
         return
     tool = data.get("tool_name", "")
     if tool not in ("TaskCreate", "TaskUpdate"):

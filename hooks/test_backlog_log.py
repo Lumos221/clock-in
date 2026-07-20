@@ -1,9 +1,11 @@
-"""Tests for posttool_backlog_log.py — the completion logger and the 审查-pass
-retirement that keeps the review gate honest across sessions.
+"""Tests for posttool_backlog_log.py — the completion logger over the per-card
+store: 审查-pass retirement, backlog row + shipped line with the durable #NNN,
+card retirement into done/ (shipped date + sha stamped on the card).
 Run: python3 hooks/test_backlog_log.py"""
 import os, sys, json, tempfile, subprocess, unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import cardlib
 import posttool_backlog_log as bl
 
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "posttool_backlog_log.py")
@@ -23,10 +25,13 @@ TASKBOARD = """# demo · TaskBoard
 """
 
 
-def _proj(d):
+def _proj(d, board_md=TASKBOARD):
     os.makedirs(os.path.join(d, ".claude"), exist_ok=True)
     with open(os.path.join(d, ".claude", "orchestrate.json"), "w") as f:
         f.write('{"active":true}')
+    os.makedirs(os.path.join(d, "docs"), exist_ok=True)
+    with open(os.path.join(d, "docs", "TaskBoard.md"), "w", encoding="utf-8") as f:
+        f.write(board_md)
 
 
 def _run_hook(root, task_id="3", status="completed"):
@@ -36,18 +41,8 @@ def _run_hook(root, task_id="3", status="completed"):
                    text=True, capture_output=True, timeout=20)
 
 
-class CardFor(unittest.TestCase):
-    def test_finds_dept_name_and_label_by_task_id(self):
-        self.assertEqual(bl.card_for(TASKBOARD, "3"), ("RnD", "login form", "TASK-001"))
-
-    def test_hash_number_heading_label(self):
-        board = TASKBOARD.replace("TASK-001 · login form", "#139 · INVITE-PDF-REORG — rework")
-        self.assertEqual(bl.card_for(board, "3"),
-                         ("RnD", "INVITE-PDF-REORG — rework", "#139"))
-
-    def test_no_prefix_match_on_ids(self):
-        self.assertEqual(bl.card_for(TASKBOARD.replace("task_id:** 3", "task_id:** 30"), "3"),
-                         (None, None, None))
+def _digest(d):
+    return open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
 
 
 class ConsumePass(unittest.TestCase):
@@ -129,61 +124,52 @@ class EndToEnd(unittest.TestCase):
         # a trace instead of hiding (refcheck field case)
         with tempfile.TemporaryDirectory() as d:
             _proj(d)
-            os.makedirs(os.path.join(d, "docs"), exist_ok=True)
-            with open(os.path.join(d, "docs", "TaskBoard.md"), "w") as f:
-                f.write(TASKBOARD)
             _run_hook(d, task_id="99")
             misses = open(os.path.join(d, ".claude", "marker-misses.log"),
                           encoding="utf-8").read()
             self.assertIn("completion #99 matched no card", misses)
-            board = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
-            self.assertIn("### TASK-001", board)  # nothing wrongly retired
+            self.assertIn("login form", _digest(d))  # nothing wrongly retired
 
     def test_hash_headed_card_ships_with_project_number(self):
         # Boss's ask (0.9.24): the durable #NNN rides the shipped line + BACKLOG
         # task cell — the platform id alone is unreferenceable next session
         with tempfile.TemporaryDirectory() as d:
-            _proj(d)
+            _proj(d, TASKBOARD.replace("TASK-001 · login form", "#139 · INVITE-PDF-REORG"))
             os.makedirs(os.path.join(d, "docs", "reviews"))
-            board = TASKBOARD.replace("TASK-001 · login form", "#139 · INVITE-PDF-REORG")
-            with open(os.path.join(d, "docs", "TaskBoard.md"), "w") as f:
-                f.write(board)
             open(os.path.join(d, "docs", "reviews", "3.pass"), "w").write("ok")
             _run_hook(d)
-            tb = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
-            self.assertIn("· #139 · #3 · RnD · INVITE-PDF-REORG ·", tb)
+            self.assertIn("· #139 · #3 · RnD · INVITE-PDF-REORG ·", _digest(d))
             backlog = open(os.path.join(d, "docs", "BACKLOG.md"), encoding="utf-8").read()
             self.assertIn("| #139 INVITE-PDF-REORG |", backlog)
 
-    def test_completion_appends_backlog_row_and_retires_pass(self):
+    def test_completion_appends_backlog_retires_pass_and_card(self):
         with tempfile.TemporaryDirectory() as d:
             _proj(d)
             os.makedirs(os.path.join(d, "docs", "reviews"))
-            with open(os.path.join(d, "docs", "TaskBoard.md"), "w") as f:
-                f.write(TASKBOARD)
             open(os.path.join(d, "docs", "reviews", "3.pass"), "w").write("ok")
             _run_hook(d)
             backlog = open(os.path.join(d, "docs", "BACKLOG.md"), encoding="utf-8").read()
-            self.assertIn("| 3 | RnD | login form | done |", backlog)
+            self.assertIn("| 3 | RnD | #1 login form | done |", backlog)
             self.assertFalse(os.path.exists(os.path.join(d, "docs", "reviews", "3.pass")))
             self.assertTrue(os.path.exists(os.path.join(d, "docs", "reviews", "archive", "3.pass")))
-            board = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
-            self.assertIn("· #3 · RnD · login form ·", board)   # shipped line hook-written
-            self.assertNotIn("### TASK-001", board)             # card retired from Active
+            text = _digest(d)
+            self.assertIn("· #1 · #3 · RnD · login form ·", text)  # shipped line hook-written
+            self.assertNotIn("### #1 · login form", text)          # card gone from Active
+            done = cardlib.load(os.path.join(d, "docs", "board"), "done")
+            self.assertEqual(done[0]["name"], "login form")
+            self.assertEqual(done[0]["status"], "done")
+            self.assertTrue(done[0].get("shipped"))                # date stamped on the card
 
     def test_completion_leaves_multi_id_cards_alone(self):
-        """A shared card ("task_id:** 6 规格 · 7 build") must survive one of its ids
+        """A shared card ("task_id:** 3 spec · 7 build") must survive one of its ids
         completing — surgery on a half-understood card would destroy the others."""
         with tempfile.TemporaryDirectory() as d:
-            _proj(d)
+            _proj(d, TASKBOARD.replace("task_id:** 3", "task_id:** 3 spec · 7 build"))
             os.makedirs(os.path.join(d, "docs", "reviews"))
-            shared = TASKBOARD.replace("task_id:** 3", "task_id:** 3 spec · 7 build")
-            with open(os.path.join(d, "docs", "TaskBoard.md"), "w") as f:
-                f.write(shared)
             open(os.path.join(d, "docs", "reviews", "3.pass"), "w").write("ok")
             _run_hook(d)
-            board = open(os.path.join(d, "docs", "TaskBoard.md"), encoding="utf-8").read()
-            self.assertIn("### TASK-001", board)  # card kept
+            self.assertIn("login form", _digest(d))  # card kept in Active
+            self.assertEqual(cardlib.load(os.path.join(d, "docs", "board"), "done"), [])
 
     def test_non_completed_and_inactive_are_noops(self):
         with tempfile.TemporaryDirectory() as d:

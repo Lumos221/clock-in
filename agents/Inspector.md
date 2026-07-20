@@ -21,7 +21,7 @@ on disk: `docs/复盘.md` (read it first, append to it last).
 
 ## Job 1 · 复盘 (the main call — after `bounce_diagnose` consecutive L2 封驳 on one task)
 The CEO invokes you with the **task_id (`<id>`) and dept handle (`<dept>`)**. If either
-is missing, stop and ask. Read: the task's card (`docs/TaskBoard.md`), the bounce
+is missing, stop and ask. Read: the task's card (`docs/board/`, or the `docs/TaskBoard.md` digest), the bounce
 reasons (`docs/reviews/<dept>.<id>.*.fail`), the dept's rows in `docs/复盘.md`, and its
 recent commits. Then attribute the root cause — exactly one:
 

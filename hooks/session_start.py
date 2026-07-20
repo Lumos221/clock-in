@@ -29,9 +29,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "skills", "orchestrate", "scripts"))
 try:
-    import hooklib
+    import hooklib, cardlib
 except Exception:
-    hooklib = None
+    hooklib = cardlib = None
 try:
     import board  # only for main_checkout (worktree piercing)
 except Exception:
@@ -61,6 +61,23 @@ def fat_cards_flag(tb_text):
         if b - a > CARD_MAX_CHARS:
             head = tb_text[a:b].splitlines()[0][4:].strip()
             fat.append((head.split("·", 1)[0].strip() or head)[:24])
+    return _fat_flag(fat)
+
+
+def fat_card_files_flag(bdir):
+    """Per-card-store version: measure each card FILE (fields + body — the body is
+    where a journal actually accumulates; the digest only carries fields)."""
+    fat = []
+    for c in cardlib.load(bdir):
+        try:
+            if os.path.getsize(c["_path"]) > CARD_MAX_CHARS:
+                fat.append("#%d" % c["id"])
+        except OSError:
+            pass
+    return _fat_flag(fat)
+
+
+def _fat_flag(fat):
     if not fat:
         return None
     return ("⚠ %d TaskBoard card(s) exceed %d chars (%s) — a card is a pointer, not a "
@@ -166,13 +183,18 @@ def context_for(root, cfg, audience="lead", agent_name=None):
         except Exception:
             pass
     tb = os.path.join(root, cfg.get("taskboard", "docs/TaskBoard.md"))
-    if os.path.exists(tb):
-        try:
+    try:
+        bdir = cardlib.board_dir(root, cfg) if cardlib else ""
+        if bdir and os.path.isdir(bdir):
+            flag = fat_card_files_flag(bdir)
+        elif os.path.exists(tb):
             flag = fat_cards_flag(open(tb, encoding="utf-8").read())
-            if flag:
-                parts.append(flag)
-        except Exception:
-            pass
+        else:
+            flag = None
+        if flag:
+            parts.append(flag)
+    except Exception:
+        pass
     if board is not None:
         try:
             tbv = board.load_taskboard(root)
@@ -235,35 +257,36 @@ def detach_stale_ids(root, cfg, data):
     mechanically detached (task_id → —), so the existing id-less flag takes over and
     the CEO never journals migration state into card headings (field cause, refcheck
     2026-07-15: titles like "#— (session-1 id retired; re-CREATE at dispatch)").
-    Field surgery only — machine-owned field, prose untouched; ambiguous cards left
-    alone. Returns how many were detached."""
-    if hooklib is None:
+    Field surgery on the per-card store (a legacy board migrates here — this runs
+    before any flag reads the result); prose/multi-id task_ids untouched. Returns
+    how many were detached."""
+    if hooklib is None or cardlib is None:
         return 0
     sid = str(data.get("session_id") or "")
     if not sid:
         return 0
     cfg_root = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
     store = os.path.join(cfg_root, "tasks", "session-%s" % sid[:8])
-    tb_path = os.path.join(root, cfg.get("taskboard", "docs/TaskBoard.md"))
     try:
-        text = open(tb_path, encoding="utf-8").read()
+        bdir, _ = cardlib.ensure_store(root, cfg)
     except Exception:
         return 0
-    stale = []
-    for m in re.finditer(r"(?m)^-\s*\*\*task_id:\*\*\s*(\d+)\s*$", text):
-        tid = m.group(1)
-        if not os.path.exists(os.path.join(store, "%s.json" % tid)):
-            stale.append(tid)
+    if not bdir:
+        return 0
     n = 0
-    for tid in dict.fromkeys(stale):
-        new = hooklib.tb_set_field(text, tid, "task_id", "—")
-        if new:
-            text, n = new, n + 1
+    for card in cardlib.load(bdir):
+        tid = cardlib.clean(card.get("task_id", ""))
+        if tid.isdigit() and not os.path.exists(os.path.join(store, "%s.json" % tid)):
+            try:
+                cardlib.set_fields(card, task_id=cardlib.EMPTY)
+                n += 1
+            except Exception:
+                pass
     if n:
         try:
-            hooklib.tb_write(tb_path, text)
+            cardlib.regen_digest(root, cfg)
         except Exception:
-            return 0
+            pass
     return n
 
 
@@ -551,7 +574,16 @@ def main():
             audience, agent_name = "dept", name
     except Exception:
         pass
+    store_notice = None
     if audience == "lead":
+        try:
+            # migrate a legacy board now (one-time, atomic) and freshen the digest
+            # after out-of-session card edits (Obsidian / the 分公司 branch session)
+            _, store_notice = cardlib.ensure_store(root, cfg)
+            if cardlib.digest_stale(root, cfg):
+                cardlib.regen_digest(root, cfg)
+        except Exception:
+            pass
         try:
             detach_stale_ids(root, cfg, data)  # before flags — the id-less flag reads the result
         except Exception:
@@ -566,7 +598,7 @@ def main():
             pass
     if audience == "lead":
         try:
-            flags = pane_flags(root, data)
+            flags = ([store_notice] if store_notice else []) + pane_flags(root, data)
             try:
                 # auto-patch BEFORE the stamp flag: parity reached → stamp advanced
                 # in cfg on disk AND in this dict → the /recruit prescription stays
