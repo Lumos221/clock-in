@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.31] — 2026-07-20
+### Added
+- **`priority:` card field** (Boss's ask). Values `P0` (drop everything) · `P1` (next) · `P2`/unset (normal) — chosen so plain lexical sort orders correctly everywhere (`P0 < P1 < P2 < —`), no mapping table anywhere. First-class through the chain: cardlib FIELDS (round-trips, digest bullet, migration-safe), Boss-Board kanban (Todo/In-progress columns sort by priority tier then board order; P0 coral / P1 amber pills on card faces), Bases views (column + priority-then-id sort in the template AND refcheck's live Board.base, her UI tweaks preserved). Ownership doctrine: Boss/CEO set it (card file or an Obsidian cell edit — Bases adds the property to the note); depts' only frontmatter write stays `status:` (SOP line hardened); dispatch/queue order and the branch claim order honour it (SKILL + branch skill).
+
 ## [0.9.30] — 2026-07-20
 ### Fixed
 - **Migration no longer blocked by a pre-existing board dir.** `ensure_store` keyed "store is live" on directory existence — so a pre-staged `Board.base`, a `.DS_Store`, or a folder Obsidian created would silently veto the legacy-board migration forever. Live = *any card file present* now; migrating into an existing dir moves the built cards in file-by-file (deterministic output makes a racing double-move benign), the atomic whole-dir rename stays as the fast path. Lets a project stage its Obsidian view before its first post-0.9.28 session start.

@@ -316,7 +316,7 @@ def parse_taskboard(path):
             status = "done"  # tombstone heading, no status field → file as done, not Todo
         tasks.append({"label": clean(label) or head, "name": clean(name) or clean(label),
                       "dept": field("dept"), "task_id": field("task_id"),
-                      "status": status,
+                      "status": status, "priority": field("priority"),
                       "blocked_on": field("blocked_on"), "what": field("what")})
     shipped = []
     m = re.search(r"<!-- SHIPPED:START -->(.*?)<!-- SHIPPED:END -->", text, re.S)
@@ -705,6 +705,8 @@ html.dark .glyph { color: #6f6d66; }
 .pill.pj { background: #f0ddd2; color: #a2542f; }
 .pill.pt { background: #eae6d9; color: #6b6a62; }
 .pill.px { background: #d9e4ea; color: #3d6a80; }  /* 分公司 branch-office lane */
+.pill.pr-0 { background: #e8b4a0; color: #7c2d12; }  /* P0 — drop everything */
+.pill.pr-1 { background: #f0ddb8; color: #7c5a12; }  /* P1 — next up */
 .chip b { font-variant-numeric: tabular-nums; }
 code { font: .85em ui-monospace, "SF Mono", Menlo, monospace;
        background: #eae6d9; border-radius: 4px; padding: 0 4px; }
@@ -781,6 +783,8 @@ html.dark .chip { border-color: #4a4945; color: #b8b5ac; }
 html.dark .pill.pj { background: #453026; color: #e09b78; }
 html.dark .pill.pt { background: #3a3935; color: #b8b5ac; }
 html.dark .pill.px { background: #263c48; color: #86b6cf; }
+html.dark .pill.pr-0 { background: #4a2318; color: #f0a284; }
+html.dark .pill.pr-1 { background: #453a1c; color: #dcc27a; }
 html.dark code { background: #3e3d3a; }
 html.dark a { color: #e08262; text-decoration-color: rgba(224,130,98,.4); }
 html.dark a:hover { text-decoration-color: #e08262; }
@@ -968,7 +972,8 @@ function tCard(t){
   // task_id (session-scoped plumbing) the neutral one. Non-#N labels stay plain.
   const lab = /^#\d+$/.test(t.label) ? `<span class='pill pj'>${esc(t.label)}</span>` : md(t.label);
   const id = t.task_id && t.label !== '#'+t.task_id ? `<span class='pill pt'>#${esc(t.task_id)}</span>` : '';
-  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${lab}${id}</span>${badge}
+  const pp = /^P[01]$/.test(t.priority||'') ? `<span class='pill pr-${t.priority==='P0'?'0':'1'}'>${t.priority}</span>` : '';
+  return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${pp}${lab}${id}</span>${badge}
     ${t.name && t.name !== t.label ? `<div class="nm">${md(t.name)}</div>` : ''}
     <div class="sub">${esc(t.dept)}${t.external?` <span class='pill px'>分</span>`:''}${t.what?` · `+md(t.what):''}</div></div>`;
 }
@@ -1027,8 +1032,12 @@ async function tick(){
     document.getElementById('hist').innerHTML = resolved.length
       ? resolved.slice(0,5).map(e=>askRow(e,T,e.updated)).join('')
       : `<p class='empty'>—</p>`;
-    const todo = tb.tasks.filter(t=>['todo','blocked'].includes(t.status)||!t.status);
-    const prog = tb.tasks.filter(t=>['doing','review'].includes(t.status));
+    // Priority sort inside the working columns: P0 < P1 < P2 < unset lexically; JS
+    // sort is stable, so board (id) order holds within a tier. Done keeps recency.
+    const pr = t=>/^P\d$/.test(t.priority||'') ? t.priority : 'P8';
+    const psort = arr=>arr.slice().sort((a,b)=>pr(a).localeCompare(pr(b)));
+    const todo = psort(tb.tasks.filter(t=>['todo','blocked'].includes(t.status)||!t.status));
+    const prog = psort(tb.tasks.filter(t=>['doing','review'].includes(t.status)));
     const doneT = tb.tasks.filter(t=>t.status==='done');
     const shipped = tb.shipped||[];
     // Done is a glance at momentum, not the archive (that's BACKLOG.md): the 5 most

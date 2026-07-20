@@ -52,10 +52,10 @@ class RoundTrip(unittest.TestCase):
 
     def test_parse_render_preserves_extras_and_body(self):
         text = cardlib.render_card({"id": 5, "name": "x", "status": "todo"},
-                                   ["priority: high"], "body [[link]]\n")
+                                   ["severity: high"], "body [[link]]\n")
         meta, extras, body = cardlib.parse_card(text)
         self.assertEqual(meta["name"], "x")
-        self.assertEqual(extras, ["priority: high"])
+        self.assertEqual(extras, ["severity: high"])
         self.assertIn("[[link]]", body)
         self.assertEqual(cardlib.parse_card(cardlib.render_card(meta, extras, body)),
                          (meta, extras, body))
@@ -65,6 +65,16 @@ class RoundTrip(unittest.TestCase):
 
 
 class Store(unittest.TestCase):
+    def test_priority_field_first_class(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = cardlib.new_card(d, "urgent", priority="P0")
+            b = cardlib.new_card(d, "normal")
+            got = {c["name"]: c["priority"] for c in cardlib.load(d)}
+            self.assertEqual(got, {"urgent": "P0", "normal": "—"})
+            # lexical ordering P0 < P1 < P2 < — holds by construction (Bases + panel
+            # sort with no mapping table)
+            self.assertTrue("P0" < "P1" < "P2" < "—")
+
     def test_new_card_mints_next_free_id(self):
         with tempfile.TemporaryDirectory() as d:
             a = cardlib.new_card(d, "first")

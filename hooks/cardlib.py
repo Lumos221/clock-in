@@ -28,7 +28,11 @@ No side effects at import; callers stay fail-open."""
 import os, re
 from datetime import datetime
 
-FIELDS = ("dept", "task_id", "status", "blocked_on", "what", "done-when", "artifacts")
+FIELDS = ("dept", "task_id", "status", "priority", "blocked_on", "what", "done-when",
+          "artifacts")
+# priority: P0 (drop everything) · P1 (next) · P2/unset (normal). Lexical sort works
+# by construction — P0 < P1 < P2 < the — placeholder — so Bases and the panel sort
+# it with no mapping table. Boss/CEO-owned; depts never touch it.
 EMPTY = "—"
 CARD_RE = re.compile(r"^(\d+)-.*\.md$")
 TOMB_RE = re.compile(r"~~|\b(?:SHIPPED|RETIRED)\b|card closes")  # = board.TOMB_RE

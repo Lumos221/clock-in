@@ -17,9 +17,12 @@ views:
       - dept
       - task_id
       - status
+      - priority
       - blocked_on
       - what
     sort:
+      - property: priority
+        direction: ASC
       - property: id
         direction: ASC
   - type: cards
@@ -31,8 +34,11 @@ views:
       - name
       - dept
       - status
+      - priority
       - what
     sort:
+      - property: priority
+        direction: ASC
       - property: id
         direction: ASC
   - type: table
