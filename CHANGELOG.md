@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.32] — 2026-07-20
+### Fixed
+- **Dead-letter sentinel** (field case, refcheck 2026-07-20, day one of the mail lane): the CEO commissioned a dept report as a file-drop and it landed in `docs/board/mail/` as plain markdown — no `to:`/`status:` frontmatter, so Bases showed empty columns and the unread nudge (correctly) ignored it: a letter no addressee could ever see. `stop_mail` now sweeps the mailbox for frontmatter-less/unaddressed `.md` files and nags the **CEO office as postmaster** (one nudge per state; branches see only their own mail): add the frontmatter or move the file out. Doctrine hardened in the dept SOP: the mailbox is inter-office post (CEO↔分公司) ONLY — dept reports never go there, commissioned file-drops land in the dept's own folder.
+
 ## [0.9.31] — 2026-07-20
 ### Added
 - **`priority:` card field** (Boss's ask). Values `P0` (drop everything) · `P1` (next) · `P2`/unset (normal) — chosen so plain lexical sort orders correctly everywhere (`P0 < P1 < P2 < —`), no mapping table anywhere. First-class through the chain: cardlib FIELDS (round-trips, digest bullet, migration-safe), Boss-Board kanban (Todo/In-progress columns sort by priority tier then board order; P0 coral / P1 amber pills on card faces), Bases views (column + priority-then-id sort in the template AND refcheck's live Board.base, her UI tweaks preserved). Ownership doctrine: Boss/CEO set it (card file or an Obsidian cell edit — Bases adds the property to the note); depts' only frontmatter write stays `status:` (SOP line hardened); dispatch/queue order and the branch claim order honour it (SKILL + branch skill).

@@ -66,6 +66,27 @@ class MailNudge(unittest.TestCase):
             self.assertIn("for-mkt.md", out)
             self.assertNotIn("for-ceo.md", out)
 
+    def test_dead_letter_nags_the_postmaster_only(self):
+        # field case 2026-07-20: a dept report file-dropped without frontmatter sat
+        # invisible — empty columns in Bases, no nudge ever. The CEO office now
+        # hears about it; branch offices don't (not their mailroom).
+        with tempfile.TemporaryDirectory() as d:
+            md = _proj(d)
+            with open(os.path.join(md, "20260720-Frontend-172-leg1-report.md"), "w") as f:
+                f.write("# raw report, no frontmatter\n")
+            out = sm.run({"cwd": d, "hook_event_name": "Stop"}, None)
+            self.assertIn("DEAD letter", out)
+            self.assertIn("Frontend-172-leg1-report", out)
+            # same state → silent; fixing the letter disarms
+            self.assertIsNone(sm.run({"cwd": d, "hook_event_name": "Stop"}, None))
+        with tempfile.TemporaryDirectory() as d:
+            md = _proj(d)
+            with open(os.path.join(d, ".claude", "office.json"), "w") as f:
+                f.write('{"office": "Marketing"}')
+            with open(os.path.join(md, "dead.md"), "w") as f:
+                f.write("# no frontmatter\n")
+            self.assertIsNone(sm.run({"cwd": d, "hook_event_name": "Stop"}, None))
+
     def test_inactive_or_no_mail_dir_silent(self):
         with tempfile.TemporaryDirectory() as d:
             os.makedirs(os.path.join(d, ".claude"))

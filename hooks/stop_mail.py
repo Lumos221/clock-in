@@ -37,14 +37,18 @@ def identity(local_root):
         return "CEO"
 
 
-def unread_for(mail_dir, office):
-    """[(filename, from, subject-ish)] of unread notes addressed to this office."""
+def sweep(mail_dir, office):
+    """(mine, dead): unread notes addressed to this office, and DEAD LETTERS — .md
+    files in the mailbox lacking `to:`/`status:` frontmatter. A dead letter is
+    invisible to every addressee forever (field case, refcheck 2026-07-20: a
+    commissioned dept report file-dropped as plain markdown sat with empty columns
+    and no nudge), so the CEO office gets told instead of nobody."""
     me = office.strip().lower()
-    mine = []
+    mine, dead = [], []
     try:
         names = sorted(os.listdir(mail_dir))
     except OSError:
-        return mine
+        return mine, dead
     for fn in names:
         if not fn.endswith(".md"):
             continue
@@ -53,15 +57,15 @@ def unread_for(mail_dir, office):
                                           encoding="utf-8").read())
         except OSError:
             continue
+        to = (fm.get("to") or "").strip().lower()
+        if not to or not (fm.get("status") or "").strip():
+            dead.append(fn)
+            continue
         if (fm.get("status") or "").strip().lower() != "unread":
             continue
-        to = (fm.get("to") or "").strip().lower()
-        if not to:
-            continue
-        hit = to == me or (me == "ceo" and to in CEO_ALIASES)
-        if hit:
+        if to == me or (me == "ceo" and to in CEO_ALIASES):
             mine.append((fn, fm.get("from") or "?", fm.get("re") or ""))
-    return mine
+    return mine, dead
 
 
 def run(data, text):
@@ -91,10 +95,13 @@ def run(data, text):
     if not os.path.isdir(mail_dir):
         return None
     office = identity(local_root)
-    mine = unread_for(mail_dir, office)
-    if not mine:
+    mine, dead = sweep(mail_dir, office)
+    if office.strip().lower() != "ceo":
+        dead = []  # the CEO office is the postmaster; branches see only their mail
+    if not mine and not dead:
         return None
-    sig = hashlib.md5(json.dumps(sorted(f for f, _, _ in mine)).encode("utf-8")).hexdigest()
+    sig = hashlib.md5(json.dumps([sorted(f for f, _, _ in mine),
+                                  sorted(dead)]).encode("utf-8")).hexdigest()
     state = os.path.join(local_root, ".claude", "mail-nudge-state")
     try:
         if open(state, encoding="utf-8").read().strip() == sig:
@@ -107,12 +114,21 @@ def run(data, text):
             f.write(sig)
     except Exception:
         return None  # can't cap → never risk a nudge loop
-    lst = " · ".join("%s (from %s%s)" % (f, s, " re %s" % r if r else "")
-                     for f, s, r in mine[:4]) + ("…" if len(mine) > 4 else "")
-    return ("📮 mail: %d unread for %s — %s. Read each (%s/), act or reply (a reply "
-            "is a NEW mail note: from/to/re/status: unread), then flip its "
-            "`status: read`. (One nudge per unread-set — new mail re-arms.)"
-            % (len(mine), office, lst, os.path.relpath(mail_dir, root)))
+    parts = []
+    if mine:
+        lst = " · ".join("%s (from %s%s)" % (f, s, " re %s" % r if r else "")
+                         for f, s, r in mine[:4]) + ("…" if len(mine) > 4 else "")
+        parts.append("%d unread for %s — %s. Read each (%s/), act or reply (a reply "
+                     "is a NEW mail note: from/to/re/status: unread), then flip its "
+                     "`status: read`."
+                     % (len(mine), office, lst, os.path.relpath(mail_dir, root)))
+    if dead:
+        parts.append("%d DEAD letter(s) with no to:/status: frontmatter (%s) — "
+                     "invisible to every addressee. Add the mail frontmatter, or move "
+                     "the file out (the mailbox is for ADDRESSED inter-office notes; "
+                     "dept reports go via SendMessage / the dept's own folder)."
+                     % (len(dead), " · ".join(dead[:3]) + ("…" if len(dead) > 3 else "")))
+    return "📮 mail: " + " ".join(parts) + " (One nudge per state — changes re-arm.)"
 
 
 def main():
