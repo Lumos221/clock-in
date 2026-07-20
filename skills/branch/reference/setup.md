@@ -4,10 +4,11 @@ Boss-driven bootstrap for running an external dept (e.g. Marketing) as its own s
 
 ## 1 · Second account, isolated CLI
 
-- **The invariant, however achieved:** the branch session runs logged into the BRANCH account while the main session keeps the main account, both live at once. The mechanism is the Boss's (e.g. `claude swap` to the branch account, then start the branch session — sessions stay bound to the account they started under); fallbacks: `CLAUDE_CONFIG_DIR=~/.claude-<handle> claude` + `/login`, or a separate macOS user.
-- **Verify, don't assume:** `/status` in BOTH sessions must show different accounts — check once after starting the pair, whatever the mechanism.
-- Branch session: clock-in plugin available (a swapped account sharing the config dir already has it; a separate config dir needs its own install), model via `/model` (subject to that account's plan).
-- Keep both installs on the SAME plugin version — the offices share hooks' on-disk formats.
+- **The invariant:** the branch session runs on the BRANCH account while the main session keeps the main account, BOTH LIVE AT ONCE — and stays there across token refreshes.
+- **In-place account switchers (e.g. claude-swap) do NOT give this on their own:** they swap the single active Keychain credential, and every running Claude Code follows the active account at its next token refresh (claude-swap's autoswitch is built exactly so running sessions pick up the new account) — two concurrent sessions would converge onto one account. Per-account session profiles isolate state/history, not runtime credentials.
+- **The safe mechanism — pin the branch by env token:** once, logged into the branch account, run `claude setup-token` (long-lived OAuth token); start every branch session as `CLAUDE_CODE_OAUTH_TOKEN=<that-token> claude` (env credential wins over the Keychain slot, immune to swaps). The main session keeps its normal flow. Keep the branch account OUT of any autoswitch rotation, or the main office rotates onto it.
+- **Verify, don't assume:** `/status` in BOTH sessions must show different accounts — check once after starting the pair.
+- Branch session: clock-in plugin available in whatever config dir it runs under, model via `/model` (subject to that account's plan). Keep both installs on the SAME plugin version — the offices share hooks' on-disk formats.
 
 ## 2 · Browser (claude-in-chrome)
 
