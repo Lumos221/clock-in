@@ -204,6 +204,40 @@ class Create(unittest.TestCase):
             self.assertEqual(_digest(d), TASKBOARD)  # not even migrated
 
 
+class ExternalLane(unittest.TestCase):
+    """0.9.29 分公司: external cards never join the platform lifecycle — a CREATE
+    targeting one (by number or name) is refused with a trace, not filled, and
+    never birthed as a duplicate."""
+
+    def _proj_ext(self, d):
+        board_md = TASKBOARD.replace(
+            "### TASK-003 · hand-written, unregistered\n- **dept:** QA",
+            "### #141 · MARKETING-LAUNCH — listing copy\n- **dept:** Marketing")
+        os.makedirs(os.path.join(d, ".claude"), exist_ok=True)
+        with open(os.path.join(d, ".claude", "orchestrate.json"), "w") as f:
+            f.write('{"active":true,"external":["Marketing"]}')
+        os.makedirs(os.path.join(d, "docs"), exist_ok=True)
+        with open(os.path.join(d, "docs", "TaskBoard.md"), "w", encoding="utf-8") as f:
+            f.write(board_md)
+
+    def test_create_targeting_external_card_refused_with_trace(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj_ext(d)
+            ts.run(_payload(d, "TaskCreate",
+                            {"subject": "#141 MARKETING-LAUNCH — listing copy"}, {"id": "9"}))
+            card = [c for c in _cards(d) if c["id"] == 141][0]
+            self.assertEqual(card["task_id"], "—")            # never registered
+            self.assertIsNone(cardlib.find_task(_cards(d), "9"))  # no duplicate born
+            misses = open(os.path.join(d, ".claude", "marker-misses.log")).read()
+            self.assertIn("分公司", misses)
+
+    def test_internal_cards_unaffected_by_external_flag(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj_ext(d)
+            ts.run(_payload(d, "TaskCreate", {"subject": "wire the API"}, {"id": "9"}))
+            self.assertIsNotNone(cardlib.find_task(_cards(d), "9"))
+
+
 class Update(unittest.TestCase):
     def _migrated(self, d):
         _proj(d)

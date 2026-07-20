@@ -329,12 +329,22 @@ def parse_taskboard(path):
 
 def load_taskboard(root):
     rel = "docs/TaskBoard.md"
+    ext = []
     try:
-        rel = json.load(open(os.path.join(root, ".claude", "orchestrate.json"),
-                             encoding="utf-8")).get("taskboard", rel)
+        cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"),
+                             encoding="utf-8"))
+        rel = cfg.get("taskboard", rel)
+        ext = [str(h).strip().lower() for h in (cfg.get("external") or [])]
     except Exception:
         pass
-    return parse_taskboard(os.path.join(root, rel))
+    tb = parse_taskboard(os.path.join(root, rel))
+    if ext:
+        # 分公司 (branch-office) depts run outside this session's team — badge their
+        # cards so the Boss reads the lane at a glance (0.9.29)
+        for t in tb["tasks"]:
+            d = (t.get("dept") or "").strip().lower()
+            t["external"] = bool(d) and any(e in d for e in ext)
+    return tb
 
 
 # ---------------------------------------------------------------- project root
@@ -694,6 +704,7 @@ html.dark .glyph { color: #6f6d66; }
         font-variant-numeric: tabular-nums; }
 .pill.pj { background: #f0ddd2; color: #a2542f; }
 .pill.pt { background: #eae6d9; color: #6b6a62; }
+.pill.px { background: #d9e4ea; color: #3d6a80; }  /* 分公司 branch-office lane */
 .chip b { font-variant-numeric: tabular-nums; }
 code { font: .85em ui-monospace, "SF Mono", Menlo, monospace;
        background: #eae6d9; border-radius: 4px; padding: 0 4px; }
@@ -769,6 +780,7 @@ html.dark .count { background: #3e3d3a; color: #b8b5ac; }
 html.dark .chip { border-color: #4a4945; color: #b8b5ac; }
 html.dark .pill.pj { background: #453026; color: #e09b78; }
 html.dark .pill.pt { background: #3a3935; color: #b8b5ac; }
+html.dark .pill.px { background: #263c48; color: #86b6cf; }
 html.dark code { background: #3e3d3a; }
 html.dark a { color: #e08262; text-decoration-color: rgba(224,130,98,.4); }
 html.dark a:hover { text-decoration-color: #e08262; }
@@ -958,7 +970,7 @@ function tCard(t){
   const id = t.task_id && t.label !== '#'+t.task_id ? `<span class='pill pt'>#${esc(t.task_id)}</span>` : '';
   return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${lab}${id}</span>${badge}
     ${t.name && t.name !== t.label ? `<div class="nm">${md(t.name)}</div>` : ''}
-    <div class="sub">${esc(t.dept)}${t.what?` · `+md(t.what):''}</div></div>`;
+    <div class="sub">${esc(t.dept)}${t.external?` <span class='pill px'>分</span>`:''}${t.what?` · `+md(t.what):''}</div></div>`;
 }
 function col(title, color, cls, inner, n){
   return `<div class="col ${cls}"><h3><span class="dot" style="border-color:${color}"></span>${title}

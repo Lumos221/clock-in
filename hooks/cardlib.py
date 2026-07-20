@@ -214,6 +214,22 @@ def find_task(cards, task_id):
     return None
 
 
+def frontmatter(text):
+    """ALL scalar frontmatter keys of a note (mail, or anything note-shaped) —
+    {} when there's no fence. Same YAML subset as cards; no rewrite support."""
+    if not (text or "").startswith("---"):
+        return {}
+    close = text.find("\n---", 3)
+    if close < 0:
+        return {}
+    out = {}
+    for line in text[text.index("\n") + 1:close + 1].splitlines():
+        m = re.match(r"([A-Za-z][\w-]*):(.*)$", line)
+        if m:
+            out[m.group(1)] = _unquote(m.group(2))
+    return out
+
+
 # ---------------------------------------------------------------- digest
 
 DIGEST_NOTE = ("<!-- GENERATED SECTION — cards live in %s/ (one note per card); edit "

@@ -20,6 +20,31 @@ def find_root(start):
         d = parent
 
 
+def externals(cfg):
+    """Lower-cased base handles of the 分公司 (branch-office) depts — orchestrate.json
+    `external: ["Marketing"]`, additive beside `roster` (entries stay in roster too:
+    the brief file is the branch session's identity). An external dept runs as its
+    OWN session on its own account: never a teammate, never on the platform task
+    lifecycle — its cards live purely on the durable #NNN."""
+    out = set()
+    for h in (cfg or {}).get("external") or []:
+        h = re.sub(r"-\d+$", "", str(h)).strip().lower()
+        if h:
+            out.add(h)
+    return out
+
+
+def is_external(cfg, handle_or_dept):
+    """True when a handle / card dept field names an external dept (base match —
+    'Marketing-2' and a prose 'Marketing (branch)' both count)."""
+    ext = externals(cfg)
+    if not ext:
+        return False
+    s = str(handle_or_dept or "").strip().lower()
+    base = re.sub(r"-\d+$", "", s)
+    return base in ext or any(e in s for e in ext)
+
+
 def last_assistant_text(transcript_path):
     """Text of the LAST assistant message in the transcript JSONL — and only that one.
     Walking further back would replay markers from an earlier, already-processed turn

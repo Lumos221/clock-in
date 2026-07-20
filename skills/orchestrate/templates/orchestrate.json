@@ -7,6 +7,7 @@
   "backlog": "docs/BACKLOG.md",
   "decisions": "docs/DECISIONS.md",
   "roster": [],
+  "external": [],
   "redlines": [],
   "thresholds": {
     "bounce_diagnose": 2,

@@ -113,12 +113,32 @@ def on_create(root, cfg, ti, resp):
             "task_id %s recycled by TaskCreate '%s' — stale card detached" % (tid, subject)])
         cards = cardlib.load(bdir)
 
+    # 分公司 cards never join the platform lifecycle — registering one would pull the
+    # branch's lane through the CEO team's gates. Not a fill candidate; a CREATE that
+    # targeted one by number is refused with a trace instead of birthing a duplicate.
+    unregistered = [c for c in cards if not cardlib.clean(c.get("task_id", ""))]
+    external = [c for c in unregistered if hooklib.is_external(cfg, c.get("dept"))]
+    unregistered = [c for c in unregistered if c not in external]
+    sub_num_probe = _card_number(subject)
+
+    def _targets(c):
+        if sub_num_probe is not None and c["id"] == sub_num_probe:
+            return True
+        return (subject in (c.get("name"), _head(c))
+                or (_norm(subject) and _norm(subject) in (_norm(c.get("name")),
+                                                          _norm(_head(c)))))
+    hit = next((c for c in external if _targets(c)), None)
+    if hit is not None:
+        hooklib.log_marker_misses(root, "task-sync", [
+            "TaskCreate '%s' targets external (分公司) card #%d — not registered; "
+            "the branch session owns that lane" % (subject, hit["id"])])
+        return
+
     # the CEO hand-wrote this card first, then registered it → fill, don't duplicate.
     # Match tiers: ① exact name/head equality (historic behaviour) ② the durable card
     # number the subject leads with — ids are unique in the store, so #NNN names at
     # most one card ③ normalised equality (separator/space/case drift, exactly one
     # candidate — ambiguity falls through to a birth, never a guess).
-    unregistered = [c for c in cards if not cardlib.clean(c.get("task_id", ""))]
     for c in unregistered:
         if subject and subject in (c.get("name"), _head(c)):
             cardlib.set_fields(c, task_id=tid)

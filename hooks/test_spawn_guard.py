@@ -298,5 +298,43 @@ class PaneSentinel(unittest.TestCase):
             self.assertEqual(self._flags(d), [])
 
 
+class ExternalLane(unittest.TestCase):
+    """0.9.29 分公司: an external dept runs as its own branch session — an in-team
+    spawn under its name (bare or suffixed) double-dispatches the lane; block it
+    regardless of model params, before any team config exists."""
+
+    def _run(self, d, tool_input):
+        import subprocess
+        hook = os.path.join(HERE, "pretool_spawn_guard.py")
+        payload = {"cwd": d, "session_id": SID, "tool_name": "Agent",
+                   "tool_input": tool_input}
+        r = subprocess.run([sys.executable, hook], input=json.dumps(payload),
+                           text=True, capture_output=True, timeout=20)
+        return r.returncode, r.stderr
+
+    def _proj_ext(self, d):
+        os.makedirs(os.path.join(d, ".claude"), exist_ok=True)
+        with open(os.path.join(d, ".claude", "orchestrate.json"), "w") as f:
+            f.write('{"active":true,"roster":["RnD","Marketing"],"external":["Marketing"]}')
+
+    def test_external_dept_spawn_blocked_even_with_model(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj_ext(d)
+            for name in ("Marketing", "Marketing-2"):
+                code, err = self._run(d, {"name": name, "subagent_type": "Marketing",
+                                          "model": "sonnet"})
+                self.assertEqual(code, 2, name)
+                self.assertIn("分公司", err)
+
+    def test_internal_dept_and_one_shot_untouched(self):
+        with tempfile.TemporaryDirectory() as d:
+            self._proj_ext(d)
+            code, _ = self._run(d, {"name": "RnD", "subagent_type": "RnD",
+                                    "model": "sonnet"})
+            self.assertEqual(code, 0)
+            code, _ = self._run(d, {"subagent_type": "Marketing"})  # one-shot: no name
+            self.assertEqual(code, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

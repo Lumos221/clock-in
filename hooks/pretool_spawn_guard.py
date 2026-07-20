@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""PreToolUse hook (Agent) — two guards on teammate spawns. exit 2 = block (stderr
+"""PreToolUse hook (Agent) — guards on teammate spawns. exit 2 = block (stderr
 fed to the model); exit 0 = allow. Fail-open (any doubt → allow).
 
+0) 分公司 lane (0.9.29): block spawning a teammate under an EXTERNAL dept's name
+   (orchestrate.json `external`) — that dept runs as its own branch session; an
+   in-team twin would double-dispatch the lane.
 1) Spawn-collision: block spawning a teammate whose base handle already has a LIVE
    member in this session's team.
 2) Brain-regime tier: in a Fable-CEO session, block a NAMED teammate spawn carrying
@@ -136,14 +139,19 @@ def session_model(transcript_path):
     return ""
 
 
-def active(root):
+def org_cfg(root):
+    """The active project's orchestrate.json dict, else None."""
     if not root:
-        return False
+        return None
     try:
         cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
     except Exception:
-        return False
-    return bool(cfg.get("active"))
+        return None
+    return cfg if cfg.get("active") else None
+
+
+def active(root):
+    return org_cfg(root) is not None
 
 
 def main():
@@ -159,8 +167,20 @@ def main():
     if not name or name == "team-lead":
         return  # one-shot subagent — no collision possible
     root = hooklib.find_root(data.get("cwd") or os.getcwd())
-    if not active(root):
+    ocfg = org_cfg(root)
+    if ocfg is None:
         return
+    # 分公司 depts are NOT teammates: an external dept runs as its own session (own
+    # account, own browser), syncing through the card store — an in-team spawn under
+    # its name would double-dispatch the lane (0.9.29).
+    if hooklib.is_external(ocfg, base(name)):
+        sys.stderr.write(
+            "⛔ 分公司 lane: '%s' is an EXTERNAL dept (orchestrate.json `external`) — it "
+            "runs as its own branch session, never as a teammate. Leave its cards "
+            "(dept: %s) on the board for the branch to claim; message it via the mail "
+            "lane (docs/board/mail/). To bring the dept back in-house, remove it from "
+            "`external` first." % (name, base(name)))
+        sys.exit(2)
     # The reviewers are ONE-SHOT subagents by contract — independence comes from a
     # fresh instance per invocation, and a named reviewer becomes a teammate that
     # holds a pane, lands on the members roster and lingers as a corpse (field case

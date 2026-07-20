@@ -60,6 +60,7 @@ Every domain = a **concise source-of-truth view** + the **detailed log/product**
 | `docs/DECISIONS.md` | **decision log** — every decision + its **why**, logged once | **CEO** prose | on-demand; SoT gists the vital ones |
 | `docs/CANON.md` | **canonical-answer registry** — current authoritative file per answered question | **`canon.py`** (auto, via `@CANON` hook) | read-first by depts (small) |
 | `docs/<其领域>/` | dept work products; the **canonical** one earns a `CANON.md` row | the dept | on-demand |
+| `docs/board/mail/` | **inter-office mail** (分公司 lane) — one note per message (`from`/`to`/`re`/`status: unread`) | either office writes; the addressee flips `status: read` (a Stop nudge backs the sweep) | on-demand |
 | `docs/reviews/` · `复盘.md` · `handover-*` | gate ledger · 督察 memory · handovers | 审查官 · 督察 · departing dept | on-demand |
 
 **"Canonical file"** = a dept's current authoritative answer to a question the project acts on — one pointer per answered question (full definition → `reference/departments.md`).
@@ -117,7 +118,9 @@ When direct work starts: spawn the dept if it isn't up, tell the Boss **"go to `
 
 ## 4 · Meetings, decisions & CEO outputs
 
-Meetings are **events**, not stored files — outcomes land in `TaskBoard.md` / `DECISIONS.md`.
+**分公司 (external depts).** A dept in orchestrate.json `external` (e.g. Marketing on its own Claude account for its own browser) is NOT yours to spawn or register: it runs as its own session (the `branch` skill), claims its `dept:`-designated cards off the shared board itself, gates through the same L2 审查官 (`x<NNN>` review keys), and self-merges only path-disjoint diffs. You reach it by **mail** (`docs/board/mail/` note, `to: <handle>`), never SendMessage; its cards stay off the platform widget (guards enforce all of this mechanically). Its Boss-approvals happen in ITS session, not yours.
+
+Meetings are **events**, not stored files — outcomes land in the board / `DECISIONS.md`.
 
 - **例会** = a CEO status brief + the Boss's direction back; outcomes flow into TaskBoard / `DECISIONS.md`, never archived.
 - **董事会** = pull the Boss for stacked/blocked calls — fire when **decisions stack to ≥N (default 3)** or **the project is blocked on the Boss**. Item kinds: **拍板项** (pick A/B) · **签字项** (准/驳 a 法务部-flagged legal call, §5). Tag 🔴 临时 (pull now) / ⚪ 例行 (batch). Each call → `DECISIONS.md` (format → `templates/DECISIONS.md`).

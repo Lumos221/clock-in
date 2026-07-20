@@ -96,6 +96,25 @@ class TombstoneCards(unittest.TestCase):
             self.assertNotIn("OLD-X", reg_flag)               # not told to register a tombstone
 
 
+class ExternalLaneFlags(unittest.TestCase):
+    """0.9.29 分公司: an external dept's cards are id-less BY DESIGN — the
+    register-via-TaskCreate prescription must skip them."""
+
+    def test_external_idless_card_not_prescribed_registration(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, cards=("### #141 · MARKETING-LAUNCH\n- **dept:** Marketing\n"
+                            "- **task_id:** —\n- **status:** todo\n"))
+            with open(os.path.join(d, ".claude", "orchestrate.json"), "w") as f:
+                f.write('{"active":true,"external":["Marketing"]}')
+            self.assertNotIn("carry no platform task_id", _ctx(d))
+
+    def test_internal_idless_card_still_flagged(self):
+        with tempfile.TemporaryDirectory() as d:
+            _proj(d, cards=("### #141 · MARKETING-LAUNCH\n- **dept:** Marketing\n"
+                            "- **task_id:** —\n- **status:** todo\n"))
+            self.assertIn("carry no platform task_id", _ctx(d))  # no external flag set
+
+
 class DecisionsSentinel(unittest.TestCase):
     """Token-free lookup/impl discipline over DECISIONS.md — field causes (refcheck):
     tagged rulings without a CANON row make lookups grep-luck; rulings whose impl was

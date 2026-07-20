@@ -1,0 +1,65 @@
+filters:
+  and:
+    - file.inFolder("docs/board")
+    - file.ext == "md"
+views:
+  - type: table
+    name: Active
+    filters:
+      and:
+        - file.folder == "docs/board"
+    groupBy:
+      property: status
+      direction: ASC
+    order:
+      - id
+      - name
+      - dept
+      - task_id
+      - status
+      - blocked_on
+      - what
+    sort:
+      - property: id
+        direction: ASC
+  - type: cards
+    name: Cards
+    filters:
+      and:
+        - file.folder == "docs/board"
+    order:
+      - name
+      - dept
+      - status
+      - what
+    sort:
+      - property: id
+        direction: ASC
+  - type: table
+    name: Done
+    filters:
+      and:
+        - file.folder == "docs/board/done"
+    order:
+      - id
+      - name
+      - dept
+      - shipped
+      - sha
+    sort:
+      - property: shipped
+        direction: DESC
+  - type: table
+    name: Mail
+    filters:
+      and:
+        - file.folder == "docs/board/mail"
+    order:
+      - file.name
+      - from
+      - to
+      - re
+      - status
+    sort:
+      - property: file.name
+        direction: DESC

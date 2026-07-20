@@ -198,7 +198,10 @@ def context_for(root, cfg, audience="lead", agent_name=None):
     if board is not None:
         try:
             tbv = board.load_taskboard(root)
-            idless = [t for t in tbv["tasks"] if not t["task_id"]]
+            # 分公司 cards live purely on the durable #NNN — never registered to the
+            # CEO team's widget, so the register prescription would be WRONG for them
+            idless = [t for t in tbv["tasks"] if not t["task_id"]
+                      and not hooklib.is_external(cfg, t.get("dept"))]
             # A tombstone (finished card hand-closed by striking the heading) must NOT
             # get the register advice — re-registering shipped work is worse than the
             # rot, so the CEO learns to ignore the flag. Prescribe deletion instead.
