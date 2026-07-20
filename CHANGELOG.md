@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.33] — 2026-07-20
+### Added
+- **`time:` field on mail notes** (Boss's ask). Frontmatter `time: "YYYY-MM-DD HH:MM"` — human-readable and lexically sortable, written by the sender (the filename stamp remains the uniqueness key). Wired through the branch skill's mail format, the orchestrate files table, setup doc, the mail nudge's reply-format line, and the Board.base Mail view (new column; template sorts by time DESC, a project's own sort tweaks are left alone). Refcheck's 22 existing letters backfilled from their filename stamps. Not part of the dead-letter contract — `to:`/`status:` stay the address; `time` is display/sort metadata.
+
 ## [0.9.32] — 2026-07-20
 ### Fixed
 - **Dead-letter sentinel** (field case, refcheck 2026-07-20, day one of the mail lane): the CEO commissioned a dept report as a file-drop and it landed in `docs/board/mail/` as plain markdown — no `to:`/`status:` frontmatter, so Bases showed empty columns and the unread nudge (correctly) ignored it: a letter no addressee could ever see. `stop_mail` now sweeps the mailbox for frontmatter-less/unaddressed `.md` files and nags the **CEO office as postmaster** (one nudge per state; branches see only their own mail): add the frontmatter or move the file out. Doctrine hardened in the dept SOP: the mailbox is inter-office post (CEO↔分公司) ONLY — dept reports never go there, commissioned file-drops land in the dept's own folder.

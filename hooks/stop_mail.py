@@ -119,8 +119,8 @@ def run(data, text):
         lst = " · ".join("%s (from %s%s)" % (f, s, " re %s" % r if r else "")
                          for f, s, r in mine[:4]) + ("…" if len(mine) > 4 else "")
         parts.append("%d unread for %s — %s. Read each (%s/), act or reply (a reply "
-                     "is a NEW mail note: from/to/re/status: unread), then flip its "
-                     "`status: read`."
+                     "is a NEW mail note: from/to/re/time/status: unread), then flip "
+                     "its `status: read`."
                      % (len(mine), office, lst, os.path.relpath(mail_dir, root)))
     if dead:
         parts.append("%d DEAD letter(s) with no to:/status: frontmatter (%s) — "

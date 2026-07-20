@@ -65,7 +65,10 @@ views:
       - from
       - to
       - re
+      - time
       - status
     sort:
+      - property: time
+        direction: DESC
       - property: file.name
         direction: DESC

@@ -34,7 +34,7 @@ Start future branch sessions IN the worktree. The marker routes the mail nudge t
 ## 5 · Mail lane
 
 - `docs/board/mail/` in the **MAIN checkout** — shared state (cards · mail · reviews · BACKLOG) is always read/written at the main checkout's paths, from both offices; a worktree's own copy of those files is not the shared surface (the skill resolves `<main>` via `git rev-parse --git-common-dir`).
-- Note format: `<YYYYMMDD-HHMM>-<from>-<slug>.md`, frontmatter `from` · `to` · `re: "#NNN"` · `status: unread` · optional `needs_boss: yes`, body free prose. Flip `status: read` after acting.
+- Note format: `<YYYYMMDD-HHMM>-<from>-<slug>.md`, frontmatter `from` · `to` · `re: "#NNN"` (or the replied-to note's filename) · `time: "YYYY-MM-DD HH:MM"` · `status: unread` · optional `needs_boss: yes`, body free prose. Flip `status: read` after acting.
 
 ## 6 · Smoke the lane
 

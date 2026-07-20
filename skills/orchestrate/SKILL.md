@@ -60,7 +60,7 @@ Every domain = a **concise source-of-truth view** + the **detailed log/product**
 | `docs/DECISIONS.md` | **decision log** — every decision + its **why**, logged once | **CEO** prose | on-demand; SoT gists the vital ones |
 | `docs/CANON.md` | **canonical-answer registry** — current authoritative file per answered question | **`canon.py`** (auto, via `@CANON` hook) | read-first by depts (small) |
 | `docs/<其领域>/` | dept work products; the **canonical** one earns a `CANON.md` row | the dept | on-demand |
-| `docs/board/mail/` | **inter-office mail** (分公司 lane) — one note per message (`from`/`to`/`re`/`status: unread`) | either office writes; the addressee flips `status: read` (a Stop nudge backs the sweep) | on-demand |
+| `docs/board/mail/` | **inter-office mail** (分公司 lane) — one note per message (`from`/`to`/`re`/`time: "YYYY-MM-DD HH:MM"`/`status: unread`) | either office writes; the addressee flips `status: read` (a Stop nudge backs the sweep) | on-demand |
 | `docs/reviews/` · `复盘.md` · `handover-*` | gate ledger · 督察 memory · handovers | 审查官 · 督察 · departing dept | on-demand |
 
 **"Canonical file"** = a dept's current authoritative answer to a question the project acts on — one pointer per answered question (full definition → `reference/departments.md`).
