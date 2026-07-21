@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.43] — 2026-07-21
+### Fixed
+- **Mail `time:` backfill sweep** (Boss's screenshot: the Mail view's time column patchy — empty on most of the day's letters). `time:` is sender-written (0.9.33), and doctrine drifted within a day: live sessions post letters without it, and the CEO also names files without the HHMM stamp. `stop_mail.backfill_time` now fills a missing/empty `time:` mechanically at every turn end: filename stamp `YYYYMMDD-HHMM` first, else filename date + the file clock's HH:MM, else the file clock alone. A sender-written value is never overwritten; dead letters (no fence) stay the postmaster-nudge lane; idempotent, traced under `mail-hygiene`. Refcheck's patchy letters healed in-flight (the live session ran the sweep from the working tree before release).
+
 ## [0.9.42] — 2026-07-21
 ### Changed
 - **Collapsed kanban cards are title-only** (Boss's call): pills + name + dept chip, no prose clamp — the board scans as a list of titles (the name's own "SLUG — description" carries the gist); the fielded card (WHAT / DONE WHEN / BLOCKED ON / ARTIFACTS) waits behind the click or `#x`. Status badges stay on the face.

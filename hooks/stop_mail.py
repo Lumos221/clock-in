@@ -12,7 +12,8 @@ absent → this is the CEO/main office. Mail is "mine" when `to:` base-matches t
 identity (CEO aliases: ceo · boss · 总部 · hq). One nudge per unread-set signature
 (acting or new mail re-arms; ignoring stays silent — the capacity pattern).
 Fail-open everywhere; inert without an active orchestrate project or a mail dir."""
-import os, sys, json, hashlib
+import os, re, sys, json, hashlib
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -25,6 +26,63 @@ except Exception:
     board = None
 
 CEO_ALIASES = {"ceo", "boss", "总部", "hq", "main"}
+STAMP_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})\D")
+DATE_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})\D")
+
+
+def backfill_time(mail_dir):
+    """Mechanically fill a missing/empty `time:` on mailbox notes. The sender-
+    written field (0.9.33) drifted within a day — live sessions post letters
+    without it, and the CEO also names files without the HHMM stamp — so the Mail
+    view's time column went patchy (Boss's 2026-07-21 screenshot). Truth order:
+    filename stamp YYYYMMDD-HHMM → filename date + file-clock HH:MM → file clock
+    alone. Only fenced notes are touched (dead letters stay the postmaster's
+    nudge); a real value is never overwritten; idempotent. Returns filled count."""
+    filled = 0
+    try:
+        names = sorted(os.listdir(mail_dir))
+    except OSError:
+        return 0
+    for fn in names:
+        if not fn.endswith(".md"):
+            continue
+        path = os.path.join(mail_dir, fn)
+        try:
+            text = open(path, encoding="utf-8").read()
+        except OSError:
+            continue
+        close = text.find("\n---", 3)
+        if not text.startswith("---") or close < 0:
+            continue
+        head = text[:close]
+        if re.search(r"(?m)^time:\s*\S", head):
+            continue  # sender wrote a value — theirs wins
+        m, d = STAMP_RE.match(fn), DATE_RE.match(fn)
+        try:
+            mt = datetime.fromtimestamp(os.path.getmtime(path))
+        except OSError:
+            mt = datetime.now()
+        if m:
+            val = "%s-%s-%s %s:%s" % m.groups()
+        elif d:
+            val = "%s-%s-%s %s" % (d.group(1), d.group(2), d.group(3), mt.strftime("%H:%M"))
+        else:
+            val = mt.strftime("%Y-%m-%d %H:%M")
+        line = 'time: "%s"' % val
+        if re.search(r"(?m)^time:", head):  # empty key → rewrite it in place
+            out = re.sub(r"(?m)^time:.*$", line, head, count=1) + text[close:]
+        else:
+            nl = text.find("\n")
+            out = text[:nl + 1] + line + "\n" + text[nl + 1:]
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(out)
+            os.replace(tmp, path)
+            filled += 1
+        except OSError:
+            pass
+    return filled
 
 
 def identity(local_root):
@@ -94,6 +152,13 @@ def run(data, text):
     mail_dir = os.path.join(cardlib.board_dir(root, cfg), "mail")
     if not os.path.isdir(mail_dir):
         return None
+    try:
+        n = backfill_time(mail_dir)
+        if n:
+            hooklib.log_marker_misses(root, "mail-hygiene",
+                                      ["time backfilled on %d letter(s)" % n])
+    except Exception:
+        pass
     office = identity(local_root)
     mine, dead = sweep(mail_dir, office)
     if office.strip().lower() != "ceo":

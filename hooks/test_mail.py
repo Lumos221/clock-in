@@ -95,5 +95,43 @@ class MailNudge(unittest.TestCase):
             self.assertIsNone(sm.run({"cwd": d, "hook_event_name": "Stop"}, None))
 
 
+class BackfillTime(unittest.TestCase):
+    """0.9.43: senders drifted off writing time: within a day — the sweep fills it
+    from the filename stamp (or the file clock when the name lacks HHMM)."""
+
+    def test_filename_stamp_wins_and_value_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as d:
+            md = _proj(d)
+            _mail(md, "20260721-1335-Marketing-208v11.md")
+            with open(os.path.join(md, "20260720-1845-CEO-ack.md"), "w", encoding="utf-8") as f:
+                f.write('---\nfrom: CEO\nto: Marketing\ntime: "2026-07-20 18:45"\nstatus: read\n---\nx\n')
+            n = sm.backfill_time(md)
+            self.assertEqual(n, 1)
+            import cardlib
+            fm = cardlib.frontmatter(open(os.path.join(md, "20260721-1335-Marketing-208v11.md"),
+                                          encoding="utf-8").read())
+            self.assertEqual(fm["time"], "2026-07-21 13:35")
+            fm2 = cardlib.frontmatter(open(os.path.join(md, "20260720-1845-CEO-ack.md"),
+                                           encoding="utf-8").read())
+            self.assertEqual(fm2["time"], "2026-07-20 18:45")  # sender's value kept
+            self.assertEqual(sm.backfill_time(md), 0)  # idempotent
+
+    def test_date_only_filename_uses_file_clock_and_dead_letters_untouched(self):
+        with tempfile.TemporaryDirectory() as d:
+            md = _proj(d)
+            _mail(md, "20260721-CEO-208ack.md")  # the CEO's HHMM-less naming habit
+            path = os.path.join(md, "20260721-CEO-208ack.md")
+            os.utime(path, (1784600000,) * 2)
+            with open(os.path.join(md, "notes.md"), "w", encoding="utf-8") as f:
+                f.write("plain markdown, no fence\n")
+            sm.backfill_time(md)
+            import cardlib
+            t = cardlib.frontmatter(open(path, encoding="utf-8").read())["time"]
+            self.assertTrue(t.startswith("2026-07-21 "))
+            self.assertRegex(t, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
+            self.assertEqual(open(os.path.join(md, "notes.md"), encoding="utf-8").read(),
+                             "plain markdown, no fence\n")  # dead letter: postmaster's lane
+
+
 if __name__ == "__main__":
     unittest.main()
