@@ -183,14 +183,19 @@ def main():
         pass
     try:
         # `date · #<proj> · #<tid> · dept · name · sha` — the renderer pills the
-        # leading ids. Legacy 5-field lines (no proj) keep the old shape.
-        if proj:
-            line = ("- %s · %s · #%s · %s · %s · %s"
-                    % (today, proj, task_id, dept or "—", name or "—", sha or "—"))
-        else:
-            line = ("- %s · #%s · %s · %s · %s"
-                    % (today, task_id, dept or "—", name or "—", sha or "—"))
-        update_shipped(tb, line)
+        # leading ids. Legacy 5-field lines (no proj) keep the old shape. A
+        # completion NO card claims writes no tail line at all (0.9.38): the tail
+        # is the Boss's ship glance, and card-less completions are CEO bookkeeping
+        # chores (window closes, marker banking) — dash-filled lines were noise
+        # (her 2026-07-21 screenshot). The BACKLOG row above keeps the full ledger.
+        if card is not None:
+            if proj:
+                line = ("- %s · %s · #%s · %s · %s · %s"
+                        % (today, proj, task_id, dept or "—", name or "—", sha or "—"))
+            else:
+                line = ("- %s · #%s · %s · %s · %s"
+                        % (today, task_id, dept or "—", name or "—", sha or "—"))
+            update_shipped(tb, line)
     except Exception:
         pass
     try:

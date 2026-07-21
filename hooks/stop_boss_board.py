@@ -208,6 +208,13 @@ def run(data, text=None):
                                        % (token, len(opens), ", ".join(o["id"] for o in opens)))
         except Exception:
             pass
+    # ---- Obsidian desk mirror (0.9.38): the ask register as generated notes in
+    # docs/board/desk/ — refreshed every turn end AFTER captures/dones landed, so
+    # the Bases Desk view tracks the panel. Fail-open, byte-stable when unchanged.
+    try:
+        board.desk_mirror(root)
+    except Exception:
+        pass
     # ---- supersede collision (any add path): a fresh ask targets the same task as
     # an older still-open ask — regardless of raiser handle or kind (0.9.36: one ask
     # registered twice, CLI add + marker re-end, wore different dept AND kind and

@@ -93,6 +93,107 @@ def get_entry(store, eid):
     return None
 
 
+# ---------------------------------------------------------------- Obsidian desk mirror
+
+DESK_REL = os.path.join("docs", "board", "desk")
+DESK_ANSWERED_KEEP = 8
+# python twin of the panel's PATH_RE — file-path extraction for the files: column
+DESK_FILE_RE = re.compile(
+    r"(^|[^\w.\-/一-鿿])"
+    r"((?:[\w.\-一-鿿]+/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5}"
+    r"|[\w\-一-鿿][\w.\-一-鿿]*\."
+    r"(?:png|jpe?g|gif|webp|pdf|svg|md|txt|csv|json|log|html?|ya?ml|toml))\b")
+
+
+def desk_files(text):
+    out = []
+    for m in DESK_FILE_RE.finditer(" " + (text or "")):
+        p = m.group(2)
+        if p not in out:
+            out.append(p)
+    return out
+
+
+def _desk_section(e):
+    """The desk section an entry files under (panel parity); None = not mirrored.
+    Numbered prefixes make Bases' lexical group sort match the panel's order."""
+    info = (e.get("kind") == "info" or e.get("notice")
+            or (e.get("dept") or "").lower().startswith("inspector"))
+    if e.get("status") == "open":
+        return "3 Information" if info else "1 Needs you"
+    if e.get("status") == "parked":
+        return "2 Parked"
+    if e.get("status") == "resolved" and not e.get("notice"):
+        return "4 Answered"
+    return None
+
+
+def desk_mirror(root):
+    """Mirror the ask register into Obsidian notes — docs/board/desk/<id>.md, flat
+    frontmatter (section · kind · dept · task · ask · files · updated) so a Bases
+    view shows the Boss's desk (Needs you / Parked / Information / Answered) with
+    file paths in their own column (Boss's ask, 2026-07-21). GENERATED, machine-
+    owned: status truth stays in the JSON store (resolve via @BOSS-DONE / CLI /
+    the CEO) — notes rewrite wholesale (only when bytes change, so Obsidian stays
+    quiet) and prune when their entry leaves the desk; the `mirror` key marks what
+    may be pruned, foreign files are never touched. Answered keeps the newest
+    DESK_ANSWERED_KEEP. Callers stay fail-open."""
+    store = load_store(_store_path(root))
+    entries = [e for e in store.get("entries", []) if _desk_section(e)]
+    answered = sorted((e for e in entries if _desk_section(e) == "4 Answered"),
+                      key=lambda e: e.get("updated") or "", reverse=True)
+    drop = {e["id"] for e in answered[DESK_ANSWERED_KEEP:]}
+    entries = [e for e in entries if e["id"] not in drop]
+    ddir = os.path.join(root, DESK_REL)
+    os.makedirs(ddir, exist_ok=True)
+    keep = set()
+    for e in entries:
+        fn = "%s.md" % e["id"]
+        keep.add(fn)
+        title, _, detail = (e.get("text") or "").partition("::")
+        title, detail = title.strip(), detail.strip()
+        files = desk_files(e.get("text") or "")
+        fm = [("mirror", "boss-board"), ("id", e["id"]),
+              ("section", _desk_section(e)), ("kind", e.get("kind") or ""),
+              ("dept", e.get("dept") or ""),
+              ("task", ("#%s" % e["task"]) if e.get("task") else ""),
+              ("ask", title[:120]), ("files", " · ".join(files)),
+              ("updated", e.get("updated") or e.get("created") or "")]
+        lines = ["> 机器镜像（boss-board 生成）— 状态以 Boss Board 为准，此文件会被重写。", ""]
+        if title:
+            lines += ["**%s**" % title, ""]
+        if detail:
+            lines += [detail, ""]
+        if e.get("status") == "resolved" and e.get("sum"):
+            lines += ["**答复:** %s" % e["sum"], ""]
+        if files:
+            lines += ["Files:"] + ["- [%s](%s)" % (p, p) for p in files] + [""]
+        full = ("---\n"
+                + "\n".join("%s: %s" % (k, json.dumps(v, ensure_ascii=False)) for k, v in fm)
+                + "\n---\n\n" + "\n".join(lines).rstrip("\n") + "\n")
+        path = os.path.join(ddir, fn)
+        try:
+            cur = open(path, encoding="utf-8").read()
+        except OSError:
+            cur = None
+        if cur != full:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(full)
+    for fn in os.listdir(ddir):
+        if not fn.endswith(".md") or fn in keep:
+            continue
+        try:
+            with open(os.path.join(ddir, fn), encoding="utf-8") as f:
+                head = f.read(200)
+        except OSError:
+            continue
+        if 'mirror: "boss-board"' in head:
+            try:
+                os.remove(os.path.join(ddir, fn))
+            except OSError:
+                pass
+
+
 def list_entries(store, dept=None):
     return [e for e in store["entries"] if dept is None or e["dept"] == dept]
 
@@ -1052,12 +1153,16 @@ async function tick(){
     // cards first (still on the live board), then the shipped tail (newest-first).
     // Shipped-line head: `date · #proj · #tid · …` (6-field, 0.9.24) or legacy
     // `date · #tid · …` — pill the leading id(s); the two-id replace fires first
-    // and leaves nothing for the one-id pattern to re-match.
+    // and leaves nothing for the one-id pattern to re-match. A LONE leading id is
+    // the session task_id (legacy / card-less lines), so it wears the NEUTRAL pill
+    // — coral is reserved for the durable #NNN. Placeholder runs (" · — · —") from
+    // card-less completions collapse before render: quiet lines, no dash noise.
     const pillDone = h => h
       .replace(/^(\d{4}-\d{2}-\d{2}) · (#\d+) · (#\d+) · /, "$1 <span class='pill pj'>$2</span><span class='pill pt'>$3</span> ")
-      .replace(/^(\d{4}-\d{2}-\d{2}) · (#\d+) · /, "$1 <span class='pill pj'>$2</span> ");
+      .replace(/^(\d{4}-\d{2}-\d{2}) · (#\d+) · /, "$1 <span class='pill pt'>$2</span> ");
     const doneAll = doneT.map(tCard).concat(
-        shipped.map(x=>`<div class='done-line${xc('s:'+x)}' data-k="${esc('s:'+x)}" tabindex="0" onclick="tog(this)"><div class='dl'>${pillDone(md(x))}</div></div>`));
+        shipped.map(raw=>{ const x = raw.replace(/( · —)+(?= · )/g,'');
+          return `<div class='done-line${xc('s:'+x)}' data-k="${esc('s:'+x)}" tabindex="0" onclick="tog(this)"><div class='dl'>${pillDone(md(x))}</div></div>`; }));
     const d = new Date();
     const today = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     const cap = Math.max(5, doneT.length + shipped.filter(x=>x.trim().startsWith(today)).length);

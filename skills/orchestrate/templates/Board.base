@@ -42,6 +42,23 @@ views:
       - property: id
         direction: ASC
   - type: table
+    name: Desk
+    filters:
+      and:
+        - file.folder == "docs/board/desk"
+    groupBy:
+      property: section
+      direction: ASC
+    order:
+      - ask
+      - dept
+      - task
+      - files
+      - updated
+    sort:
+      - property: updated
+        direction: DESC
+  - type: table
     name: Done
     filters:
       and:

@@ -591,6 +591,8 @@ def main():
                     hooklib.log_marker_misses(root, "board-hygiene", traces)
             if cardlib.digest_stale(root, cfg):
                 cardlib.regen_digest(root, cfg)
+            if board is not None:
+                board.desk_mirror(root)  # Obsidian desk view fresh from session one
         except Exception:
             pass
         try:

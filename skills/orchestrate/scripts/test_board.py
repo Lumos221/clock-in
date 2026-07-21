@@ -159,6 +159,42 @@ class SupersedeCollision(unittest.TestCase):
         self.assertNotIn("collides", i)
         self.assertNotIn("collides", c)
 
+    def test_desk_mirror_sections_files_and_prune(self):
+        import tempfile as tf
+        board._SKIP_SERVER = True   # board_add must not spawn a panel here
+        with tf.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, ".claude"))
+            board.board_add(d, "CEO", "needs",
+                            "Pick the DB :: evidence in docs/mockups/db-shot.png and 报告.md",
+                            task="7")
+            board.board_add(d, "CEO", "info", "FYI merged")
+            done = board.board_add(d, "QA", "needs", "#9 old question")
+            board.board_done(d, done["id"], "answered: option B")
+            board.desk_mirror(d)
+            ddir = os.path.join(d, "docs", "board", "desk")
+            notes = {fn: open(os.path.join(ddir, fn), encoding="utf-8").read()
+                     for fn in os.listdir(ddir)}
+            ask = notes["CEO-1.md"]
+            self.assertIn('section: "1 Needs you"', ask)
+            self.assertIn('files: "docs/mockups/db-shot.png · 报告.md"', ask)
+            self.assertIn('task: "#7"', ask)
+            self.assertIn("- [docs/mockups/db-shot.png](docs/mockups/db-shot.png)", ask)
+            self.assertIn('section: "3 Information"', notes["CEO-2.md"])
+            self.assertIn('section: "4 Answered"', notes["QA-1.md"])
+            self.assertIn("**答复:** answered: option B", notes["QA-1.md"])
+            # foreign files survive the prune; a resolved entry beyond the cap goes
+            with open(os.path.join(ddir, "hand-note.md"), "w") as f:
+                f.write("---\nmine: yes\n---\nboss's own note\n")
+            board.board_done(d, "CEO-2", "seen")
+            board.desk_mirror(d)
+            self.assertTrue(os.path.exists(os.path.join(ddir, "hand-note.md")))
+            self.assertIn('section: "4 Answered"',
+                          open(os.path.join(ddir, "CEO-2.md"), encoding="utf-8").read())
+            # byte-stable: a second run rewrites nothing
+            before = os.path.getmtime(os.path.join(ddir, "CEO-1.md"))
+            board.desk_mirror(d)
+            self.assertEqual(os.path.getmtime(os.path.join(ddir, "CEO-1.md")), before)
+
     def test_cli_plus_marker_double_registration_flags(self):
         # the Boss-13/CEO-166 field case: the trailer nudge fired, the CEO registered
         # via `orchestrate-board add` (dept defaulted to Boss, kind discuss, key from
