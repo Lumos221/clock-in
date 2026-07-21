@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.41] — 2026-07-21
+### Added
+- **Fielded kanban cards** (Boss chose structure over costume after the 三省六部 comparison; Anthropic theme kept). The edict lesson applied: a card is a form, not an essay. Expanded cards now render **labelled compartments** — WHAT · DONE WHEN · BLOCKED ON · ARTIFACTS, each through the 0.9.40 formatter (done-when's `·` glue becomes checklist rows), tiny uppercase labels over hairlines; `parse_taskboard` now carries `done-when` + `artifacts` to the panel. **Coloured dept chips** (edict's per-ministry coding, Anthropic-muted): deterministic hue per handle via `--dh` CSS variable, light+dark derived pairs; an empty dept renders a quiet grey **未派** chip — a department name opening the `what` prose can no longer masquerade as the dept badge (her #184 confusion). Collapsed faces stay compact (chip + clamped what). Light + dark screenshot-verified.
+
 ## [0.9.40] — 2026-07-21
 ### Added
 - **The essay formatter — structured, ADHD-friendly cards** (Boss: "still have no line break… can you make every card organized well?"). Root cause of "still": CEO asks carry no literal newlines — they're single-line essays glued with `·`, sentences, and ①-⑳ — so 0.9.37's newline support had nothing to break on. New `fmt()` rebuilds the structure the prose hides, purely mechanically: **sentences end lines** (`。？！；` always, closing brackets stay attached; `. ! ?` only before a fresh capital/`「`/digit so paths and decimals hold), **①-⑳ clauses** become hanging-indent list rows, **` · ` runs** become dotted list rows with a coral marker. Applied to expanded ask bodies, quoted originals, and expanded kanban cards (the collapsed dept·what clamp swaps for a dept line + the structured essay); collapsed faces stay compact clamped flow. Light + dark verified by headless screenshot.

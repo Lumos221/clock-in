@@ -426,7 +426,8 @@ def parse_taskboard(path):
         tasks.append({"label": clean(label) or head, "name": clean(name) or clean(label),
                       "dept": field("dept"), "task_id": field("task_id"),
                       "status": status, "priority": field("priority"),
-                      "blocked_on": field("blocked_on"), "what": field("what")})
+                      "blocked_on": field("blocked_on"), "what": field("what"),
+                      "done-when": field("done-when"), "artifacts": field("artifacts")})
     shipped = []
     m = re.search(r"<!-- SHIPPED:START -->(.*?)<!-- SHIPPED:END -->", text, re.S)
     seg = m.group(1) if m else _section(text, "Recently shipped")
@@ -772,11 +773,18 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
 .fli { padding-left: 1.25em; text-indent: -1.25em; }
 .fdot { padding-left: 1em; position: relative; }
 .fdot .fm { position: absolute; left: .12em; color: #c15f3c; font-weight: 600; }
-/* expanded kanban card: the clamp swaps for the structured what */
+/* expanded kanban card: the clamp swaps for the fielded card (labelled compartments) */
 .t .tx { display: none; }
 .t.x .tx { display: block; }
 .t.x > .sub { display: none; }
-.t .tx .sub { margin-bottom: 3px; }
+.t .tx .dr { margin: 3px 0 1px; }
+/* dept chip — deterministic pastel per handle via --dh; unassigned = quiet grey */
+.dchip { display: inline-block; font-size: .64rem; font-weight: 600; padding: 1px 7px;
+         border-radius: 9px; background: hsl(var(--dh,40),30%%,88%%); color: hsl(var(--dh,40),45%%,30%%); }
+.dchip.d0 { background: #eae6d9; color: #8a887f; font-weight: 500; }
+/* compartment label — tiny uppercase over a hairline, the fielded-card chrome */
+.tl { font-size: .6rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+      color: #a8a49a; margin: .55em 0 .12em; padding-top: .45em; border-top: 1px solid #edeadd; }
 .rage { flex: none; font-size: .7rem; color: #87867f; margin-top: .25em;
         font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .parked .row { opacity: .6; }
@@ -906,6 +914,9 @@ html.dark .pill.px { background: #263c48; color: #86b6cf; }
 html.dark .pill.pr-0 { background: #4a2318; color: #f0a284; }
 html.dark .pill.pr-1 { background: #453a1c; color: #dcc27a; }
 html.dark .fdot .fm { color: #e09b78; }
+html.dark .dchip { background: hsl(var(--dh,40),20%%,27%%); color: hsl(var(--dh,40),35%%,76%%); }
+html.dark .dchip.d0 { background: #3a3935; color: #8f8d85; }
+html.dark .tl { color: #7f7d76; border-top-color: #3a3936; }
 html.dark code { background: #3e3d3a; }
 html.dark a { color: #e08262; text-decoration-color: rgba(224,130,98,.4); }
 html.dark a:hover { text-decoration-color: #e08262; }
@@ -1116,27 +1127,33 @@ function askRow(e, T, ts){
     </div>
     <span class="rage">${a}</span></div>`;
 }
+// Deterministic per-dept hue (edict's per-ministry colour coding, Anthropic-muted):
+// the handle hashes to a hue, CSS derives the pastel pair per theme from --dh.
+function hue(s){ let h = 0; for (const c of s) h = (h*31 + c.codePointAt(0)) %% 360; return h; }
+function dchip(t){
+  const d = (t.dept||'').trim();
+  if(!d) return `<span class="dchip d0">未派</span>`;
+  return `<span class="dchip" style="--dh:${hue(d)}">${esc(d)}</span>${t.external?` <span class='pill px'>分</span>`:''}`;
+}
+// A labelled compartment (fielded card, the edict lesson): tiny uppercase label
+// over the formatted content; absent fields render nothing at all.
+function sect(label, v){ return v ? `<div class="tl">${label}</div>${fmt(v)}` : ''; }
 function tCard(t){
   const badge = t.status==='blocked'
       ? `<span class="badge blocked">blocked${t.blocked_on?': '+esc(t.blocked_on):''}</span>`
       : t.status==='review' ? `<span class="badge review">review</span>` : '';
-  // Long card bodies clamp to a few lines; click a card to expand it. The s-<status>
-  // class gives blocked/review cards their coloured undershade. Hook-born cards have
-  // label "#<id>" (skip the redundant id chip) and ·-less headings parse label===name
-  // (skip the redundant body line) — show each fact once.
+  // Collapsed: compact clamp (dept chip + what flow). Expanded: the fielded card —
+  // dept chip row, then labelled compartments What / Done when / Blocked on /
+  // Artifacts, each through fmt(). The s-<status> class keeps the undershade;
+  // hook-born "#<id>" labels and ·-less headings show each fact once, as before.
   const k = 't:' + t.label + '#' + (t.task_id||'');
-  // The heading's #NNN (durable, Boss-facing) wears the coral pill; the platform
-  // task_id (session-scoped plumbing) the neutral one. Non-#N labels stay plain.
   const lab = /^#\d+$/.test(t.label) ? `<span class='pill pj'>${esc(t.label)}</span>` : md(t.label);
   const id = t.task_id && t.label !== '#'+t.task_id ? `<span class='pill pt'>#${esc(t.task_id)}</span>` : '';
   const pp = /^P[01]$/.test(t.priority||'') ? `<span class='pill pr-${t.priority==='P0'?'0':'1'}'>${t.priority}</span>` : '';
-  // Collapsed: the compact dept·what clamp, unchanged. Expanded: the clamp swaps
-  // for the dept line + the what essay through fmt() — structured rows, not a wall.
-  const dp = `${esc(t.dept)}${t.external?` <span class='pill px'>分</span>`:''}`;
   return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${pp}${lab}${id}</span>${badge}
     ${t.name && t.name !== t.label ? `<div class="nm">${md(t.name)}</div>` : ''}
-    <div class="sub">${dp}${t.what?` · `+md(t.what):''}</div>
-    ${t.what?`<div class="tx"><div class="sub">${dp}</div>${fmt(t.what)}</div>`:''}</div>`;
+    <div class="sub">${dchip(t)}${t.what?` `+md(t.what):''}</div>
+    <div class="tx"><div class="dr">${dchip(t)}</div>${sect('What', t.what)}${sect('Done when', t['done-when'])}${sect('Blocked on', t.blocked_on)}${sect('Artifacts', t.artifacts)}</div></div>`;
 }
 function col(title, color, cls, inner, n){
   return `<div class="col ${cls}"><h3><span class="dot" style="border-color:${color}"></span>${title}
