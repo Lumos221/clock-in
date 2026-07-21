@@ -1150,9 +1150,12 @@ function tCard(t){
   const lab = /^#\d+$/.test(t.label) ? `<span class='pill pj'>${esc(t.label)}</span>` : md(t.label);
   const id = t.task_id && t.label !== '#'+t.task_id ? `<span class='pill pt'>#${esc(t.task_id)}</span>` : '';
   const pp = /^P[01]$/.test(t.priority||'') ? `<span class='pill pr-${t.priority==='P0'?'0':'1'}'>${t.priority}</span>` : '';
+  // Collapsed = title-only (Boss's call 2026-07-21): pills + name + dept chip, no
+  // prose — the board scans as a list of titles; the fielded card waits behind the
+  // click (or #x). The name's own "SLUG — description" carries the gist.
   return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${pp}${lab}${id}</span>${badge}
     ${t.name && t.name !== t.label ? `<div class="nm">${md(t.name)}</div>` : ''}
-    <div class="sub">${dchip(t)}${t.what?` `+md(t.what):''}</div>
+    <div class="sub">${dchip(t)}</div>
     <div class="tx"><div class="dr">${dchip(t)}</div>${sect('What', t.what)}${sect('Done when', t['done-when'])}${sect('Blocked on', t.blocked_on)}${sect('Artifacts', t.artifacts)}</div></div>`;
 }
 function col(title, color, cls, inner, n){

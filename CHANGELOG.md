@@ -4,6 +4,10 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.42] — 2026-07-21
+### Changed
+- **Collapsed kanban cards are title-only** (Boss's call): pills + name + dept chip, no prose clamp — the board scans as a list of titles (the name's own "SLUG — description" carries the gist); the fielded card (WHAT / DONE WHEN / BLOCKED ON / ARTIFACTS) waits behind the click or `#x`. Status badges stay on the face.
+
 ## [0.9.41] — 2026-07-21
 ### Added
 - **Fielded kanban cards** (Boss chose structure over costume after the 三省六部 comparison; Anthropic theme kept). The edict lesson applied: a card is a form, not an essay. Expanded cards now render **labelled compartments** — WHAT · DONE WHEN · BLOCKED ON · ARTIFACTS, each through the 0.9.40 formatter (done-when's `·` glue becomes checklist rows), tiny uppercase labels over hairlines; `parse_taskboard` now carries `done-when` + `artifacts` to the panel. **Coloured dept chips** (edict's per-ministry coding, Anthropic-muted): deterministic hue per handle via `--dh` CSS variable, light+dark derived pairs; an empty dept renders a quiet grey **未派** chip — a department name opening the `what` prose can no longer masquerade as the dept badge (her #184 confusion). Collapsed faces stay compact (chip + clamped what). Light + dark screenshot-verified.
