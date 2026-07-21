@@ -4,6 +4,11 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.40] — 2026-07-21
+### Added
+- **The essay formatter — structured, ADHD-friendly cards** (Boss: "still have no line break… can you make every card organized well?"). Root cause of "still": CEO asks carry no literal newlines — they're single-line essays glued with `·`, sentences, and ①-⑳ — so 0.9.37's newline support had nothing to break on. New `fmt()` rebuilds the structure the prose hides, purely mechanically: **sentences end lines** (`。？！；` always, closing brackets stay attached; `. ! ?` only before a fresh capital/`「`/digit so paths and decimals hold), **①-⑳ clauses** become hanging-indent list rows, **` · ` runs** become dotted list rows with a coral marker. Applied to expanded ask bodies, quoted originals, and expanded kanban cards (the collapsed dept·what clamp swaps for a dept line + the structured essay); collapsed faces stay compact clamped flow. Light + dark verified by headless screenshot.
+- **`#x` expand-all mode**: open the board at `/#x` and every card renders pre-expanded — one reading pass over the whole desk without a click per card; hand-collapsing a card sticks.
+
 ## [0.9.39] — 2026-07-21
 ### Fixed
 Four Boss reports on the 0.9.38 desk, one pass:

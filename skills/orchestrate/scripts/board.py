@@ -766,6 +766,17 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
         font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .95em; }
 .rx { display: none; }
 .row.x .rx { display: block; margin-top: 2px; }
+/* fmt(): structured essay rows — sentence lines, ①-⑳ hanging indents, · list rows */
+.fmt > div { margin: .26em 0; }
+.fmt > div:first-child { margin-top: .05em; }
+.fli { padding-left: 1.25em; text-indent: -1.25em; }
+.fdot { padding-left: 1em; position: relative; }
+.fdot .fm { position: absolute; left: .12em; color: #c15f3c; font-weight: 600; }
+/* expanded kanban card: the clamp swaps for the structured what */
+.t .tx { display: none; }
+.t.x .tx { display: block; }
+.t.x > .sub { display: none; }
+.t .tx .sub { margin-bottom: 3px; }
 .rage { flex: none; font-size: .7rem; color: #87867f; margin-top: .25em;
         font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .parked .row { opacity: .6; }
@@ -894,6 +905,7 @@ html.dark .pill.pt { background: #3a3935; color: #b8b5ac; }
 html.dark .pill.px { background: #263c48; color: #86b6cf; }
 html.dark .pill.pr-0 { background: #4a2318; color: #f0a284; }
 html.dark .pill.pr-1 { background: #453a1c; color: #dcc27a; }
+html.dark .fdot .fm { color: #e09b78; }
 html.dark code { background: #3e3d3a; }
 html.dark a { color: #e08262; text-decoration-color: rgba(224,130,98,.4); }
 html.dark a:hover { text-decoration-color: #e08262; }
@@ -990,13 +1002,17 @@ function md(s){
 // Expanded cards must survive the poll re-render (each tick used to rebuild the DOM
 // and instantly re-collapse whatever the Boss had just clicked open).
 const EXP = new Set();
+// #x in the URL = expand-all mode (open every card/row pre-expanded — a reading
+// pass over the whole board without a click per card; clicking still collapses).
+const XALL = location.hash === '#x';
 function tog(el){
   if (getSelection().toString()) return;   // selecting text is not a toggle
   const k = el.dataset.k;
   el.classList.toggle('x');
-  if (el.classList.contains('x')) EXP.add(k); else EXP.delete(k);
+  if (el.classList.contains('x')) { EXP.add(k); EXP.delete('!'+k); }
+  else { EXP.delete(k); EXP.add('!'+k); }   // '!' = collapsed-by-hand, sticky under #x
 }
-function xc(k){ return EXP.has(k) ? ' x' : ''; }
+function xc(k){ if (XALL && !EXP.has('!'+k)) EXP.add(k); return EXP.has(k) ? ' x' : ''; }
 document.addEventListener('keydown', e=>{
   if(e.key==='Enter' && e.target && e.target.dataset && e.target.dataset.k){ tog(e.target); e.preventDefault(); }
 });
@@ -1024,6 +1040,30 @@ const ICONS = {
 function brk(t, nl){
   const h = md(t).replace(/\s([①-⑳])(?![①-⑳])/g,'<br>$1');
   return nl ? h.replace(/\n/g,'<br>') : h;
+}
+// fmt(): the essay formatter (Boss's ask 2026-07-21 — "organized, structured,
+// ADHD-friendly"). CEO asks are single-line essays glued with · and sentence
+// runs, so literal-newline support alone never broke them. Mechanical typography
+// rebuilds the structure the prose hides: sentences end lines (。？！； always;
+// . ! ? only before a fresh capital/「/digit so paths and decimals hold), ①-⑳
+// clauses become hanging-indent rows, ` · ` runs become dotted list rows.
+// Titles never come here — collapsed faces stay clamped flow.
+function fmt(t){
+  const parts = [];
+  (t||'').split('\n').forEach(seg=>{
+    seg.split(/\s(?=[①-⑳](?![①-⑳]))/).forEach(s2=>{
+      s2.split(/(?<=[。？！；])(?![」』）\)])\s*|(?<=[^.\d][.!?])\s+(?=[A-Z0-9「『#①-⑳])/).forEach(s3=>{
+        s3 = (s3||'').trim(); if(!s3) return;
+        if(/^[①-⑳]/.test(s3)) parts.push({c:'fli', t:s3});
+        else if(s3.includes(' · '))
+          s3.split(' · ').forEach(it=>{ it=it.trim(); if(it) parts.push({c:'fdot', t:it}); });
+        else parts.push({c:'fln', t:s3});
+      });
+    });
+  });
+  if(!parts.length) return '';
+  return `<div class='fmt'>` + parts.map(p=>
+    `<div class='${p.c}'>${p.c==='fdot'?`<span class='fm'>·</span>`:''}${md(p.t)}</div>`).join('') + `</div>`;
 }
 function dirBand(d){
   // A short leading "LABEL:" (≤30 chars, colon+space) becomes the statement's
@@ -1071,7 +1111,7 @@ function askRow(e, T, ts){
     <span class="dot2 k-${esc(e.kind)}"></span>
     <div class="rc">
       <div class="rt">${rt}</div>
-      <div class="rx">${!sum && body?`<div class='body'>${brk(body,1)}</div>`:''}${sum?`<div class='orig'>${brk(e.text,1)}</div>`:''}${linked.map(chip).join('')}${files.length?`<div class='files'>${files.map(flink).join(' · ')}</div>`:''}</div>
+      <div class="rx">${!sum && body?`<div class='body'>${fmt(body)}</div>`:''}${sum?`<div class='orig'>${fmt(e.text)}</div>`:''}${linked.map(chip).join('')}${files.length?`<div class='files'>${files.map(flink).join(' · ')}</div>`:''}</div>
       <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
     </div>
     <span class="rage">${a}</span></div>`;
@@ -1090,9 +1130,13 @@ function tCard(t){
   const lab = /^#\d+$/.test(t.label) ? `<span class='pill pj'>${esc(t.label)}</span>` : md(t.label);
   const id = t.task_id && t.label !== '#'+t.task_id ? `<span class='pill pt'>#${esc(t.task_id)}</span>` : '';
   const pp = /^P[01]$/.test(t.priority||'') ? `<span class='pill pr-${t.priority==='P0'?'0':'1'}'>${t.priority}</span>` : '';
+  // Collapsed: the compact dept·what clamp, unchanged. Expanded: the clamp swaps
+  // for the dept line + the what essay through fmt() — structured rows, not a wall.
+  const dp = `${esc(t.dept)}${t.external?` <span class='pill px'>分</span>`:''}`;
   return `<div class="t s-${esc(t.status||'none')}${xc(k)}" data-k="${esc(k)}" tabindex="0" onclick="tog(this)"><span class="tid">${pp}${lab}${id}</span>${badge}
     ${t.name && t.name !== t.label ? `<div class="nm">${md(t.name)}</div>` : ''}
-    <div class="sub">${esc(t.dept)}${t.external?` <span class='pill px'>分</span>`:''}${t.what?` · `+md(t.what):''}</div></div>`;
+    <div class="sub">${dp}${t.what?` · `+md(t.what):''}</div>
+    ${t.what?`<div class="tx"><div class="sub">${dp}</div>${fmt(t.what)}</div>`:''}</div>`;
 }
 function col(title, color, cls, inner, n){
   return `<div class="col ${cls}"><h3><span class="dot" style="border-color:${color}"></span>${title}
