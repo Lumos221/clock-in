@@ -4,6 +4,14 @@ All notable changes to **clock-in** are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com); this project uses [semantic versioning](https://semver.org)
 (`0.x` = pre-1.0, still evolving).
 
+## [0.9.39] — 2026-07-21
+### Fixed
+Four Boss reports on the 0.9.38 desk, one pass:
+- **CLI `--dept` default flipped to `CEO`**, and an explicit `Boss`/`老板` normalises to CEO — "Boss is not dept": she is the audience of every ask, never its raiser; the old default stamped her name into the dept column of every CLI-raised ask (existing `Boss-NN` entries keep their ids — renaming would dangle `@BOSS-DONE` references).
+- **Desk `files` cells now clickable**: a plain scalar string rendered dead text in Bases — `files:` is now a YAML list of quoted wiki-links (`- "[[docs/…]]"`), which Obsidian renders as links in both the properties panel and the Bases cell; always a list (empty `[]`) so the property type never flips.
+- **Panel ask meta line is a footer in BOTH states**: expanded, `Boss-32 · Boss · discuss` used to wedge between title and body and read as a divider — `.rx` (body/files) now precedes `.rm`, so the meta sits quietly at the bottom expanded exactly as it does collapsed.
+- **Path extraction: bare filenames can no longer start with a hyphen** (panel PATH_RE + the mirror's python twin) — killed the `-2026-07-21.jpg` fragment links a date-suffixed name split produced.
+
 ## [0.9.38] — 2026-07-21
 ### Added
 - **Obsidian desk mirror** (Boss's ask: the panel's Needs you / Parked / Information sections in Obsidian, with file paths in their own cell). `board.desk_mirror(root)` writes the ask register as generated notes — `docs/board/desk/<id>.md`, flat frontmatter (`section` · `kind` · `dept` · `task` · `ask` · `files` · `updated`), body carrying the full text with clickable markdown links; `files:` extracts project-relative paths via the panel's own PATH_RE (python twin), giving Bases a separate readable column. Sections are number-prefixed (`1 Needs you` · `2 Parked` · `3 Information` · `4 Answered`) so lexical groupBy matches the panel's order; Answered keeps the newest 8. Machine-owned: notes rewrite only when bytes change (Obsidian stays quiet), prune only files stamped `mirror: boss-board` — the Boss's own notes in the folder survive. Status truth stays in the JSON store (resolve via @BOSS-DONE / CLI / the CEO). Refreshed at every turn end (stop_boss_board, after captures/dones) and session start; `templates/Board.base` + refcheck's live base gain the **Desk** view (grouped by section, sorted updated DESC).

@@ -176,7 +176,9 @@ class SupersedeCollision(unittest.TestCase):
                      for fn in os.listdir(ddir)}
             ask = notes["CEO-1.md"]
             self.assertIn('section: "1 Needs you"', ask)
-            self.assertIn('files: "docs/mockups/db-shot.png · 报告.md"', ask)
+            self.assertIn('- "[[docs/mockups/db-shot.png]]"', ask)   # clickable list items
+            self.assertIn('- "[[报告.md]]"', ask)
+            self.assertIn("files: []", notes["CEO-2.md"])            # type-stable when empty
             self.assertIn('task: "#7"', ask)
             self.assertIn("- [docs/mockups/db-shot.png](docs/mockups/db-shot.png)", ask)
             self.assertIn('section: "3 Information"', notes["CEO-2.md"])

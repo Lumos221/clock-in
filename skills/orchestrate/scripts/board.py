@@ -101,7 +101,7 @@ DESK_ANSWERED_KEEP = 8
 DESK_FILE_RE = re.compile(
     r"(^|[^\w.\-/一-鿿])"
     r"((?:[\w.\-一-鿿]+/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5}"
-    r"|[\w\-一-鿿][\w.\-一-鿿]*\."
+    r"|[\w一-鿿][\w.\-一-鿿]*\."
     r"(?:png|jpe?g|gif|webp|pdf|svg|md|txt|csv|json|log|html?|ya?ml|toml))\b")
 
 
@@ -157,7 +157,7 @@ def desk_mirror(root):
               ("section", _desk_section(e)), ("kind", e.get("kind") or ""),
               ("dept", e.get("dept") or ""),
               ("task", ("#%s" % e["task"]) if e.get("task") else ""),
-              ("ask", title[:120]), ("files", " · ".join(files)),
+              ("ask", title[:120]),
               ("updated", e.get("updated") or e.get("created") or "")]
         lines = ["> 机器镜像（boss-board 生成）— 状态以 Boss Board 为准，此文件会被重写。", ""]
         if title:
@@ -168,8 +168,15 @@ def desk_mirror(root):
             lines += ["**答复:** %s" % e["sum"], ""]
         if files:
             lines += ["Files:"] + ["- [%s](%s)" % (p, p) for p in files] + [""]
+        # files = a YAML LIST of quoted wiki-links — Obsidian renders link-typed
+        # list items clickable in the properties panel AND the Bases cell (a plain
+        # scalar string rendered dead text — Boss's 2026-07-21 report). Always a
+        # list, even empty: a key that flips scalar/list confuses the property type.
+        files_yaml = ("files:\n" + "\n".join('  - "[[%s]]"' % p for p in files)
+                      if files else "files: []")
         full = ("---\n"
                 + "\n".join("%s: %s" % (k, json.dumps(v, ensure_ascii=False)) for k, v in fm)
+                + "\n" + files_yaml
                 + "\n---\n\n" + "\n".join(lines).rstrip("\n") + "\n")
         path = os.path.join(ddir, fn)
         try:
@@ -940,7 +947,7 @@ function esc(s){return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>
 // outside the path charset (or start) anchors both, so URL innards (host/a.png)
 // never match; trailing punctuation stays outside via the \b. stopPropagation keeps
 // a link click from toggling the row/card it sits in.
-const PATH_RE = /(^|[^\w.\-\/一-鿿])((?:[\w.\-一-鿿]+\/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5}|[\w\-一-鿿][\w.\-一-鿿]*\.(?:png|jpe?g|gif|webp|pdf|svg|md|txt|csv|json|log|html?|ya?ml|toml))\b/g;
+const PATH_RE = /(^|[^\w.\-\/一-鿿])((?:[\w.\-一-鿿]+\/)+[\w.\-一-鿿]+\.[A-Za-z0-9]{1,5}|[\w一-鿿][\w.\-一-鿿]*\.(?:png|jpe?g|gif|webp|pdf|svg|md|txt|csv|json|log|html?|ya?ml|toml))\b/g;
 // The path charset admits no HTML-escapable characters, so `p` is safe raw in
 // href (encoded), label AND the inline onclick string.
 // Two click behaviours (Boss's ask, 2026-07-18): types the browser renders
@@ -1057,12 +1064,15 @@ function askRow(e, T, ts){
   const [title, body] = splitAsk(e.text);
   const rt = brk(sum ? e.sum : (title || e.text));
   const files = filesOf(e.text);
+  // The id·dept·kind meta line is a quiet FOOTER in both states: collapsed it sits
+  // under the clamped title; expanded it must not wedge between title and body
+  // (Boss's 2026-07-21 report — mid-card it read as a divider), so .rx comes first.
   return `<div class="row${xc(e.id)}" data-k="${esc(e.id)}" tabindex="0" onclick="tog(this)">
     <span class="dot2 k-${esc(e.kind)}"></span>
     <div class="rc">
       <div class="rt">${rt}</div>
-      <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
       <div class="rx">${!sum && body?`<div class='body'>${brk(body,1)}</div>`:''}${sum?`<div class='orig'>${brk(e.text,1)}</div>`:''}${linked.map(chip).join('')}${files.length?`<div class='files'>${files.map(flink).join(' · ')}</div>`:''}</div>
+      <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
     </div>
     <span class="rage">${a}</span></div>`;
 }
@@ -1448,7 +1458,13 @@ def main():
                              "  orchestrate-board add --dept <handle> --kind <needs|discuss|info>"
                              " --text \"...\" [--task <id>]\n")
             sys.exit(2)
-        e = board_add(root, _opt(argv, "--dept", "Boss"),
+        # dept = the RAISER's handle. The Boss is the audience, never a dept — the
+        # old "Boss" default put her name in every CLI-raised ask's dept column
+        # (her ruling 2026-07-21: "Boss is not dept"); explicit Boss normalises too.
+        dept = _opt(argv, "--dept", "CEO")
+        if dept.strip().lower() in ("boss", "老板"):
+            dept = "CEO"
+        e = board_add(root, dept,
                       _opt(argv, "--kind", "needs"), text,
                       _opt(argv, "--task"))
         print(e["id"])
