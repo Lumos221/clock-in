@@ -1036,5 +1036,91 @@ class AddCliGuard(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(d, board.STORE_REL)))
 
 
+class BasketAndSend(unittest.TestCase):
+    """The interactive reverse channel: stage answers, flush with Send, resolve
+    replies on the board, queue a durable outbox record, drain it via the inbox."""
+
+    def test_basket_stage_replace_and_unstage(self):
+        s = {"entries": []}
+        board.basket_set(s, "QA-1", "reply", "use SQLite", NOW)
+        board.basket_set(s, "CEO-2", "ask", "what deadline?", NOW)
+        self.assertEqual([(x["id"], x["kind"]) for x in s["basket"]],
+                         [("QA-1", "reply"), ("CEO-2", "ask")])
+        board.basket_set(s, "QA-1", "reply", "use Postgres", NOW)   # one per id: replace
+        self.assertEqual({x["id"]: x["text"] for x in s["basket"]}["QA-1"], "use Postgres")
+        self.assertEqual(len(s["basket"]), 2)
+        board.basket_set(s, "QA-1", "reply", "   ", NOW)            # empty -> unstage
+        self.assertEqual([x["id"] for x in s["basket"]], ["CEO-2"])
+
+    def test_compose_is_single_line_and_flags_replies_vs_asks(self):
+        basket = [{"id": "QA-1", "kind": "reply", "text": "use SQLite"},
+                  {"id": "CEO-2", "kind": "ask", "text": "what deadline?"}]
+        msg = board.compose_basket(basket)
+        self.assertNotIn("\n", msg)                 # one prompt, one submit
+        for frag in ("QA-1", "CEO-2", "use SQLite", "what deadline?"):
+            self.assertIn(frag, msg)
+        self.assertIn("resolved on the board", msg)
+        self.assertIn("still open", msg)
+
+    def test_send_mutate_resolves_replies_keeps_asks_and_queues_outbox(self):
+        s = {"entries": []}
+        board.add_entry(s, "QA", "needs", "db?", NOW)      # QA-1
+        board.add_entry(s, "CEO", "info", "fyi", NOW)      # CEO-1
+        board.basket_set(s, "QA-1", "reply", "SQLite", NOW)
+        board.basket_set(s, "CEO-1", "ask", "when?", NOW)
+        rec = board.board_send_mutate(s, NOW)
+        self.assertEqual(board.get_entry(s, "QA-1")["status"], "resolved")
+        self.assertEqual(board.get_entry(s, "QA-1")["sum"], "SQLite")
+        self.assertEqual(board.get_entry(s, "CEO-1")["status"], "open")   # an ask stays open
+        self.assertEqual(s["basket"], [])                                 # cleared on send
+        self.assertEqual(rec["items"], ["QA-1", "CEO-1"])
+        self.assertFalse(rec["delivered"])
+        self.assertEqual(len(s["outbox"]), 1)
+
+    def test_send_mutate_empty_basket_is_noop(self):
+        self.assertIsNone(board.board_send_mutate({"entries": []}, NOW))
+
+    def test_take_pending_marks_delivered_once(self):
+        s = {"entries": []}
+        board.add_entry(s, "QA", "needs", "db?", NOW)
+        board.basket_set(s, "QA-1", "reply", "SQLite", NOW)
+        board.board_send_mutate(s, NOW)
+        self.assertEqual(len(board.take_pending_outbox(s)), 1)
+        self.assertTrue(s["outbox"][0]["delivered"])
+        self.assertEqual(board.take_pending_outbox(s), [])   # already delivered -> silent
+
+    def test_iterm_prime_skips_without_a_captured_pane(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(board.iterm_prime(d), "skip")   # no iterm-target -> fall back to hook
+
+    def test_set_read_flag_toggles_without_touching_status(self):
+        s = {"entries": []}
+        board.add_entry(s, "CEO", "info", "fyi", NOW)
+        board.set_read(s, "CEO-1", True, NOW)
+        self.assertTrue(board.get_entry(s, "CEO-1")["read"])
+        self.assertEqual(board.get_entry(s, "CEO-1")["status"], "open")
+        board.set_read(s, "CEO-1", False, NOW)
+        self.assertFalse(board.get_entry(s, "CEO-1")["read"])
+
+    def test_board_send_end_to_end_with_iterm_skipped(self):
+        board._SKIP_SERVER = True
+        os.environ["BOARD_SKIP_ITERM"] = "1"
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                os.makedirs(os.path.join(d, ".claude"))
+                board.board_add(d, "QA", "needs", "Postgres or SQLite?")
+                board._locked_mutate(d, lambda st: board.basket_set(
+                    st, "QA-1", "reply", "use SQLite", board._now()))
+                res = board.board_send(d)
+                self.assertEqual((res["delivery"], res["n"]), ("skip", 1))
+                st = board.load_store(board._store_path(d))
+                self.assertEqual(board.get_entry(st, "QA-1")["status"], "resolved")
+                self.assertEqual(st["basket"], [])
+                self.assertEqual(len(st["outbox"]), 1)
+                self.assertFalse(st["outbox"][0]["delivered"])   # skip -> pending for the inbox hook
+        finally:
+            os.environ.pop("BOARD_SKIP_ITERM", None)
+
+
 if __name__ == "__main__":
     unittest.main()

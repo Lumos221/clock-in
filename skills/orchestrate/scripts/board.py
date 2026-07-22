@@ -215,6 +215,87 @@ def set_status(store, eid, status, now, sum=None):
     return e
 
 
+# ---------------------------------------------------------------- interactive desk (reverse channel)
+# The board is no longer read-only: the Boss answers on the panel, and Send flushes
+# the staged answers into THIS session as ONE message. Resolution happens HERE, at
+# send, server-side — so "forgot to run @BOSS-DONE" is structurally impossible: the
+# answer's arrival IS the resolution. See docs/design/specs + reference/boss-board.md.
+def set_read(store, eid, read, now):
+    """Mechanical 'seen' flag on an entry (Information items need no decision, only a
+    read tick). Pure display state — never touches status or the session."""
+    e = get_entry(store, eid)
+    if e:
+        e["read"] = bool(read)
+        e["updated"] = now
+    return e
+
+
+def basket_set(store, eid, kind, text, now):
+    """Stage (or replace) the Boss's answer for one entry; empty text unstages it.
+    kind 'reply' = a decision (resolves the item at send); 'ask' = a follow-up
+    question (item stays open). One staged answer per entry — a re-stage overwrites.
+    Persisted in the store so a page reload restores the tray."""
+    b = [x for x in store.get("basket", []) if x.get("id") != eid]
+    if (text or "").strip():
+        b.append({"id": eid, "kind": ("ask" if kind == "ask" else "reply"),
+                  "text": text.strip(), "ts": now})
+    store["basket"] = b
+    return b
+
+
+def compose_basket(basket):
+    """One SINGLE-LINE message carrying every staged answer with its id. Single-line
+    because iTerm2 `write text` submits at each newline — the whole basket must land
+    as ONE prompt. Replies are flagged already-resolved (so the session never re-runs
+    @BOSS-DONE); asks are flagged still-open."""
+    reps = [x for x in basket if x.get("kind") != "ask"]
+    asks = [x for x in basket if x.get("kind") == "ask"]
+
+    def one(x):
+        t = re.sub(r"\s+", " ", x.get("text", "")).strip()
+        return "%s %s %s" % (x["id"], "asks:" if x.get("kind") == "ask" else "→", t)
+
+    note = []
+    if reps:
+        note.append("%d repl%s ALREADY resolved on the board (do NOT re-run @BOSS-DONE — "
+                    "just act on %s)" % (len(reps), "y" if len(reps) == 1 else "ies",
+                                         "it" if len(reps) == 1 else "them"))
+    if asks:
+        note.append("%d question%s still open" % (len(asks), "" if len(asks) == 1 else "s"))
+    return ("[Boss Board] The Boss answered on the panel — %s. %s"
+            % ("; ".join(note), " · ".join(one(x) for x in basket)))
+
+
+def board_send_mutate(store, now):
+    """Flush the basket: resolve reply items (sum = the reply text), leave asks open,
+    append the composed message to the outbox as a PENDING record, clear the basket.
+    The inbox hook is the sole deliverer — it flips pending → delivered when it hands
+    the message to the model. Returns the record, or None when the basket is empty."""
+    basket = list(store.get("basket") or [])
+    if not basket:
+        return None
+    for x in basket:
+        if x.get("kind") != "ask":
+            set_status(store, x["id"], "resolved", now, sum=x.get("text"))
+    rec = {"msg": compose_basket(basket), "items": [x["id"] for x in basket],
+           "ts": now, "delivered": False}
+    store.setdefault("outbox", []).append(rec)
+    store["basket"] = []
+    return rec
+
+
+def take_pending_outbox(store):
+    """Undelivered outbox records, marked delivered in the SAME locked pass so each
+    message injects exactly once. Keeps the outbox bounded (tail is just audit)."""
+    pend = [r for r in store.get("outbox", []) if not r.get("delivered")]
+    for r in pend:
+        r["delivered"] = True
+    ob = store.get("outbox", [])
+    if len(ob) > 50:
+        store["outbox"] = ob[-50:]
+    return pend
+
+
 def set_direction(store, text, now):
     """The standing product-direction banner above the panel (e.g. a launch
     checklist). One slot, whole-text replace; empty text clears it."""
@@ -455,6 +536,237 @@ def load_taskboard(root):
             d = (t.get("dept") or "").strip().lower()
             t["external"] = bool(d) and any(e in d for e in ext)
     return tb
+
+
+def _agent_frontmatter(text):
+    """Flat dict of a dept brief's leading `---` frontmatter (scalar values only), {}
+    when absent. Tolerant of an inline `# comment` on a value (the 0.9.18 field bug)."""
+    if not text.startswith("---"):
+        return {}
+    close = text.find("\n---", 3)
+    if close < 0:
+        return {}
+    fm = {}
+    for line in text[3:close].splitlines():
+        m = re.match(r"([A-Za-z][\w-]*):\s*(.*)$", line)
+        if m:
+            v = re.sub(r"\s+#.*$", "", m.group(2)).strip().strip('"').strip("'")
+            fm[m.group(1)] = v
+    return fm
+
+
+def load_roster(root):
+    """The department 花名册 for the Departments view. One entry per project dept — a
+    `.claude/agents/<handle>.md` file, the design-native registry (same source as
+    stop_refute_tally._known_handles; standing agents ship plugin-scope, so they never
+    appear here) — carrying the MODEL it runs on (frontmatter `model:`, the truth for
+    'what runs this pane'), its role/description, the 分公司 (external) flag, and its
+    live card counts. Internal depts first, then 分公司; each alphabetical. [] when none."""
+    adir = os.path.join(root, ".claude", "agents")
+    try:
+        files = sorted(f for f in os.listdir(adir) if f.endswith(".md"))
+    except OSError:
+        return []
+    try:
+        cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
+    except Exception:
+        cfg = {}
+    ext = {str(h).strip().lower() for h in (cfg.get("external") or [])}
+    try:
+        models = load_store(_store_path(root)).get("models") or {}   # live spawn overrides
+    except Exception:
+        models = {}
+    tasks = load_taskboard(root)["tasks"]
+    out = []
+    for f in files:
+        handle = f[:-3]
+        try:
+            fm = _agent_frontmatter(open(os.path.join(adir, f), encoding="utf-8").read())
+        except OSError:
+            fm = {}
+        cards = [t for t in tasks if (t.get("dept") or "").strip().lower() == handle.lower()]
+        default_model = fm.get("model", "")
+        live = str((models.get(handle) or {}).get("model") or "")
+        # Effective model = the CEO's in-session spawn override if any, else the
+        # frontmatter default (which is NOT the truth once overridden — the Boss's call).
+        out.append({"handle": handle, "model": live or default_model,
+                    "default_model": default_model, "live": bool(live),
+                    "role": fm.get("role") or fm.get("description") or "",
+                    "external": handle.lower() in ext, "cards": len(cards),
+                    "active": len([c for c in cards if c.get("status") in ("doing", "review", "blocked")]),
+                    "statuses": [c.get("status") for c in cards]})
+    out.sort(key=lambda d: (d["external"], d["handle"].lower()))
+    return out
+
+
+_BASE_FOLDER_RE = re.compile(r'inFolder\("([^"]+)"\)')
+
+
+def _base_columns(text):
+    """The first table view's column order (its `order:` list) from a .base file."""
+    m = re.search(r"(?m)^\s*order:\s*\n((?:[ \t]*-[ \t]*.+\n?)+)", text)
+    if not m:
+        return []
+    return [re.sub(r"^[ \t]*-[ \t]*", "", l).strip()
+            for l in m.group(1).splitlines() if l.strip().startswith("-")]
+
+
+def load_finance(root):
+    """The finance ledger for the Finance view — read straight from an Obsidian Base
+    (markdown-native, no DB connection). orchestrate.json `finance` names a `docs/…/*.base`
+    file; its table view gives the column order and its folder filter gives the rows
+    (each note's frontmatter = one period). None when unconfigured or absent, so the tab
+    stays hidden on projects without a finance base."""
+    try:
+        cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
+    except Exception:
+        return None
+    rel = cfg.get("finance")
+    if not rel:
+        return None
+    try:
+        btext = open(os.path.join(root, rel), encoding="utf-8").read()
+    except Exception:
+        return None
+    fm = _BASE_FOLDER_RE.search(btext)
+    folder = fm.group(1) if fm else os.path.dirname(rel)
+    cols = _base_columns(btext)
+    rows = []
+    try:
+        for f in sorted(os.listdir(os.path.join(root, folder))):
+            if not f.endswith(".md"):
+                continue
+            try:
+                data = _agent_frontmatter(open(os.path.join(root, folder, f), encoding="utf-8").read())
+            except OSError:
+                continue
+            if data:
+                rows.append(data)
+    except OSError:
+        return None
+    if not rows:
+        return None
+    if cols and all(cols[0] in r for r in rows):
+        rows.sort(key=lambda r: r.get(cols[0], ""), reverse=True)   # newest period first
+    if not cols:
+        cols = list(rows[0].keys())
+    return {"name": os.path.splitext(os.path.basename(rel))[0], "folder": folder,
+            "columns": cols, "rows": rows}
+
+
+def load_sot(root):
+    """The Dashboard's compass — the SoT's `## Now` section (State · Blocked-on-her ·
+    Money). It replaces the retired manual Direction band precisely because the SoT is
+    CEO-curated, capped, and re-read every session (the discipline sentinel keeps it from
+    going stale), so it never becomes the noise an unmaintained banner did. {now, as_of}
+    or None."""
+    try:
+        cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
+        text = open(os.path.join(root, cfg.get("sot", "docs/SoT.md")), encoding="utf-8").read()
+    except Exception:
+        return None
+    m = re.search(r"(?m)^##\s+Now\b[^\n]*\n(.*?)(?=^##\s|\Z)", text, re.S)
+    if not m or not m.group(1).strip():
+        return None
+    hm = re.search(r"(?m)^##\s+Now\b[^\n(]*\(([^)]+)\)", text)
+    return {"now": m.group(1).strip(), "as_of": (hm.group(1).strip() if hm else "")}
+
+
+def load_decisions(root, limit=14):
+    """The org's decision memory for the Decisions view: recent DECISIONS.md rulings
+    (`## <date> · [key] <title>`, newest first — the file is prepend-ordered) and the
+    CANON.md topic index (`` `topic` → <pointer> (updated <date>) ``, the settled answer
+    for each question). Returns {decisions, canon} or None when neither exists."""
+    try:
+        cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
+    except Exception:
+        cfg = {}
+    out = {"decisions": [], "canon": []}
+    try:
+        dec = open(os.path.join(root, cfg.get("decisions", "docs/DECISIONS.md")), encoding="utf-8").read()
+        for m in re.finditer(r"(?m)^##\s+(\d{4}-\d{2}-\d{2})\b[ ·:\-]*(.+)$", dec):
+            rest = m.group(2).strip()
+            km = re.match(r"\[([^\]]+)\]\s*(.*)", rest)
+            out["decisions"].append({"date": m.group(1), "key": km.group(1) if km else "",
+                                     "title": (km.group(2).strip() if km else rest)})
+            if len(out["decisions"]) >= limit:
+                break
+    except Exception:
+        pass
+    try:
+        canon = open(os.path.join(root, cfg.get("canon", "docs/CANON.md")), encoding="utf-8").read()
+        for m in re.finditer(r"(?m)^-\s+`([^`]+)`\s*(?:→|->)\s*(.+?)\s*(?:\(updated\s+([^)]+)\))?\s*$", canon):
+            out["canon"].append({"topic": m.group(1), "ptr": m.group(2).strip(),
+                                 "updated": (m.group(3) or "").strip()})
+            if len(out["canon"]) >= 80:
+                break
+    except Exception:
+        pass
+    return out if (out["decisions"] or out["canon"]) else None
+
+
+def load_mail(root, limit=30):
+    """Mail & Branches view: the 分公司 mail lane (docs/board/mail/*.md frontmatter:
+    time·from·to·re·status, newest first — filenames lead with the YYYYMMDD-HHMM stamp)
+    plus the branch offices (orchestrate.json `external` depts, badged with their letter
+    + unread counts). Returns {mail, branches} or None."""
+    try:
+        cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
+    except Exception:
+        cfg = {}
+    mdir = os.path.join(root, cfg.get("board", "docs/board"), "mail")
+    mail = []
+    try:
+        for f in sorted(os.listdir(mdir), reverse=True):
+            if not f.endswith(".md"):
+                continue
+            try:
+                fm = _agent_frontmatter(open(os.path.join(mdir, f), encoding="utf-8").read())
+            except OSError:
+                continue
+            if not (fm.get("to") or fm.get("from")):
+                continue  # dead letter (no headers) — the postmaster's problem, not a row
+            mail.append({"file": f, "from": fm.get("from", ""), "to": fm.get("to", ""),
+                         "re": fm.get("re", ""), "time": fm.get("time", ""),
+                         "status": fm.get("status", "")})
+            if len(mail) >= limit:
+                break
+    except OSError:
+        pass
+    branches = []
+    for h in (cfg.get("external") or []):
+        hl = str(h).lower()
+        involved = [m for m in mail if m["from"].lower() == hl or m["to"].lower() == hl]
+        branches.append({"handle": str(h), "letters": len(involved),
+                         "unread": len([m for m in involved if (m["status"] or "").lower() == "unread"]),
+                         "last": involved[0]["time"] if involved else ""})
+    return {"mail": mail, "branches": branches} if (mail or branches) else None
+
+
+def load_archive(root, limit=25):
+    """Archive view: finished-work history — the taskboard's Recently-shipped tail plus
+    the DONE entries in BACKLOG.md (`> **✅ DONE — <title>** (<dept, sha, …, date>) — …`,
+    newest first). Returns {shipped, backlog} or None."""
+    shipped = load_taskboard(root).get("shipped", [])
+    backlog = []
+    try:
+        cfg = json.load(open(os.path.join(root, ".claude", "orchestrate.json"), encoding="utf-8"))
+        text = open(os.path.join(root, cfg.get("backlog", "docs/BACKLOG.md")), encoding="utf-8").read()
+        for m in re.finditer(r"(?m)^>\s*\*\*✅\s*DONE\s*[—:-]\s*(.+?)\*\*\s*(?:\(([^)]*)\))?", text):
+            meta = (m.group(2) or "").strip()
+            dm = re.search(r"(\d{4}-\d{2}-\d{2})", meta)
+            # the meta is `(<dept>, <sha>, …)` OR `(<topic-key>, <dept>, <sha>, …)` — the
+            # dept is the first Capitalised token (Ops · Backend-IO); a lowercase-hyphen
+            # topic-key or a hex sha never matches, so it is never mislabelled a dept.
+            dept = next((p.strip() for p in meta.split(",")
+                         if re.match(r"^[A-Z][A-Za-z][A-Za-z_-]*$", p.strip())), "")
+            backlog.append({"title": m.group(1).strip(), "dept": dept,
+                            "date": (dm.group(1) if dm else "")})
+            if len(backlog) >= limit:
+                break
+    except Exception:
+        pass
+    return {"shipped": shipped, "backlog": backlog} if (shipped or backlog) else None
 
 
 # ---------------------------------------------------------------- project root
@@ -803,20 +1115,16 @@ h2 { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color:
 /* Structured asks: the detail body lives in the expansion; extracted file paths
    get their own quiet row under a hairline so the Boss never hunts inside prose. */
 .rx .files { margin-top: 6px; padding-top: 5px; border-top: 1px solid #e9e5d8; font-size: .74rem; }
-/* Direction band — the product's standing compass, set via `orchestrate-board
-   direction`; hidden entirely when unset. Deliberately UNBOXED: every card below
-   is work, this is the thesis the work serves — so it reads as the masthead's
-   motto line (kicker in the brand's voice, statement in the panel's serif), not
-   as one more card in the stack. */
-.dirband { margin: 2px 0 4px; padding: 12px 2px 16px; border-bottom: 1px solid #dcd8cb; }
-.dkick { display: flex; align-items: center; gap: 6px; font-size: .66rem; font-weight: 600;
-         letter-spacing: .16em; text-transform: uppercase; color: #c15f3c; }
-.dkick svg { flex: none; }
-.dkick .rage { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 400; }
-.dstate { font-family: "Tiempos Text", ui-serif, Georgia, "Songti SC", serif;
-          font-size: 1.04rem; line-height: 1.6; margin-top: 7px; max-width: 75ch;
-          text-wrap: pretty; white-space: pre-line; }
-.dstate .dlabel { color: #a2542f; font-weight: 600; letter-spacing: .02em; }
+/* SoT compass — the Dashboard's maintained "where we stand" band (SoT `## Now`),
+   replacing the retired manual Direction band. Boxed as a quiet card: it reads as
+   live status, not a masthead motto (which is exactly why the old banner went stale). */
+.sotband { margin: 2px 0 6px; padding: 13px 15px; border: 1px solid #dfdacc; border-radius: 10px;
+  background: #faf9f5; box-shadow: 0 1px 2px rgba(31,30,29,.05); }
+.skick { display: flex; align-items: center; gap: 8px; font-size: .64rem; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase; color: #c15f3c; margin-bottom: 8px; }
+.sage { margin-left: auto; letter-spacing: 0; text-transform: none; font-weight: 400; color: #a8a49a; }
+.srow { font-size: .82rem; line-height: 1.5; margin: 3px 0; color: #4b4a45; }
+.srow b { color: #1f1e1d; font-weight: 600; }
 /* An answered row with a one-line outcome folds to it; the original ask sits
    behind the click, quoted under a hairline. */
 .rx .orig { margin: 4px 0 2px; padding-left: 8px; border-left: 2px solid #e2ddd0;
@@ -893,9 +1201,9 @@ html.dark .parked .dot2 { background: #5c5b57; }
 html.dark .info #hist .dot2 { background: #7fae72; }
 html.dark .info h4.hist { color: #a3a199; }
 html.dark .rx .files { border-top-color: #3a3936; }
-html.dark .dirband { border-bottom-color: #3e3d3a; }
-html.dark .dkick { color: #d97757; }
-html.dark .dstate .dlabel { color: #e08262; }
+html.dark .sotband { background: #30302e; border-color: #3e3d3a; box-shadow: none; }
+html.dark .skick { color: #d97757; }
+html.dark .srow { color: #d8d5cc; } html.dark .srow b { color: #eceae4; }
 html.dark .rx .orig { border-left-color: #4a4945; color: #b8b5ac; }
 html.dark .col.c-todo { background: #2c312a; }
 html.dark .col.c-prog { background: #363023; }
@@ -923,6 +1231,226 @@ html.dark a:hover { text-decoration-color: #e08262; }
 html.dark .badge.blocked { background: #4a2a20; color: #e08262; }
 html.dark .badge.review { background: #3a3050; color: #c4b3e8; }
 html.dark [data-k]:focus-visible { outline-color: #d97757; }
+/* ---- interactive desk: reply/ask affordances, outbox tray, composer, toast ---- */
+.rowbtns { display: flex; gap: 6px; margin-top: 6px; }
+.bbtn { font: 600 .66rem -apple-system, "SF Pro Text", Helvetica, sans-serif; border: 1px solid #d9d4c6;
+        background: #faf9f5; color: #6b6a62; border-radius: 7px; padding: 2px 10px; cursor: pointer; }
+.bbtn:hover { border-color: #c15f3c; color: #a2542f; }
+.bbtn.staged { border-color: #c15f3c; background: #f0ddd2; color: #a2542f; }
+.rdchk { display: inline-flex; align-items: center; gap: 4px; font-size: .66rem; color: #87867f;
+  cursor: pointer; user-select: none; }
+.rdchk input { cursor: pointer; margin: 0; }
+.row.rd { opacity: .5; }
+.row.rd:hover { opacity: .85; }
+body.haspanel { padding-bottom: 108px; }   /* clear the fixed bottom bar */
+#tray { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: none;
+        background: #faf9f5; border-top: 1px solid #dcd8cb; box-shadow: 0 -2px 12px rgba(31,30,29,.07);
+        padding: 11px 24px 14px; }
+#tray.on { display: block; }
+.trayhd { display: flex; align-items: center; gap: 10px; max-width: 1060px; margin: 0 auto; }
+#traycount { font-size: .74rem; color: #87867f; }
+.traylist { max-width: 1060px; margin: 8px auto 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.tchip { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; max-width: 360px;
+         background: #f0eee6; border: 1px solid #e2ddd0; border-radius: 9px; padding: 2px 5px 2px 9px; }
+.tchip .tk { font: 600 .64rem ui-monospace, "SF Mono", Menlo, monospace; color: #a2542f; flex: none; }
+.tchip.ask .tk { color: #3d6a80; }
+.tchip .tt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4b4a45; }
+.tchip .tx2 { cursor: pointer; color: #a8a49a; padding: 0 3px; flex: none; }
+.tchip .tx2:hover { color: #be4b32; }
+.sendbtn { margin-left: auto; font: 600 .82rem -apple-system, sans-serif; border: none; cursor: pointer;
+           background: #c15f3c; color: #fff; border-radius: 8px; padding: 7px 18px; }
+.sendbtn:hover { background: #a2542f; }
+#compose { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: none;
+           background: #fffefb; border-top: 2px solid #c15f3c; box-shadow: 0 -3px 16px rgba(31,30,29,.11);
+           padding: 13px 24px 15px; }
+#compose.on { display: block; }
+.cwrap { max-width: 1060px; margin: 0 auto; }
+.chd { font-size: .74rem; color: #87867f; margin-bottom: 6px; }
+.chd b { color: #a2542f; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+#ctext { width: 100%%; min-height: 64px; resize: vertical; font: inherit; color: inherit; padding: 9px 11px;
+         border: 1px solid #d9d4c6; border-radius: 8px; background: #faf9f5; }
+#ctext:focus { outline: 2px solid #c15f3c; outline-offset: 1px; border-color: #c15f3c; }
+.cbtns { display: flex; gap: 8px; margin-top: 9px; }
+.cbtns button { font: 600 .8rem -apple-system, sans-serif; border: 1px solid #d9d4c6; background: #faf9f5;
+                color: #4b4a45; border-radius: 8px; padding: 6px 16px; cursor: pointer; }
+.cbtns .primary { background: #c15f3c; color: #fff; border-color: #c15f3c; }
+.cbtns .primary:hover { background: #a2542f; }
+#toast { position: fixed; bottom: 122px; left: 50%%; transform: translateX(-50%%); z-index: 40;
+         max-width: 82vw; text-align: center; background: #1f1e1d; color: #f0eee6; font-size: .78rem;
+         padding: 9px 16px; border-radius: 9px; opacity: 0; transition: opacity .22s; pointer-events: none; }
+#toast.on { opacity: .96; }
+html.dark .bbtn { background: #30302e; border-color: #4a4945; color: #b8b5ac; }
+html.dark .bbtn:hover { border-color: #d97757; color: #e09b78; }
+html.dark .bbtn.staged { background: #453026; border-color: #d97757; color: #e09b78; }
+html.dark #tray { background: #30302e; border-top-color: #3e3d3a; }
+html.dark #traycount { color: #a3a199; }
+html.dark .tchip { background: #383734; border-color: #4a4945; }
+html.dark .tchip .tt { color: #d8d5cc; }
+html.dark #compose { background: #262624; }
+html.dark .chd { color: #a3a199; }
+html.dark #ctext { background: #30302e; border-color: #4a4945; }
+html.dark .cbtns button { background: #30302e; border-color: #4a4945; color: #d8d5cc; }
+html.dark .cbtns .primary { background: #c15f3c; border-color: #c15f3c; color: #fff; }
+html.dark #toast { background: #0d0d0c; color: #eceae4; }
+/* ---- dashboard: tab bar + the monitor glance strip (edict's monitor, distilled) ---- */
+nav.tabs { display: flex; gap: 2px; margin: 4px 0 20px; border-bottom: 1px solid #dcd8cb; }
+nav.tabs button { font: 600 .82rem -apple-system, "SF Pro Text", Helvetica, sans-serif; background: none;
+  border: none; cursor: pointer; padding: 8px 15px; color: #87867f; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; }
+nav.tabs button:hover { color: #1f1e1d; }
+nav.tabs button.on { color: #a2542f; border-bottom-color: #c15f3c; }
+section.tabpane { display: none; }
+section.tabpane.on { display: block; }
+.monitor { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 2px 0 24px; }
+@media (max-width: 620px) { .monitor { grid-template-columns: repeat(2, 1fr); } }
+.tile { border: 1px solid #dfdacc; border-radius: 10px; padding: 13px 15px; background: #faf9f5;
+  box-shadow: 0 1px 2px rgba(31,30,29,.05); }
+.tile .tn { font: 700 1.95rem/1 "Tiempos Text", ui-serif, Georgia, "Songti SC", serif;
+  font-variant-numeric: tabular-nums; color: #1f1e1d; display: flex; align-items: center; gap: 9px; }
+.tile .th { width: 9px; height: 9px; border-radius: 50%%; flex: none; }
+.tile .tlab { font-size: .67rem; text-transform: uppercase; letter-spacing: .09em; color: #87867f; margin-top: 7px; }
+.th.calm { background: #9bb892; } .th.warn { background: #d9a441; } .th.attn { background: #c15f3c; }
+html.dark nav.tabs { border-bottom-color: #3e3d3a; }
+html.dark nav.tabs button { color: #a3a199; }
+html.dark nav.tabs button:hover { color: #eceae4; }
+html.dark nav.tabs button.on { color: #e09b78; border-bottom-color: #d97757; }
+html.dark .tile { background: #30302e; border-color: #3e3d3a; box-shadow: none; }
+html.dark .tile .tn { color: #eceae4; }
+html.dark .tile .tlab { color: #a3a199; }
+html.dark .th.calm { background: #7fae72; }
+/* ---- Departments 花名册: one card per dept, showing the model it runs on ---- */
+.depts { display: grid; grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); gap: 12px; }
+.dept { border: 1px solid #dfdacc; border-radius: 10px; padding: 12px 14px; background: #faf9f5;
+  box-shadow: 0 1px 2px rgba(31,30,29,.05); }
+.dhd { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.drole { font-size: .74rem; color: #6b6a62; margin: 7px 0 2px; line-height: 1.45;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.dstats { font-size: .7rem; color: #87867f; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.mpill { margin-left: auto; font: 600 .64rem ui-monospace, "SF Mono", Menlo, monospace; padding: 2px 8px;
+  border-radius: 8px; letter-spacing: .02em; }
+.m-opus { background: #e7d7f0; color: #6d3d94; } .m-sonnet { background: #d9e4ea; color: #3d6a80; }
+.m-haiku { background: #dce9d7; color: #4b7a3d; } .m-fable { background: #f0ddb8; color: #8a6a1e; }
+.m-other { background: #eae6d9; color: #6b6a62; } .m-none { background: #ece9df; color: #a8a49a; font-weight: 500; }
+.stpill { font-size: .64rem; padding: 1px 7px; border-radius: 7px; background: #ece8dc; color: #6b6a62; }
+.stpill.st-doing { background: #f4ecda; color: #8a6420; } .stpill.st-review { background: #ece4f4; color: #6f56a0; }
+.stpill.st-blocked { background: #f6e0d7; color: #a6452c; } .stpill.st-todo { background: #e7eadf; color: #5f7a50; }
+html.dark .dept { background: #30302e; border-color: #3e3d3a; box-shadow: none; }
+html.dark .drole { color: #b8b5ac; } html.dark .dstats { color: #a3a199; }
+html.dark .m-opus { background: #3a2c47; color: #c9a9e0; } html.dark .m-sonnet { background: #263c48; color: #86b6cf; }
+html.dark .m-haiku { background: #2c3a26; color: #9cc78a; } html.dark .m-fable { background: #453a1c; color: #dcc27a; }
+html.dark .m-other { background: #3a3935; color: #b8b5ac; } html.dark .m-none { background: #333230; color: #7f7d76; }
+html.dark .stpill { background: #3a3935; color: #b8b5ac; }
+html.dark .stpill.st-doing { background: #363023; color: #dcc27a; } html.dark .stpill.st-review { background: #322c40; color: #c4b3e8; }
+html.dark .stpill.st-blocked { background: #45302a; color: #e08262; } html.dark .stpill.st-todo { background: #2c312a; color: #9cbf8a; }
+.mlive { margin-left: 5px; font-size: .8em; font-weight: 700; opacity: .7; text-transform: uppercase; letter-spacing: .04em; }
+.msrc { font-size: .64rem; color: #a8a49a; margin-top: 6px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+html.dark .msrc { color: #7f7d76; }
+/* ---- Finance: the Obsidian-Base ledger rendered as a table ---- */
+.fmeta { font-size: .72rem; color: #87867f; margin-bottom: 12px; }
+.ftable { overflow-x: auto; border: 1px solid #dfdacc; border-radius: 10px; background: #faf9f5;
+  box-shadow: 0 1px 2px rgba(31,30,29,.05); }
+.ftable table { border-collapse: collapse; width: 100%%; font-size: .82rem; }
+.ftable th { text-align: left; font-size: .63rem; text-transform: uppercase; letter-spacing: .07em;
+  color: #87867f; font-weight: 600; padding: 10px 14px; border-bottom: 1px solid #e2ddd0; white-space: nowrap; }
+.ftable td { padding: 9px 14px; border-bottom: 1px solid #edeae0; white-space: nowrap; }
+.ftable tr:last-child td { border-bottom: none; }
+.ftable td.num { text-align: right; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums; }
+.ftable .e { color: #c7c3b6; }
+html.dark .ftable { background: #30302e; border-color: #3e3d3a; box-shadow: none; }
+html.dark .ftable th { color: #a3a199; border-bottom-color: #3e3d3a; }
+html.dark .ftable td { border-bottom-color: #3a3936; }
+html.dark .fmeta { color: #a3a199; }
+/* ---- Decisions / Canon: recent rulings + the settled-answer index ---- */
+/* minmax(0,1fr) not 1fr: a long unbroken topic-key gave the left column a huge
+   min-content, squishing it to a sliver and char-wrapping the key (Boss 2026-07-22). */
+.dcol2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 720px) { .dcol2 { grid-template-columns: 1fr; } }
+.dsub { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: #87867f;
+  margin: 0 0 .7em; font-weight: 600; }
+.dec { border-top: 1px solid #edeae0; padding: 9px 2px; }
+.dec:first-of-type { border-top: none; }
+.dech { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.decdate { font: 600 .68rem ui-monospace, "SF Mono", Menlo, monospace; color: #87867f; font-variant-numeric: tabular-nums; }
+.deckey { font: 600 .63rem ui-monospace, "SF Mono", Menlo, monospace; background: #f0ddd2; color: #a2542f;
+  border-radius: 7px; padding: 1px 7px; min-width: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 100%%; }
+.dectitle { font-size: .8rem; line-height: 1.45; color: #4b4a45;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.cx { display: flex; gap: 9px; align-items: baseline; padding: 5px 2px; border-top: 1px solid #edeae0; font-size: .75rem; }
+.cx:first-of-type { border-top: none; }
+.ctopic { font: 600 .72rem ui-monospace, "SF Mono", Menlo, monospace; color: #6b6a62; flex: 0 1 auto;
+  min-width: 0; max-width: 46%%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cptr { color: #6b6a62; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.cupd { color: #a8a49a; flex: 0 0 auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html.dark .dsub { color: #a3a199; }
+html.dark .dec { border-top-color: #3a3936; }
+html.dark .decdate { color: #a3a199; }
+html.dark .deckey { background: #453026; color: #e09b78; }
+html.dark .dectitle { color: #d8d5cc; }
+html.dark .ctable { background: #30302e; border-color: #3e3d3a; }
+html.dark .ctable td { border-bottom-color: #3a3936; }
+html.dark .ctopic, html.dark .cptr { color: #b8b5ac; }
+html.dark .cupd { color: #7f7d76; }
+/* ---- Mail & Branches · Archive ---- */
+.brwrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.brn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #dfdacc; border-radius: 9px;
+  padding: 5px 10px; background: #faf9f5; font-size: .74rem; }
+.brmeta { color: #87867f; }
+.mstat { color: #be4b32; text-align: center; width: 1.4em; }
+.marrow { color: #a8a49a; text-align: center; }
+.mfrom, .mto { font-weight: 600; white-space: nowrap; }
+.mre { color: #6b6a62; }
+.mtime { color: #a8a49a; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ftable tr.unread td { background: rgba(190,75,50,.05); }
+.shl { font-size: .8rem; padding: 6px 2px; border-top: 1px solid #edeae0; color: #4b4a45; }
+.shl:first-child { border-top: none; }
+.blg { border-top: 1px solid #edeae0; padding: 9px 2px; }
+.blg:first-of-type { border-top: none; }
+.blh { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+html.dark .brn { background: #30302e; border-color: #3e3d3a; }
+html.dark .brmeta, html.dark .mtime { color: #a3a199; }
+html.dark .mre { color: #b8b5ac; }
+html.dark .shl { border-top-color: #3a3936; color: #d8d5cc; }
+html.dark .blg { border-top-color: #3a3936; }
+html.dark .ftable tr.unread td { background: rgba(224,130,98,.08); }
+/* ---- cohesion: a left side-rail + one main column, so the tabs read as one instrument ---- */
+body { max-width: 1240px; }
+.shell { display: flex; align-items: flex-start; gap: 34px; }
+.rail { width: 186px; flex: none; position: sticky; top: 26px; }
+.rail .brand { margin-bottom: 3px; }
+.rail h1 { font-size: 1.32rem; line-height: 1.14; margin: 0 0 5px; }
+.rail .stamp { font-size: .68rem; }
+.main { flex: 1; min-width: 0; }
+.main > section > h2:first-child { margin-top: .15em; }
+nav.tabs { display: flex; flex-direction: column; gap: 1px; border-bottom: none; margin: 20px 0 0; }
+nav.tabs button { text-align: left; padding: 7px 11px; margin: 0; border-bottom: none;
+  border-left: 2px solid transparent; border-radius: 0 7px 7px 0; }
+nav.tabs button:hover { background: rgba(193,95,60,.05); }
+nav.tabs button.on { border-bottom-color: transparent; border-left-color: #c15f3c; background: rgba(193,95,60,.08); }
+@media (max-width: 780px) {
+  .shell { flex-direction: column; gap: 8px; }
+  .rail { width: auto; position: static; border-bottom: 1px solid #dcd8cb; padding-bottom: 10px; }
+  nav.tabs { flex-direction: row; flex-wrap: wrap; margin-top: 12px; gap: 2px; }
+  nav.tabs button { border-left: none; border-radius: 6px; }
+  nav.tabs button.on { border-left-color: transparent; }
+}
+html.dark .rail { border-bottom-color: #3e3d3a; }
+html.dark nav.tabs button:hover { background: rgba(217,119,87,.06); }
+html.dark nav.tabs button.on { border-left-color: #d97757; background: rgba(217,119,87,.09); }
+/* collapsible rail: a ‹ handle in the rail hides it; a ☰ button brings it back */
+#railtog { float: right; width: 24px; height: 24px; border: 1px solid #dcd8cb; background: #faf9f5;
+  border-radius: 7px; cursor: pointer; color: #87867f; font-size: 15px; line-height: 22px; padding: 0; }
+#railtog:hover { border-color: #c15f3c; color: #a2542f; }
+#railopen { display: none; position: fixed; top: 18px; left: 16px; z-index: 30; width: 32px; height: 32px;
+  border: 1px solid #dcd8cb; background: #faf9f5; border-radius: 8px; cursor: pointer; color: #6b6a62;
+  font-size: 16px; line-height: 30px; box-shadow: 0 1px 3px rgba(31,30,29,.1); }
+#railopen:hover { border-color: #c15f3c; color: #a2542f; }
+body.railoff .rail { display: none; }
+body.railoff #railopen { display: block; }
+body.railoff .main { padding-left: 40px; }
+html.dark #railtog, html.dark #railopen { background: #30302e; border-color: #4a4945; color: #a3a199; }
+html.dark #railtog:hover, html.dark #railopen:hover { border-color: #d97757; color: #e09b78; }
 </style>
 <script>
 (function(){
@@ -933,25 +1461,75 @@ html.dark [data-k]:focus-visible { outline-color: #d97757; }
 })();
 </script>
 </head><body>
-<header>
+<button id='railopen' onclick='toggleRail()' title='Show sidebar' aria-label='Show sidebar'>☰</button>
+<div class='shell'>
+<aside class='rail'>
+  <button id='railtog' onclick='toggleRail()' title='Hide sidebar' aria-label='Hide sidebar'>‹</button>
   <div class='brand'>Boss Board</div>
   <h1 id='proj'>—</h1>
   <div class='stamp' id='stamp'>—</div>
-</header>
-<div id='dir'></div>
-<h2>On your desk</h2>
-<div class='board top'>
-  <div class='col'><h3><span class='dot' style='border-color:#c15f3c'></span>Needs you
-    <span class='count' id='askn'>0</span></h3><div id='asks'></div></div>
-  <div class='col parked'><h3><span class='dot' style='border-color:#cbc6b9'></span>Parked
-    <span class='count' id='parkn'>0</span></h3><div id='parked'></div></div>
-  <div class='col info'><h3><span class='dot' style='border-color:#5b7fa6'></span>Information
-    <span class='count' id='infon'>0</span></h3><div id='infos'></div>
-    <h4 class='hist' data-k='histcol' tabindex='0' onclick='tog(this)'>History
-    <span class='count' id='histn'>0</span></h4><div id='hist'></div></div>
+  <nav class='tabs'>
+    <button data-tab='dash' class='on' onclick='showTab("dash")'>Dashboard</button>
+    <button data-tab='tasks' onclick='showTab("tasks")'>Tasks</button>
+    <button data-tab='depts' onclick='showTab("depts")'>Departments</button>
+    <button data-tab='decisions' onclick='showTab("decisions")'>Decisions</button>
+    <button data-tab='mail' onclick='showTab("mail")' style='display:none'>Mail &amp; Branches</button>
+    <button data-tab='archive' onclick='showTab("archive")'>Archive</button>
+    <button data-tab='finance' onclick='showTab("finance")' style='display:none'>Finance</button>
+  </nav>
+</aside>
+<main class='main'>
+<section class='tabpane on' id='tab-dash'>
+  <div class='monitor' id='monitor'></div>
+  <div id='sot'></div>
+  <h2>On your desk</h2>
+  <div class='board top'>
+    <div class='col'><h3><span class='dot' style='border-color:#c15f3c'></span>Needs you
+      <span class='count' id='askn'>0</span></h3><div id='asks'></div></div>
+    <div class='col parked'><h3><span class='dot' style='border-color:#cbc6b9'></span>Parked
+      <span class='count' id='parkn'>0</span></h3><div id='parked'></div></div>
+    <div class='col info'><h3><span class='dot' style='border-color:#5b7fa6'></span>Information
+      <span class='count' id='infon'>0</span></h3><div id='infos'></div>
+      <h4 class='hist' data-k='histcol' tabindex='0' onclick='tog(this)'>History
+      <span class='count' id='histn'>0</span></h4><div id='hist'></div></div>
+  </div>
+</section>
+<section class='tabpane' id='tab-tasks'>
+  <h2>Current iteration</h2>
+  <div class='board' id='board'></div>
+</section>
+<section class='tabpane' id='tab-depts'>
+  <h2>花名册 · Departments</h2>
+  <div class='depts' id='depts'></div>
+</section>
+<section class='tabpane' id='tab-decisions'>
+  <h2>Decisions · 决策与定案</h2>
+  <div class='dcol2' id='decisions'></div>
+</section>
+<section class='tabpane' id='tab-mail'>
+  <h2>Mail &amp; Branches · 分公司</h2>
+  <div id='mail'></div>
+</section>
+<section class='tabpane' id='tab-archive'>
+  <h2>Archive · 归档</h2>
+  <div id='archive'></div>
+</section>
+<section class='tabpane' id='tab-finance'>
+  <h2>Finance · 财务台账</h2>
+  <div id='finance'></div>
+</section>
+</main>
 </div>
-<h2>Current iteration</h2>
-<div class='board' id='board'></div>
+<div id='toast'></div>
+<div id='tray'>
+  <div class='trayhd'><span id='traycount'></span><button class='sendbtn' onclick='sendBasket()'>Send to session</button></div>
+  <div class='traylist' id='traylist'></div>
+</div>
+<div id='compose'><div class='cwrap'>
+  <div class='chd' id='chd'></div>
+  <textarea id='ctext'></textarea>
+  <div class='cbtns'><button class='primary' onclick='stageCompose()'>Stage</button><button onclick='closeCompose()'>Cancel</button></div>
+</div></div>
 <script>
 const POLL = %d;
 const VER = %s;  // page generation — a version change from the server hot-reloads the tab
@@ -1076,18 +1654,12 @@ function fmt(t){
   return `<div class='fmt'>` + parts.map(p=>
     `<div class='${p.c}'>${p.c==='fdot'?`<span class='fm'>·</span>`:''}${md(p.t)}</div>`).join('') + `</div>`;
 }
-function dirBand(d){
-  // A short leading "LABEL:" (≤30 chars, colon+space) becomes the statement's
-  // coral head — the CEO's texts naturally carry one (LAUNCH LINE: · 主攻方向：).
-  const m = /^([^:：\n]{2,30})[:：]\s+/.exec(d.text);
-  const label = m ? `<span class='dlabel'>${md(m[1])}:</span> ` : '';
-  let rest = m ? d.text.slice(m[0].length) : d.text;
-  // A checklist that begins right after the label gets the head line to itself —
-  // otherwise item ① hangs off the label while ②③④ sit on their own lines.
-  if (label && /^[①-⑳]/.test(rest)) rest = '\n' + rest;
-  const rose = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2.6 5.4-4.4 1.6 2.6-5.4z"/></svg>`;
-  return `<div class='dirband'><div class='dkick'>${rose} Direction<span class='rage'>${age(d.updated)}</span></div>
-    <div class='dstate'>${label}${brk(rest)}</div></div>`;
+function sotBand(sot){
+  // The SoT `## Now` bullets (State · Blocked-on-her · Money) — each a maintained
+  // status line; the leading "**Label:**" bolds via md(), circled digits break to rows.
+  const rows = sot.now.split('\n').map(l=>l.replace(/^\s*[-*]\s*/,'').trim()).filter(Boolean);
+  return `<div class='sotband'><div class='skick'>Source of truth${sot.as_of?`<span class='sage'>${esc(sot.as_of)}</span>`:''}</div>
+    ${rows.map(l=>`<div class='srow'>${brk(l)}</div>`).join('')}</div>`;
 }
 // Information ≠ decisions: info-kind entries never sit in Needs-you — they get the
 // third column, fresh ones visible, history folded. Legacy Inspector entries (posted
@@ -1118,12 +1690,13 @@ function askRow(e, T, ts){
   // The id·dept·kind meta line is a quiet FOOTER in both states: collapsed it sits
   // under the clamped title; expanded it must not wedge between title and body
   // (Boss's 2026-07-21 report — mid-card it read as a divider), so .rx comes first.
-  return `<div class="row${xc(e.id)}" data-k="${esc(e.id)}" tabindex="0" onclick="tog(this)">
+  return `<div class="row${xc(e.id)}${e.read?' rd':''}" data-k="${esc(e.id)}" tabindex="0" onclick="tog(this)">
     <span class="dot2 k-${esc(e.kind)}"></span>
     <div class="rc">
       <div class="rt">${rt}</div>
       <div class="rx">${!sum && body?`<div class='body'>${fmt(body)}</div>`:''}${sum?`<div class='orig'>${fmt(e.text)}</div>`:''}${linked.map(chip).join('')}${files.length?`<div class='files'>${files.map(flink).join(' · ')}</div>`:''}</div>
       <div class="rm"><b>${esc(e.id)}</b> · ${esc(e.dept)} · ${esc(e.kind)}${e.task?` · task #${esc(e.task)}`:''}</div>
+      ${rowCtl(e)}
     </div>
     <span class="rage">${a}</span></div>`;
 }
@@ -1163,6 +1736,180 @@ function col(title, color, cls, inner, n){
     <span class="count">${n}</span></h3>${inner||"<p class='empty'>—</p>"}</div>`;
 }
 let fails = 0, lastRaw = '';
+// ---- interactive desk: reply/ask basket + outbox tray + composer ----
+// The tray and composer are FIXED bars outside #asks, so a background board update
+// (a dept posting mid-reply) re-renders the columns without ever wiping an answer in
+// progress. BASKET is the client mirror of the store's staged basket (server-persisted
+// so a reload restores it). Nothing sends until "Send to session" flushes it as ONE
+// message; replies resolve their item on the board at that moment (never re-run here).
+const BASKET = new Map();   // id -> {kind:'reply'|'ask', text}
+let basketInit = false, cTarget = null;
+function syncBasket(server){
+  // Adopt the store basket on first load and on any reconnect with nothing staged
+  // locally — never mid-compose (that would fight the Boss typing).
+  if (basketInit && BASKET.size) return;
+  BASKET.clear();
+  (server||[]).forEach(x=>BASKET.set(x.id,{kind:x.kind,text:x.text}));
+  basketInit = true;
+}
+function staged(e){ return BASKET.get(e.id); }
+function rowCtl(e){
+  if (e.status!=='open') return '';          // Reply/Ask only on live asks
+  const s = staged(e);
+  const rep = isInfo(e) ? '' :               // info needs no decision — Ask only
+    `<button class="bbtn${s&&s.kind!=='ask'?' staged':''}" onclick="event.stopPropagation();openCompose('${esc(e.id)}','reply')">${s&&s.kind!=='ask'?'✎ Reply staged':'Reply'}</button>`;
+  const ask =
+    `<button class="bbtn${s&&s.kind==='ask'?' staged':''}" onclick="event.stopPropagation();openCompose('${esc(e.id)}','ask')">${s&&s.kind==='ask'?'✎ Question staged':'Ask'}</button>`;
+  // Information needs no decision, only a "seen" tick — mechanical, never touches the session.
+  const read = isInfo(e)
+    ? `<label class="rdchk" onclick="event.stopPropagation()"><input type="checkbox" ${e.read?'checked':''} onchange="toggleRead('${esc(e.id)}',this.checked)">read</label>`
+    : '';
+  return `<div class="rowbtns">${rep}${ask}${read}</div>`;
+}
+function toggleRead(id, read){ post('/read',{id,read}).catch(()=>{}); lastRaw=''; }
+function openCompose(id, kind){
+  cTarget = {id, kind};
+  const cur = BASKET.get(id);
+  document.getElementById('chd').innerHTML = (kind==='ask'?'Question about ':'Reply to ')+'<b>'+esc(id)+'</b>'+(kind==='ask'?' — sent to the session, the item stays open':' — resolves the item and is sent to the session');
+  const ta = document.getElementById('ctext');
+  ta.placeholder = kind==='ask' ? 'Your question…' : 'Your decision…';
+  ta.value = cur ? cur.text : '';
+  document.getElementById('compose').classList.add('on');
+  document.body.classList.add('haspanel');
+  ta.focus();
+}
+function closeCompose(){ cTarget=null; document.getElementById('compose').classList.remove('on'); renderTray(); }
+function post(path, body){
+  return fetch(path,{method:'POST',headers:{'X-Board':'1','Content-Type':'application/json'},body:JSON.stringify(body||{})});
+}
+function stageCompose(){
+  if(!cTarget) return;
+  const text = document.getElementById('ctext').value.trim();
+  if(text) BASKET.set(cTarget.id,{kind:cTarget.kind,text}); else BASKET.delete(cTarget.id);
+  post(`/basket`,{id:cTarget.id,kind:cTarget.kind,text}).catch(()=>{});
+  lastRaw=''; closeCompose();                // force a re-render so the row button reflects staged
+}
+function unstage(id){ BASKET.delete(id); post(`/basket`,{id,text:''}).catch(()=>{}); lastRaw=''; renderTray(); }
+function renderTray(){
+  const tray = document.getElementById('tray');
+  const items = [...BASKET.entries()];
+  const composeOn = document.getElementById('compose').classList.contains('on');
+  if(!items.length){
+    tray.classList.remove('on'); document.getElementById('traylist').innerHTML='';
+    if(!composeOn) document.body.classList.remove('haspanel');
+    return;
+  }
+  document.getElementById('traycount').textContent = items.length+(items.length===1?' answer staged':' answers staged');
+  document.getElementById('traylist').innerHTML = items.map(([id,v])=>
+    `<span class="tchip${v.kind==='ask'?' ask':''}"><span class="tk">${esc(id)}${v.kind==='ask'?' ?':''}</span><span class="tt" title="${esc(v.text)}">${esc(v.text)}</span><span class="tx2" title="unstage" onclick="unstage('${esc(id)}')">✕</span></span>`).join('');
+  if(!composeOn) tray.classList.add('on');
+  document.body.classList.add('haspanel');
+}
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),3800);
+}
+const SENT = {
+  ok:'Ready in your terminal — press Enter there to hand over your answers.',
+  notfound:'Queued — your terminal pane was not found; type anything + Enter in your Claude terminal to hand them over.',
+  skip:'Queued — type anything + Enter in your Claude terminal (or restart it once so the board can prime it).',
+  err:'Queued — type anything + Enter in your Claude terminal to hand them over.',
+  empty:'Nothing staged.'};
+async function sendBasket(){
+  if(!BASKET.size) return;
+  try{
+    const j = await (await post(`/send`,{})).json();
+    BASKET.clear(); basketInit=true; lastRaw=''; closeCompose(); renderTray();
+    toast(SENT[j.delivery] || 'Saved on the board.');
+  }catch(e){ toast('Send failed — your answers are still staged.'); }
+}
+// Dashboard tabs (Dashboard glance · Tasks kanban home). Persisted in localStorage;
+// #x expand-all still works independently of the active tab.
+function showTab(name){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
+  document.querySelectorAll('section.tabpane').forEach(s=>s.classList.toggle('on', s.id==='tab-'+name));
+  try{ localStorage.setItem('board-tab', name); }catch(e){}
+}
+try{ const _t=localStorage.getItem('board-tab'); if(_t && document.getElementById('tab-'+_t)) showTab(_t); }catch(e){}
+function toggleRail(){ document.body.classList.toggle('railoff'); try{localStorage.setItem('board-rail', document.body.classList.contains('railoff')?'off':'on');}catch(e){} }
+try{ if(localStorage.getItem('board-rail')==='off') document.body.classList.add('railoff'); }catch(e){}
+// Departments 花名册: the model each dept runs on is its badge (edict's officials board,
+// re-pointed from token cost to model). Tier → colour; unset shows plainly.
+function modelPill(m, live){
+  if(!m) return `<span class="mpill m-none" title="no model set in the agent file">model unset</span>`;
+  const k = /opus/i.test(m)?'opus':/sonnet/i.test(m)?'sonnet':/haiku/i.test(m)?'haiku':/fable/i.test(m)?'fable':'other';
+  const tip = live ? 'live: this dept was spawned with this model this session'
+                   : 'default from the agent file — the CEO can override it at spawn';
+  return `<span class="mpill m-${k}" title="${tip}">${esc(m)}${live?`<span class="mlive">live</span>`:''}</span>`;
+}
+function deptCard(d){
+  const st = {}; (d.statuses||[]).forEach(s=>{ if(s) st[s]=(st[s]||0)+1; });
+  const chips = ['doing','review','blocked','todo','done'].filter(s=>st[s])
+    .map(s=>`<span class="stpill st-${s}">${st[s]} ${s}</span>`).join(' ');
+  const handle = `<span class="dchip" style="--dh:${hue(d.handle)}">${esc(d.handle)}</span>`;
+  // Honest about source: 'default' is the frontmatter fallback; 'running' is the live
+  // spawn override the CEO chose this session (the real answer to "what runs this dept").
+  const src = !d.model ? '' : (d.live
+    ? `running ${esc(d.model)}${d.default_model&&d.default_model!==d.model?` · default ${esc(d.default_model)}`:''}`
+    : `default model — no live override this session`);
+  return `<div class="dept">
+    <div class="dhd">${handle}${d.external?`<span class='pill px'>分</span>`:''}${modelPill(d.model, d.live)}</div>
+    ${d.role?`<div class="drole">${md(d.role)}</div>`:''}
+    <div class="dstats">${d.cards?`${d.active} active · ${d.cards} card(s)`:'idle'}${chips?' · '+chips:''}</div>
+    ${src?`<div class="msrc">${src}</div>`:''}
+  </div>`;
+}
+// Finance 财务台账: the configured Obsidian Base's ledger, one period per row. Columns
+// come from the .base view order; numeric cells right-align in tabular figures.
+function financeView(f){
+  if(!f || !f.rows || !f.rows.length)
+    return `<p class='empty'>No finance base configured — set <code>finance</code> in orchestrate.json to a <code>.base</code> file.</p>`;
+  const cols = (f.columns && f.columns.length) ? f.columns : Object.keys(f.rows[0]);
+  const head = cols.map(c=>`<th>${esc(c)}</th>`).join('');
+  const body = f.rows.map(r=>`<tr>${cols.map(c=>{
+    const v = (r[c]==null?'':String(r[c]));
+    const num = v!=='' && !isNaN(v.replace(/,/g,''));
+    return `<td class="${num?'num':''}">${v===''?`<span class='e'>—</span>`:esc(v)}</td>`;
+  }).join('')}</tr>`).join('');
+  return `<div class='fmeta'>${esc(f.name)} · ${f.rows.length} period(s) · <code>${esc(f.folder)}</code></div>
+    <div class='ftable'><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+// Decisions/Canon: the org's decision memory — recent dated rulings (title clamped;
+// full why lives in DECISIONS.md) beside the CANON settled-answer index (topic → pointer).
+function decisionsView(dd){
+  if(!dd) return `<p class='empty'>No decision log yet (DECISIONS.md / CANON.md).</p>`;
+  const decs = (dd.decisions||[]).map(x=>
+    `<div class='dec'><div class='dech'><span class='decdate'>${esc(x.date)}</span>${x.key?`<span class='deckey'>${esc(x.key)}</span>`:''}</div><div class='dectitle'>${md(x.title)}</div></div>`).join('') || `<p class='empty'>—</p>`;
+  // Canon as compact flex rows, NOT a table: a stretched grid cell was distributing
+  // the table's row heights into huge blank cells (Boss 2026-07-22). Pointers are prose,
+  // so no paths() link-wrapping either.
+  const canon = (dd.canon||[]).map(x=>
+    `<div class='cx'><span class='ctopic' title='${esc(x.topic)}'>${esc(x.topic)}</span><span class='cptr'>${esc(x.ptr)}</span>${x.updated?`<span class='cupd'>${esc(x.updated)}</span>`:''}</div>`).join('') || `<p class='empty'>—</p>`;
+  return `<div><h3 class='dsub'>Recent rulings <span class='count'>${(dd.decisions||[]).length}</span></h3>${decs}</div>
+    <div><h3 class='dsub'>Canon · settled answers <span class='count'>${(dd.canon||[]).length}</span></h3>${canon}</div>`;
+}
+// Mail & Branches: the 分公司 offices + the mail lane (letters newest-first, unread dot).
+function mailView(mm){
+  if(!mm) return `<p class='empty'>No mail lane (docs/board/mail).</p>`;
+  const br = (mm.branches||[]).map(b=>
+    `<div class='brn'><span class='dchip' style='--dh:${hue(b.handle)}'>${esc(b.handle)}</span><span class='pill px'>分</span><span class='brmeta'>${b.letters} letter(s)${b.unread?` · <b>${b.unread} unread</b>`:''}${b.last?` · ${esc(b.last)}`:''}</span></div>`).join('');
+  const rows = (mm.mail||[]).map(m=>{
+    const un = (m.status||'').toLowerCase()==='unread';
+    return `<tr class='${un?'unread':''}'><td class='mstat'>${un?'●':''}</td><td class='mfrom'>${esc(m.from)}</td><td class='marrow'>→</td><td class='mto'>${esc(m.to)}</td><td class='mre'>${esc(m.re)}</td><td class='mtime'>${esc(m.time)}</td></tr>`;
+  }).join('');
+  return `${br?`<div class='dsub'>Branch offices</div><div class='brwrap'>${br}</div>`:''}
+    <div class='dsub' style='margin-top:1.4em'>Mail lane <span class='count'>${(mm.mail||[]).length}</span></div>
+    <div class='ftable'><table><tbody>${rows||`<tr><td class='empty'>—</td></tr>`}</tbody></table></div>`;
+}
+// Archive: recently-shipped tail + BACKLOG history (title clamped; full record in the file).
+function archiveView(ar){
+  if(!ar) return `<p class='empty'>Nothing archived yet.</p>`;
+  const ship = (ar.shipped||[]).map(x=>`<div class='shl'>${md(x)}</div>`).join('');
+  const bl = (ar.backlog||[]).map(x=>
+    `<div class='blg'><div class='blh'>${x.date?`<span class='decdate'>${esc(x.date)}</span>`:''}${x.dept?`<span class='dchip' style='--dh:${hue(x.dept)}'>${esc(x.dept)}</span>`:''}</div><div class='dectitle'>${md(x.title)}</div></div>`).join('');
+  return `${ship?`<div class='dsub'>Recently shipped</div>${ship}`:''}
+    <div class='dsub' style='margin-top:${ship?'1.4em':'0'}'>History · BACKLOG <span class='count'>${(ar.backlog||[]).length}</span></div>${bl||`<p class='empty'>—</p>`}`;
+}
 async function tick(){
   try{
     const r = await fetch('/state.json', {cache:'no-store'});
@@ -1173,17 +1920,17 @@ async function tick(){
     document.title = proj + ' · Boss Board';
     // Re-render ONLY when the data changed — a rebuild every poll would collapse
     // whatever the Boss just expanded and churn the DOM for nothing.
-    const raw = JSON.stringify([s.entries, s.taskboard, s.direction]);
+    const raw = JSON.stringify([s.entries, s.taskboard, s.sot]);
     fails = 0;
     document.body.style.opacity = "";   // clear a stale "disconnected" dim on reconnect
+    syncBasket(s.basket); renderTray();  // restore/reflect staged answers every poll
     if (raw === lastRaw){
       document.getElementById('stamp').textContent =
         (s.entries||[]).filter(e=>e.status==='open' && !isInfo(e)).length + " open · updated " + new Date().toLocaleTimeString();
       return;
     }
     lastRaw = raw;
-    const dir = s.direction;
-    document.getElementById('dir').innerHTML = (dir && dir.text) ? dirBand(dir) : '';
+    document.getElementById('sot').innerHTML = s.sot ? sotBand(s.sot) : '';
     const es = s.entries || [];
     const tb = s.taskboard || {tasks:[], shipped:[]};
     const T = {list: tb.tasks, byId: {}};
@@ -1246,6 +1993,31 @@ async function tick(){
       + col('In progress', '#c08b2d', 'c-prog', prog.map(tCard).join(''), prog.length)
       + col('Done', '#9c87c9', 'c-done', doneAll.slice(0,cap).join('') +
             (more>0?`<p class='empty'>+${more} more → BACKLOG.md</p>`:''), doneT.length+shipped.length);
+    // Monitor glance strip (Dashboard tab): live counts + a health dot.
+    const blocked = tb.tasks.filter(t=>t.status==='blocked').length;
+    const doneToday = shipped.filter(x=>x.trim().startsWith(today)).length;
+    const tile = (n,lab,h)=>`<div class='tile'><div class='tn'>${n}<span class='th ${h}'></span></div><div class='tlab'>${lab}</div></div>`;
+    document.getElementById('monitor').innerHTML =
+        tile(needsOpen.length,'Needs you', needsOpen.length?'attn':'calm')
+      + tile(prog.length,'In progress','calm')
+      + tile(blocked,'Blocked', blocked?'warn':'calm')
+      + tile(doneToday,'Shipped today','calm');
+    // Departments 花名册 (Departments tab)
+    const roster = s.roster || [];
+    document.getElementById('depts').innerHTML = roster.length
+      ? roster.map(deptCard).join('')
+      : `<p class='empty'>No department roster yet — add .claude/agents/&lt;handle&gt;.md files.</p>`;
+    // Finance (only surfaces when a finance base is configured — tab hidden otherwise)
+    const fin = s.finance;
+    const fbtn = document.querySelector('nav.tabs button[data-tab="finance"]');
+    if (fbtn) fbtn.style.display = fin ? '' : 'none';
+    document.getElementById('finance').innerHTML = financeView(fin);
+    document.getElementById('decisions').innerHTML = decisionsView(s.decisions);
+    const mbtn = document.querySelector('nav.tabs button[data-tab="mail"]');
+    const hasMail = s.mail && (((s.mail.mail||[]).length)||((s.mail.branches||[]).length));
+    if (mbtn) mbtn.style.display = hasMail ? '' : 'none';
+    document.getElementById('mail').innerHTML = mailView(s.mail);
+    document.getElementById('archive').innerHTML = archiveView(s.archive);
     document.getElementById('stamp').textContent =
       needsOpen.length + " open · updated " + new Date().toLocaleTimeString();
   }catch(e){
@@ -1352,6 +2124,68 @@ def _launch_default(full):
         pass
 
 
+def iterm_target_file(root):
+    """Where session_start records the Boss's iTerm2 session id (env ITERM_SESSION_ID),
+    so Send can push a reply into THAT exact pane."""
+    return os.path.join(runtime_dir(root), "iterm-target")
+
+
+# Delivery: the content always travels via the outbox + the UserPromptSubmit inbox hook
+# (one deliverer, which marks it delivered), so a reply can never be "resolved but not
+# delivered". A turn still has to FIRE for the hook to run, and macOS silently drops a
+# synthetic Return posted by a background process (field-proven 2026-07-22: osascript
+# reports success, the key never registers) — so true auto-submit is impossible from
+# here. Instead we PRIME the pane: type a short nudge into the input (no focus steal —
+# write text targets the session by id) and let the Boss press Enter, which fires the
+# turn. tmux sessions get real hands-off via `tmux send-keys` (a genuine input event the
+# TUI accepts); see iterm-target capture. argv-driven (no shell/AppleScript injection);
+# the GUID pins the paste to exactly one pane.
+BOARD_NUDGE = "Deliver my Boss Board answers."
+ITERM_PRIME_APPLESCRIPT = (
+    "on run argv\n"
+    "  set theId to item 1 of argv\n"
+    "  set theMsg to item 2 of argv\n"
+    "  tell application \"iTerm2\"\n"
+    "    repeat with w in windows\n"
+    "      repeat with t in tabs of w\n"
+    "        repeat with s in sessions of t\n"
+    "          if (id of s) is theId then\n"
+    "            tell s to write text theMsg newline no\n"
+    "            return \"ok\"\n"
+    "          end if\n"
+    "        end repeat\n"
+    "      end repeat\n"
+    "    end repeat\n"
+    "  end tell\n"
+    "  return \"notfound\"\n"
+    "end run\n")
+
+
+def iterm_prime(root):
+    """Prime the Boss's PINNED iTerm2 pane with the delivery nudge — no submit (macOS
+    won't let a background process press a real Return), so the Boss presses Enter, which
+    fires the turn and the inbox hook hands over the queued answers. No focus steal
+    (write text targets the session by id). Returns 'ok' | 'notfound' | 'skip' | 'err'.
+    Never raises; tests set BOARD_SKIP_ITERM."""
+    if os.environ.get("BOARD_SKIP_ITERM"):
+        return "skip"
+    try:
+        guid = open(iterm_target_file(root), encoding="utf-8").read().strip()
+    except Exception:
+        return "skip"                       # no captured session (not iTerm2, or pre-capture)
+    guid = guid.split(":")[-1].strip()      # ITERM_SESSION_ID is "wNtMpK:GUID"; id = the GUID tail
+    if not guid:
+        return "skip"
+    try:
+        r = subprocess.run(["osascript", "-", guid, BOARD_NUDGE],
+                           input=ITERM_PRIME_APPLESCRIPT, capture_output=True,
+                           text=True, timeout=5)
+        out = (r.stdout or "").strip()
+        return out if out in ("ok", "notfound") else "err"
+    except Exception:
+        return "err"
+
+
 def serve(root, port):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
@@ -1366,7 +2200,16 @@ def serve(root, port):
             if self.path.startswith("/state.json"):
                 state["last_poll"] = time.time()
                 payload = load_store(store_path)
+                payload.pop("outbox", None)      # session-facing only — never rendered
+                payload.pop("outbox_seq", None)
                 payload["taskboard"] = load_taskboard(root)  # live iteration view
+                payload["roster"] = load_roster(root)        # 花名册 · Departments view
+                payload["finance"] = load_finance(root)      # Finance view (Obsidian Base), if configured
+                payload.pop("direction", None)               # retired: the manual Direction band was noise
+                payload["sot"] = load_sot(root)              # Dashboard compass = the maintained SoT `## Now`
+                payload["decisions"] = load_decisions(root)  # Decisions/Canon view
+                payload["mail"] = load_mail(root)            # Mail & Branches view
+                payload["archive"] = load_archive(root)      # Archive view
                 payload["version"] = BUILD                   # tab hot-reloads on change
                 payload["project"] = os.path.basename(os.path.abspath(root))
                 body = json.dumps(payload).encode("utf-8")
@@ -1416,6 +2259,47 @@ def serve(root, port):
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(body)
+
+        def _json(self, code, obj):
+            body = json.dumps(obj).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            # The board's WRITE path (the reverse channel). Every write demands the
+            # X-Board header — a cross-origin page can't send it without a preflight
+            # this server never grants (the /open anti-CSRF contract); the socket is
+            # 127.0.0.1-only, so only local origins reach here at all.
+            from urllib.parse import urlparse
+            if self.headers.get("X-Board") != "1":
+                self.send_response(403); self.end_headers(); return
+            path = urlparse(self.path).path
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n)) if n else {}
+            except Exception:
+                body = None
+            if not isinstance(body, dict):
+                self.send_response(400); self.end_headers(); return
+            if path == "/basket":
+                eid, text = str(body.get("id") or ""), body.get("text")
+                if not eid or not isinstance(text, str) or len(text) > 4000:
+                    self.send_response(400); self.end_headers(); return
+                _locked_mutate(root, lambda s: basket_set(s, eid, body.get("kind"), text, _now()))
+                self._json(200, {"ok": True})
+            elif path == "/read":
+                eid = str(body.get("id") or "")
+                if not eid:
+                    self.send_response(400); self.end_headers(); return
+                _locked_mutate(root, lambda s: set_read(s, eid, bool(body.get("read")), _now()))
+                self._json(200, {"ok": True})
+            elif path == "/send":
+                self._json(200, board_send(root))
+            else:
+                self.send_response(404); self.end_headers()
 
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
 
@@ -1473,6 +2357,20 @@ def board_resolve_dept(root, dept, sum=None):
 
 def board_done(root, eid, sum=None):
     return _locked_mutate(root, lambda store: set_status(store, eid, "resolved", _now(), sum))
+
+
+def board_send(root):
+    """Flush the Boss Board basket. Resolves replies on the board (source of truth) and
+    queues the composed answer in the outbox as PENDING; the UserPromptSubmit inbox hook
+    is the ONE deliverer (it injects the content and marks it delivered), so nothing is
+    ever resolved-but-not-delivered. We PRIME the pane with the nudge so the Boss just
+    presses Enter to fire the turn. Returns {'n','delivery','msg'}; delivery in
+    ok|notfound|skip|err|empty."""
+    now = _now()
+    rec = _locked_mutate(root, lambda store: board_send_mutate(store, now))
+    if not rec:
+        return {"n": 0, "delivery": "empty", "msg": ""}
+    return {"n": len(rec["items"]), "delivery": iterm_prime(root), "msg": rec["msg"]}
 
 
 def board_direction(root, text):

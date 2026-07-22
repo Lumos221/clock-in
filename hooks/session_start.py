@@ -546,6 +546,25 @@ def pane_flags(root, data):
             % (len(orphans), ", ".join(orphans[:6]) + ("…" if len(orphans) > 6 else ""))]
 
 
+def capture_iterm_target(root):
+    """Record THIS session's iTerm2 session id (env ITERM_SESSION_ID) into the board
+    runtime dir, so the Boss Board's Send can push a reply straight into this pane
+    (board.iterm_send targets the exact GUID, never 'current session'). iTerm2-only;
+    fail-open — no env var / no board module → nothing written, and Send simply falls
+    back to the outbox inbox hook. Lead session only (the Boss types here)."""
+    sid = (os.environ.get("ITERM_SESSION_ID") or "").strip()
+    if not sid or board is None:
+        return
+    try:
+        d = board.runtime_dir(root)
+        tmp = os.path.join(d, "iterm-target.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(sid)
+        os.replace(tmp, os.path.join(d, "iterm-target"))
+    except Exception:
+        pass
+
+
 def main():
     if hooklib is None:
         return
@@ -593,6 +612,10 @@ def main():
                 cardlib.regen_digest(root, cfg)
             if board is not None:
                 board.desk_mirror(root)  # Obsidian desk view fresh from session one
+        except Exception:
+            pass
+        try:
+            capture_iterm_target(root)   # pin this pane so Boss Board Send can reach it
         except Exception:
             pass
         try:
