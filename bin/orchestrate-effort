@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# orchestrate-effort — change ONE RUNNING teammate's effort level, mid-life.
+#   orchestrate-effort QA low        # QA thinks less; every other seat is untouched
+#   orchestrate-effort               # list live seats you can address
+#
+# ONLY the teammate path needs this. A subagent takes `effort:` from its own file or
+# its Agent call; a teammate cannot be given one at all (the spawn drops the field and
+# hands it the lead's live level), so typing into its pane is the only lever there is.
+#
+# NOT a spawn-time tool. Doing this automatically on spawn was built and abandoned:
+# `/effort` cannot apply until the pane's current turn ENDS, and a dept's first turn IS
+# its card, so it lands after the work it was declared for. Use it on a seat that has
+# been running a while and whose NEXT leg should differ — and expect the cache cost, the
+# level is part of the rendered prompt.
+#
+# It also restores the GLOBAL effortLevel that `/effort` overwrites on its way past —
+# which is why you never type `/effort` into a pane by hand.
+# Resolves effort.py relative to ITS OWN location — works from any cwd.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/orchestrate/scripts/effort.py" "$@"

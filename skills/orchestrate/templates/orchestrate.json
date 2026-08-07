@@ -1,0 +1,21 @@
+{
+  "active": true,
+  "project": "<项目名>",
+  "sot": "docs/SoT.md",
+  "taskboard": "docs/TaskBoard.md",
+  "board": "docs/board",
+  "backlog": "docs/BACKLOG.md",
+  "decisions": "docs/DECISIONS.md",
+  "roster": [],
+  "external": [],
+  "redlines": [],
+  "thresholds": {
+    "bounce_diagnose": 2,
+    "bounce_escalate": 3,
+    "chaos_ceo_refutes": 3,
+    "chaos_unowned_domain_fails": 3,
+    "meeting_batch": 3,
+    "branch_drain_hours": 24,
+    "branch_behind_commits": 10
+  }
+}

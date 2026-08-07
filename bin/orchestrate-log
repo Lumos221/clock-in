@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# orchestrate-log — append ONE finished-task row to docs/BACKLOG.md (format is
+# code-guaranteed; the completion hook uses the same formatter). Hand use: backfills,
+# and the 分公司 branch session logging its shipped cards (no completion hook fires
+# for external cards — no platform task ever existed).
+#   echo '{"task_id":"x141","dept":"Marketing","task":"#141 LAUNCH — copy","sha":"abc1234"}' | orchestrate-log
+# Resolves log.py relative to ITS OWN location — works from any cwd.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/orchestrate/scripts/log.py" "$@"

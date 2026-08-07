@@ -1,0 +1,23 @@
+# Extended regexes the pre-push hook refuses to publish. One per line, case-insensitive.
+# Comments and blank lines ignored. Keep each pattern narrow: a pattern that fires on
+# ordinary work is one that gets bypassed with --no-verify and then protects nothing.
+
+# --- the person running the org: this is a general tool, not one person's setup ---
+\b(she|her|hers|herself)\b
+
+# --- absolute paths off this machine ---
+/Users/[a-z0-9_.-]+/
+
+# --- real projects and ventures that are not this repo ---
+\brefcheck\b
+\bLumosAlmanac\b
+\bPerfectRefs\b
+今日宜学术
+
+# --- contact details ---
+# Known-safe addresses (the required Co-Authored-By trailer) are excused in
+# private-allow.txt rather than carved out here — see that file.
+[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}
+
+# --- credentials that should never be in a tree at all ---
+(sk-ant-|ghp_|github_pat_|AKIA[0-9A-Z]{16})

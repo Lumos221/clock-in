@@ -1,0 +1,13 @@
+# Exceptions. A hit matching any regex here is dropped before the push is refused.
+# Add a line whenever the guard fires on something genuinely fine to publish — that is
+# cheaper than loosening a pattern, and far cheaper than learning to type --no-verify.
+
+# The Co-Authored-By trailer this repo's commit convention requires.
+noreply@anthropic\.com
+
+# This repo's own public identity: release links, badges, install command.
+github\.com/Lumos221/clock-in
+Lumos221/clock-in
+
+# Credited upstream project (public, and the credit is deliberate).
+github\.com/cft0808/edict

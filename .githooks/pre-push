@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+"""pre-push — refuse to publish anything that identifies the person running this org.
+
+WHY. This repo is public. A branch pushed to GitHub is published the moment it lands,
+and deleting the branch or force-pushing over it does NOT reliably remove the objects:
+they stay reachable through the API, forks and caches. So the only boundary that holds
+is LOCAL vs PUSHED, never branch vs main. Be as personal as you like in local commits;
+this refuses at the one gate that matters.
+
+It scans the TREE being published and the COMMIT MESSAGES. Both, because a squash
+carries content forward even when the messages are clean, and messages are published
+too.
+
+WHY PYTHON. The bash version needed `\\b`, which git's default engine does not support
+and macOS grep does not have `-P` for — so the two halves of the same pattern file
+meant different things depending on which binary ran. One engine, no probes, no
+platform divergence. It also passed its regex to `git grep` after a bare `--`, so git
+read the pattern as a pathspec, matched nothing, and waved everything through while
+looking like it worked: a guard that can be wrong in the quiet direction is worse than
+no guard, because you stop checking by hand. Hence `self_check()` below, which refuses
+to run unless the scan can still find a string known to be in the tree.
+
+Install (once per clone):  git config core.hooksPath .githooks
+Deliberate bypass:         git push --no-verify
+"""
+import os
+import re
+import subprocess
+import sys
+
+ZERO = "0" * 40
+HERE = os.path.dirname(os.path.abspath(__file__))
+PATTERNS = os.path.join(HERE, "private-patterns.txt")
+ALLOW = os.path.join(HERE, "private-allow.txt")
+MAX_HITS = 5          # enough to act on; a wall of hits is a wall nobody reads
+LINE_CAP = 150
+
+
+def git(*args):
+    """stdout of a git command, or '' — never raises, so one odd ref can't wedge a push."""
+    try:
+        r = subprocess.run(("git",) + args, capture_output=True, text=True, timeout=120)
+        return r.stdout if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def load(path):
+    """Non-comment, non-blank lines, compiled case-insensitively. A bad regex is fatal
+    rather than skipped: a pattern silently dropped is a pattern that protects nothing."""
+    out = []
+    if not os.path.exists(path):
+        return out
+    with open(path, encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            try:
+                out.append((s, re.compile(s, re.I)))
+            except re.error as e:
+                die("%s:%d is not a valid regex (%s)" % (os.path.basename(path), n, e))
+    return out
+
+
+def die(why):
+    sys.stderr.write(
+        "\n\033[31m⛔ pre-push guard cannot run: %s\033[0m\n"
+        "Refusing rather than publishing unchecked. Fix it, or use --no-verify only\n"
+        "after reading the outgoing diff yourself.\n" % why)
+    sys.exit(1)
+
+
+def self_check(sha):
+    """The scan must still find something known to be in the tree. This is the assertion
+    the original pathspec bug would have failed."""
+    for path in ("CHANGELOG.md", "README.md"):
+        if "clock-in" in git("show", "%s:%s" % (sha, path)):
+            return
+    die("the content scan found nothing in a file that certainly contains the probe")
+
+
+def is_text(blob):
+    return "\0" not in blob[:8192]
+
+
+# The rule files necessarily contain the rules, so scanning them flags every pattern on
+# every push. Skipping them is not a hole: what they hold IS the list, reviewed as a list.
+SELF = ("private-patterns.txt", "private-allow.txt")
+
+
+def scan_tree(sha, paths, pats, allow):
+    """[(pattern, 'path:line: text')] for every hit in the content being published."""
+    hits = []
+    if paths is None:
+        listing = git("ls-tree", "-r", "--name-only", sha).splitlines()
+    else:
+        listing = paths
+    for path in listing:
+        if not path.strip() or os.path.basename(path) in SELF:
+            continue
+        blob = git("show", "%s:%s" % (sha, path))
+        if not blob or not is_text(blob):
+            continue
+        for lineno, text in enumerate(blob.splitlines(), 1):
+            if any(a.search(text) for _, a in allow):
+                continue
+            for src, rx in pats:
+                if rx.search(text):
+                    hits.append((src, "%s:%d: %s" % (path, lineno, text.strip()[:LINE_CAP])))
+    return hits
+
+
+def scan_messages(rng, pats, allow):
+    hits = []
+    for text in git("log", "--format=%h %s%n%b", rng).splitlines():
+        if not text.strip() or any(a.search(text) for _, a in allow):
+            continue
+        for src, rx in pats:
+            if rx.search(text):
+                hits.append((src, text.strip()[:LINE_CAP]))
+    return hits
+
+
+def report(title, hits):
+    seen, shown = set(), {}
+    for src, line in hits:
+        shown.setdefault(src, [])
+        if line in seen or len(shown[src]) >= MAX_HITS:
+            continue
+        seen.add(line)
+        shown[src].append(line)
+    for src, lines in shown.items():
+        sys.stderr.write("\n\033[31m⛔ %s:\033[0m  %s\n" % (title, src))
+        for line in lines:
+            sys.stderr.write("     %s\n" % line)
+
+
+def main():
+    pats = load(PATTERNS)
+    if not pats:
+        return 0
+    allow = load(ALLOW)
+    failed = False
+
+    for raw in sys.stdin:
+        parts = raw.split()
+        if len(parts) < 4:
+            continue
+        _lref, local_sha, _rref, remote_sha = parts[:4]
+        if local_sha == ZERO:
+            continue                                    # branch deletion
+        self_check(local_sha)
+
+        if remote_sha == ZERO:
+            # New branch: none of it is published, so the whole tree is what this push
+            # would put on the internet.
+            rng, paths = local_sha, None
+        else:
+            # Update: only the diff is new. Content published earlier is a history
+            # problem, and this gate is not the place to relitigate it.
+            rng = "%s..%s" % (remote_sha, local_sha)
+            paths = [p for p in git("diff", "--name-only", remote_sha,
+                                    local_sha).splitlines() if p.strip()]
+            if not paths:
+                continue
+
+        tree = scan_tree(local_sha, paths, pats, allow)
+        msgs = scan_messages(rng, pats, allow)
+        if tree:
+            failed = True
+            report("in the tree you are pushing", tree)
+        if msgs:
+            failed = True
+            report("in a commit message", msgs)
+
+    if failed:
+        sys.stderr.write(
+            "\nPush refused. Nothing left this machine.\n\n"
+            "Clean the content, or squash the local work into one commit whose tree AND\n"
+            "message are both clean, then push again. Genuinely fine to publish? Add a\n"
+            "line to .githooks/private-allow.txt — cheaper than loosening a pattern, and\n"
+            "far cheaper than learning to reach for --no-verify.\n")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

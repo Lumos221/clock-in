@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# orchestrate-sop — print the operating contract for the seat that is asking.
+# Run it at spawn. It works out for itself whether you are a standing teammate or a
+# one-shot subagent and prints the contract that actually binds you; a one-shot is not
+# handed the queue, report, pane and shutdown rules it has no life for.
+#   orchestrate-sop          # detected
+#   orchestrate-sop --full   # force the standing-seat addendum (分公司)
+# Resolves sop.py relative to ITS OWN location — works from any cwd / worktree.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/orchestrate/scripts/sop.py" "$@"

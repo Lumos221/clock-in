@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# orchestrate-pane — boss-in-pane marker: mute a dept while the Boss works in its pane.
+#   orchestrate-pane start QA   # Boss heads to QA's pane — pings = liveness, nudge off
+#   orchestrate-pane end QA     # Boss is back — expect QA's report; nudge re-arms
+#   orchestrate-pane status | clear
+# Resolves pane.py relative to ITS OWN location — works from any cwd.
+here="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$here/../skills/orchestrate/scripts/pane.py" "$@"

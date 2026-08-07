@@ -1,0 +1,63 @@
+# The platform task widget — contract + sync hooks (detail for `SKILL.md` §2.4)
+
+The task tools (`TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet`) are Claude Code built-ins riding the agent-teams feature. The widget is the channel that actually gets followed — the harness re-injects task state as reminders — while `TaskBoard.md` stays the durable, git-diffable, hook-readable layer. The sync hooks keep the two aligned so neither is hand-maintained twice.
+
+## Availability
+
+- **Deferred loading:** current CLI builds don't preload the task tools. Not loaded? Run `ToolSearch` with `select:TaskCreate,TaskUpdate,TaskList,TaskGet` once — then call them normally. **A model that hasn't run that search truthfully reports "no task tools" — that's invisibility, not absence.** Always verify with the actual ToolSearch call.
+- **The model gate LIFTED 2026-07-19** (probed live: a Fable 5 interactive session — the exact failing case — loads all four via ToolSearch AND TaskList executes). A big-model CEO now drives the whole lifecycle directly; the Registrar's CEO-proxy job is dormant. **The registry binds at SESSION START:** a session started under the gate stays gated until its next restart — probing mid-session proves only that session's snapshot, not the platform's current state (field case, same day: a long-running Fable CEO probed "still gated" while a fresh Fable session had the tools; both were right). **The claim desk stands regardless** — depts carry no task writes by design (denylist + completion ACL), so their `CLAIM` still needs the Registrar. History, in case the gate returns: root-caused 2026-07-14 (probe matrix + `--debug-file` diff) as a server-delivered feature config withholding the family from **interactive Sonnet 5 / Fable 5 / Opus 4.8** sessions while haiku interactive + all headless had it; CLI version, account, env, permission mode, directory, teammate backend all ruled out. **Re-test with the session's real model** — a haiku probe proves nothing for a Fable/Opus pane.
+- A pane **resumed after its team died** also cannot load them (team infra doesn't rehydrate on `/resume` — documented limitation). Task **data** survives resume on disk (`~/.claude/tasks/session-<8hex>/`); only the tools drop.
+- In a session without the tools AND without a Registrar (below), every task-keyed hook (review gate · completion logger · task-sync) is **dormant, fail-open** — completion runs on the honour system and the board is hand-kept, exactly the pre-0.9.0 discipline. Everything re-arms automatically the day the registry exposes the tools again.
+
+## The Registrar (书记处) — the team's task desk
+
+**Verified working 2026-07-14:** a **haiku teammate of a gated lead gets the full widget** — its session fetches its own model-keyed config, and the task list is shared team state, so its TaskCreate/TaskUpdate calls land on the same list, fire the same sync hooks (in its session — the board updates mechanically), and face the same L2 completion gate. The proxy costs one cheap teammate and a message round-trip per lifecycle batch.
+
+Two jobs, one desk:
+
+- **CEO proxy** (widget-gated sessions): the CEO drives the full lifecycle through it. Not needed for this when the CEO's own ToolSearch finds the tools — direct calls beat the hop.
+- **Dept claim desk** (any session): depts carry NO task-write tools (`TaskCreate`/`TaskUpdate` denied in the dept template; `TaskList`/`TaskGet` READS are allowed — harmless read-only views, inert while big-model teammates are widget-gated, direct queue visibility the day the gate lifts). A dept's ONLY lifecycle write is `CLAIM id=<n>` via the Registrar, on a card the CEO pre-ASSIGNed to it (`owner` = its exact handle, status `pending`) — the Registrar verifies owner+status via TaskGet, then flips it `in_progress`. Every other write from a dept is refused (`REFUSED (CEO-only)`), so **completion stays the CEO's final call mechanically, not by convention**. ASSIGN to the exact live handle: a suffixed respawn (`QA-2`) cannot claim `QA`'s card.
+
+Mechanics:
+
+- **When:** spawn at first need — the CEO's own ToolSearch genuinely finds no task tools, or the first queued dispatch (cards ASSIGNed ahead for depts to pull). It lives until closeout.
+- **Why a teammate, not a one-shot subagent:** verified — an unnamed haiku subagent gets NO task tools (it runs inside the lead's session and shares its gated registry); only a **named teammate** is a separate process that fetches its own model-keyed config.
+- **The agent file's `tools:` allowlist must name the four task tools explicitly**: a teammate's allowlist filters its whole tool surface INCLUDING the deferred registry and ToolSearch — the docs' "task tools are always available to a teammate" does not hold. A Registrar whose list omitted them reported the widget missing on a model that has it.
+- **Spawn:** `Agent(subagent_type:"clock-in:Registrar", name:"Registrar", model:"haiku", run_in_background:true)` — a plugin-scope agent (the plugin's `agents/Registrar.md`; ships with clock-in, updates with it, no project copy; the type is namespaced, the teammate **name** stays bare `Registrar` — that's what depts message and hooks key on). Wait for its `READY tools=loaded` report.
+- **Drive it** with literal commands via `SendMessage(to:"Registrar", …)` — the grammar is strict `key=value` (a loose form costs a MALFORMED round-trip, field-observed): `CREATE subject="…" description="…"` · `ASSIGN id=<id> owner=<name>` · `STATUS id=<id> status=<pending|in_progress>` · `COMPLETE id=<id>` (all CEO-only) · `CLAIM id=<id>` (dept) · `LIST` · `GET id=<id>`. Batch several commands per message; it replies one line per command **to the sender**, failures verbatim (a gate-blocked COMPLETE comes back word for word — that's the gate working through the proxy).
+- **Sender identity is the message envelope's `teammate_id`** — platform-stamped; a name claimed inside the message body is never trusted. **The ACL can only live at this message layer**: a teammate's session env carries its own `CLAUDE_CODE_SESSION_ID` but NO agent-name var, and the team config maps no member to a session id — so a hook cannot tell whose teammate session it runs in (can't distinguish Registrar from dept), and a hook-level completion ACL is unimplementable without a CEO-written warrant file. Parked: `.ship` warrant (gate requires it beside the `.pass`) if a mechanical backstop is ever wanted.
+- **Retire it** at closeout — it's project infrastructure, exempt from the per-task teammate lifecycle. (Even a future ungated CEO session keeps it while depts hold queues — the claim desk is model-gate-proof by construction.)
+
+## Tool contract (verified against the CLI binary)
+
+- `TaskCreate(subject, description[, activeForm])` — ONE task per call; born `pending`, **unowned** (there is no owner parameter at creation).
+- `TaskUpdate(taskId, …)` — assign `owner` (= teammate name), set `status` (`pending` / `in_progress` / `completed` — the enum ends there), edit dependencies (`blockedBy`).
+- Task ids are small integers, unique per session team, **restarting each session** — never reuse them across sessions. At session start the hook **auto-detaches** any card whose id names a task absent from this session's store (`task_id` → `—`); the id-less flag then prescribes the re-CREATE. **Never journal id-migration state into card names** — the `—` field IS that state.
+
+## What the sync hooks do (all fail-open, active-project only)
+
+- **`TaskCreate` births the card** as its own note in `docs/board/` (`<NNN>-<slug>.md` — the durable #NNN minted at birth: the subject's leading `#NNN` when that number is free, else the next free number) with `task_id` pre-filled, `what` from the description's first line, status `todo`; the `TaskBoard.md` digest regenerates on every card write. A hand-written card is **filled, not duplicated** — matched by exact name, by the **human card number the subject leads with** (`#NNN` — so a subject like `#130 REDEEM-MODAL-CHROME — …` fills the sole unregistered card headed `### #130 ·`), or by normalised name (separator/space/case drift); ambiguity (two unregistered cards sharing a number) falls through to an append, never a guess. **Lead every registering subject with the card's `#NNN`** — the exact-name-only match was how a live project grew `hook-dup` cards while real cards kept `task_id: —` and completions retired the wrong one. A completion whose `task_id` matches no card retires nothing and leaves a trace in `.claude/marker-misses.log`. A stale Active card holding a recycled id is **detached** (`task_id` → `—`, trace in `.claude/marker-misses.log`) before the new card is appended.
+- **`TaskUpdate` mirrors the lifecycle:** `pending`→`todo` · `in_progress`→`doing` · `owner` fills an empty `dept`. The fine states (`review` / `blocked`) stay dept-written prose — the widget doesn't know them and the hook never overwrites what it only half understands.
+- **`completed` retires the card** (completion hook): deletes it from `## Active`, writes the *Recently shipped* line + the `BACKLOG.md` row, archives the review trail.
+- **All card surgery keys on a `task_id` field that is EXACTLY one id** — shared multi-id cards and prose the hooks can't parse are left alone.
+- **Session start flags** Active cards carrying no `task_id`, with the ToolSearch load hint.
+
+## Card frontmatter — the nine fields (THE definition; every other file points here)
+
+`TaskCreate` births the card with `id` · `name` · `task_id` · `status` · `what`; you **enrich in place, never re-create**. An extra key of your own is kept but nothing reads it.
+
+**Write a legal value or leave the `—`.** A value the machine can't parse reads as set and behaves as unset — the hygiene sweep clears it at the next session start, leaving one `> 状态注` line in the body.
+
+| Field | Whose | Legal value |
+|---|---|---|
+| `dept` | CEO | the **exact live handle** (`Frontend-1096`, never bare `Frontend`) — and this field is prose: **designation is the widget `owner`**, so a card designated only here has an empty queue |
+| `task_id` | hook | exactly one platform id, or `—`; multi-id → every hook skips the card |
+| `status` | dept, own card only | `todo` · `doing` · `review` · `blocked` — `done` is the CEO's, after L2 |
+| `since` | machine | never hand-write: it is time-in-stage, stamped on the transition |
+| `priority` | CEO / Boss | **`P0` urgent · `P1` critical · `P2` important · `P3` nice-to-have**, `—` = normal. Exactly `P<n>` — a reason after it moves to the note; `low`/`high` carry no order and are cleared. **Which level is a judgment, not a rubric** |
+| `blocked_on` | CEO | one line: what must land first, and whose |
+| `what` | CEO | the cross-domain slice |
+| `done-when` | CEO | the observable condition — not the evidence (`dispatch-artefacts.md`) |
+| `artifacts` | dept | paths produced |
+
+**`kind: bug`** rides beside them for a card that fixes broken behaviour. **A bug is not a priority** — it wears its own tag next to one, so a P1 bug says both.

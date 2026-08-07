@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# orchestrate-bridge — forward to the project-installed agent-bridge CLI.
+#
+# The bridge is a per-project package (<project>/.agent-bridge/bridge), not a
+# plugin bin/ tool: external-seats.md teaches the protocol, the bridge package
+# provides the executable. This wrapper keeps it on PATH like the other
+# orchestrate-* tools, so `orchestrate-bridge dispatch --seat <花名> --task "..."`
+# works from any cwd inside the project (main checkout or a worktree).
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$root" ]]; then
+  echo "orchestrate-bridge: not inside a git repo — no project bridge to forward to" >&2
+  exit 1
+fi
+
+B="$root/.agent-bridge/bridge"
+if [[ ! -x "$B" ]]; then
+  echo "orchestrate-bridge: agent-bridge not installed in $root" >&2
+  echo "  run: <agent-bridge>/install.sh $root   （并先提交 .agent-bridge/）" >&2
+  exit 1
+fi
+
+exec "$B" "$@"

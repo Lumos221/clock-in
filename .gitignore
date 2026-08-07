@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+
+# local-only draft docs — not published
+README2.md
+README.old.md
+
+# clock-in Boss Board — runtime state, not a product doc
+.claude/boss-board.json
+# local design renders — screenshots and prototypes inline LIVE project data
+# (card titles, dept scopes); this repo is public, so they stay on the machine
+docs/design/renders/
+
+# field bug reports — they name a live project and its internals; this repo is public
+BUG-REPORTS-*.md
+
+# pytest cache — debug residue, never product
+.pytest_cache/
+
+# machine-local permission cache — carries absolute paths
+.claude/settings.local.json
