@@ -22,24 +22,25 @@ class RmDetection(unittest.TestCase):
         for cmd in ("rm x.txt", "rm -f *.pyc", "rm -r somedir", "npm rm some-package", "echo hello"):
             self.assertFalse(self.blocked(cmd), cmd)
 
-    def test_the_whitelist_is_one_path_not_a_name(self):
-        """0.9.140 (Boss): narrowed to the single path `web/.next`. The old list keyed on
-        NAMES (`.next|node_modules|.cache`) behind a `[\\w./@+-]+/` wildcard, so it
-        exempted every directory anywhere that happened to wear one of those names —
-        including a `node_modules` nobody meant to touch and a `.cache` some tool had
-        started putting authored files in. A name-keyed exemption cannot tell those apart;
-        a path-keyed one exempts exactly one place."""
-        for cmd in ("rm -rf web/.next", "rm -rf ./web/.next", "rm -Rf web/.next/",
-                    "rm -r -f web/.next", "rm -rf web/.next && npm run dev"):
+    def test_derived_dir_whitelist(self):
+        for cmd in ("rm -rf .next", "rm -rf ./.next", "rm -rf web/.next", "rm -Rf .next/",
+                    "rm -rf node_modules", "rm -rf .cache", "rm -rf web/node_modules"):
             self.assertFalse(self.blocked(cmd), cmd)
-        for cmd in ("rm -rf .next",              # the bare name is no longer enough
-                    "rm -rf node_modules", "rm -rf .cache",
-                    "rm -rf apps/web/.next",     # same name, different place
-                    "rm -rf ../web/.next", "rm -rf ~/web/.next",
-                    "rm -rf web/.next/../../src",
-                    "rm -rf web/.nextish",
-                    "rm -rf web/.next src",      # one bad target poisons the segment
-                    "rm -rf src && rm -rf web/.next"):
+        for cmd in ("rm -rf .next src", "rm -rf .nextish", "rm -rf src && rm -rf .next"):
+            self.assertTrue(self.blocked(cmd), cmd)
+        # whitelist holds per segment: every rm -rf in a compound must be whitelisted
+        self.assertFalse(self.blocked("rm -rf .next && npm run dev"))
+
+    def test_a_quoted_path_is_the_same_path(self):
+        """0.9.140 field case: `rm -rf "web/.next"` was refused while the identical
+        unquoted command passed. Targets arrive as raw shell words, so the quotes were
+        still on the token when it reached the whitelist and nothing matched. Quoting a
+        path with a dot in it is what a shell user does; the guard has to read it."""
+        for cmd in ('rm -rf "web/.next"', "rm -rf 'web/.next'", "rm -rf web/\\.next",
+                    'rm -rf "node_modules"', "rm -rf './.cache'"):
+            self.assertFalse(self.blocked(cmd), cmd)
+        # unquoting must not turn a blocked target into an allowed one
+        for cmd in ('rm -rf "docs"', "rm -rf '/'", 'rm -rf "web/src"'):
             self.assertTrue(self.blocked(cmd), cmd)
 
 

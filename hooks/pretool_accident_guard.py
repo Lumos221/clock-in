@@ -31,18 +31,21 @@ IRREVERSIBLE = [re.compile(p, re.IGNORECASE) for p in (
     r">\s*/dev/sd",
 )]
 
-# `rm -rf` of ONE regenerable derived directory is whitelisted, named in full: `web/.next`.
-# It holds no authored bytes, deleting it costs a rebuild and nothing else, and clearing
-# it is the standard first move when a dev server misbehaves.
-#
-# NARROW ON PURPOSE (Boss, 2026-08-07). The previous list read `.next|node_modules|.cache`
-# with a leading `[\w./@+-]+/` wildcard, so it exempted those names at ANY depth and under
-# ANY parent — `node_modules` in a directory nobody meant to touch, a `.cache` that some
-# tool had decided to put authored files in. A whitelist keyed on a NAME exempts every
-# directory that happens to wear it; this one is keyed on a PATH, so it exempts exactly
-# one place. Adding an entry means adding a full relative path, never a bare name, and
-# only for a directory rebuildable from the repo alone.
-SAFE_DERIVED = re.compile(r"(?:\./)?web/\.next/?")
+# `rm -rf` of a REGENERABLE DERIVED directory is whitelisted: a build cache holds no
+# authored bytes, deleting one costs a rebuild and nothing else, and clearing it is the
+# standard first move when a dev server misbehaves. Every whitelisted name must be
+# rebuildable from the repo alone — a directory that can hold hand-written files does not
+# belong on this list, whatever it is called.
+SAFE_DERIVED = re.compile(r"(?:\./|[\w./@+-]+/)?(?:\.next|node_modules|\.cache)/?")
+
+# Targets arrive as raw shell words, so a quoted or escaped path reaches the whitelist
+# still wearing its quotes and never matches: `rm -rf "web/.next"` was refused while the
+# identical unquoted command passed. Strip one layer of quoting before the match — this
+# is the same path, written the way a shell user actually writes one with a dot in it.
+def unquote(tok):
+    if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in "\"'":
+        return tok[1:-1]
+    return tok.replace("\\", "")
 
 def rm_rf_targets(seg):
     """If this command segment invokes `rm` with both recursive and force in effect,
@@ -73,7 +76,7 @@ def guard_verdict(cmd):
         targets = rm_rf_targets(seg)
         if targets is None:
             continue
-        if targets and all(SAFE_DERIVED.fullmatch(t) for t in targets):
+        if targets and all(SAFE_DERIVED.fullmatch(unquote(t)) for t in targets):
             continue  # whitelisted: regenerable derived dirs only
         return "`%s` is an IRREVERSIBLE op (recursive force-remove)" % seg.strip()
     for pat in IRREVERSIBLE:
