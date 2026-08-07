@@ -303,7 +303,7 @@ class DeskList(unittest.TestCase):
     def test_the_task_header_states_the_choice_and_menus_hold_the_rest(self):
         """Notion's view controls: the header states the current lane + count and the
         sort; alternatives live in a popover. Aggregates pick alone; the value lanes
-        are checkboxes that UNION, and the menu stays open while they ticks them."""
+        are checkboxes that UNION, and the menu stays open while they tick them."""
         r = run_js("""
         TASKS = [{label:'#1', status:'doing'}, {label:'#2', status:'todo'},
                  {label:'#3', status:'done'}];
@@ -539,7 +539,7 @@ class Composer(unittest.TestCase):
                                     staged: BASKET.get('CEO-1').text}));
         """)
         self.assertEqual(r["kept"], "first version, revised")
-        self.assertEqual(r["staged"], "first version", "not staged until they stages it")
+        self.assertEqual(r["staged"], "first version", "not staged until they stage it")
 
     def test_staging_consumes_the_draft(self):
         r = run_js(COMPOSE_JS + """
@@ -850,7 +850,7 @@ class TheBoxSheIsTypingIntoIsNeverRebuilt(unittest.TestCase):
         self.assertTrue(r["sigHeld"])
 
     def test_binding_the_box_to_another_ask_does_swap_the_draft(self):
-        """The one case where the value SHOULD change: they clicks Reply on a different
+        """The one case where the value SHOULD change: they click Reply on a different
         item, so the box now belongs to that item and carries its draft."""
         r = run_js(CONVO_JS + """
         DRAFTS.set('CEO-2', 'the other draft');

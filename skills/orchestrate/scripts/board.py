@@ -410,7 +410,7 @@ def resolve_by_dept(store, dept, now, outcome=None):
     #
     # INFO is excluded for the same reason and was not until 0.9.62. An info item asks
     # nothing of them: it is never what a DONE resolves, and it leaves the desk only when
-    # they toggles it read. Counting it made `@BOSS-DONE[<dept>]` permanently ambiguous for
+    # they toggle it read. Counting it made `@BOSS-DONE[<dept>]` permanently ambiguous for
     # any dept holding one — on a live board the CEO had 7 open info items, the oldest
     # 5 days old, so every dept-level DONE raised a notice instead of resolving, and the
     # notice then inflated the desk count.
@@ -2291,7 +2291,7 @@ body.haspanel { padding-bottom: 108px; }   /* clear the fixed bottom bar */
 #tray.on { display: block; }
 .trayhd { display: flex; align-items: center; gap: 10px; max-width: 1060px; margin: 0 auto; }
 #traycount { font-size: .74rem; color: #87867f; }
-/* Where Send will land, named before they clicks. The old tray said "Send to session" and
+/* Where Send will land, named before they click. The old tray said "Send to session" and
    left their to find out which session afterwards. */
 #traytarget { font-size: .7rem; color: #87867f; flex: 1; min-width: 0; overflow: hidden;
               text-overflow: ellipsis; white-space: nowrap; }
@@ -2528,7 +2528,7 @@ html.dark .panel { background: #232120; border-color: #38352f; box-shadow: none;
   text-overflow: ellipsis; max-width: 100%%; }
 .dectitle { font-size: .8rem; line-height: 1.45; color: #4b4a45;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-/* The topic key is the INDEX — it is what they scans the canon by, so it holds a column
+/* The topic key is the INDEX — it is what they scan the canon by, so it holds a column
    of its own and wraps; only the prose pointer gives up width. (It used to shrink first
    and ellipse, which cut exactly the identifying half: `citely-cn…`, `pp-d…`.) */
 /* A registry row is a QUESTION and the file that answers it. The topic used to be a
@@ -2759,7 +2759,7 @@ html.dark #themetog:hover { border-color: #d97757; color: #e09b78; }
 </style>
 <script>
 // Dark-FIRST: the board is a monitor that sits open all
-// day, so it defaults dark and they flips it by hand, rather than following whatever the
+// day, so it defaults dark and they flip it by hand, rather than following whatever the
 // OS decided. Order of authority: ?theme= (pins a screenshot) > their saved choice > dark.
 (function(){
   const q = new URLSearchParams(location.search).get('theme');
@@ -3051,7 +3051,7 @@ function askRow(e, T, ts, cls){
   const rd = !!e.read;                       // archived — dims, then folds to History
   // A MESSAGE LIST, not a mailbox. Four columns:
   //   col 1  state dot — what kind of message it is
-  //   col 2  the item id (CEO-498), because that is what they needs to locate and cite it.
+  //   col 2  the item id (CEO-498), because that is what they need to locate and cite it.
   //          The dept alone was "CEO" over and over, which located nothing; the id carries
   //          the dept as its prefix anyway, so this column says strictly more.
   //   col 3  the message: title in ink, the rest trailing in grey on the SAME line
@@ -3274,7 +3274,7 @@ document.addEventListener('click', e=>{
 });
 // The lane filter is Notion's: the two aggregates (In flight \u00b7 Everything) pick alone
 // and close the menu; the five value lanes are checkboxes that UNION, and the menu
-// stays open while they ticks them. An emptied set falls back to the In-flight default.
+// stays open while they tick them. An emptied set falls back to the In-flight default.
 const TAGGS = ['active','all'];
 function tfAgg(k){ TFILTER = k; FMOPEN = null; drawTasks(); }
 function tfToggle(k){
@@ -4157,7 +4157,7 @@ function commitCompose(send){
 }
 function stageCompose(send){ commitCompose(send); }   // the row-level box still calls this
 function unstage(id){ BASKET.delete(id); basketSave(); post(`/basket`,{id,text:''}).catch(()=>{}); lastRaw=''; renderTray(); }
-// Name the pane Send will type into, before they clicks. A red line here means the click
+// Name the pane Send will type into, before they click. A red line here means the click
 // will only reach the clipboard, and says why — which beats finding out from a toast after
 // the basket has already been flushed.
 function renderTarget(){
@@ -4175,7 +4175,7 @@ function renderTarget(){
   if(!t){ el.textContent=''; el.classList.remove('bad'); return; }
   // "change" opens the seat picker. The auto-claim gets it right in the ordinary case and
   // cannot be right in every case — several sessions live in one tree (CEO, the Marketing
-  // 分公司, whatever else is open) and only they knows which one is the CEO.
+  // 分公司, whatever else is open) and only they know which one is the CEO.
   const pick = PANES.length>1 ? ` <a class="seatpick" onclick="event.stopPropagation();toggleSeats()">change</a>` : '';
   if(t.ok){
     el.classList.remove('bad');
@@ -4287,7 +4287,7 @@ async function sendBasket(){
       return;
     }
     // Landed in the input box but the echo could not be confirmed, so Return was NOT
-    // pressed. The text is already there — they finishes it, and nothing was typed blind.
+    // pressed. The text is already there — they finish it, and nothing was typed blind.
     if(j.delivery==='typed'){ toast(`Typed ${n} answer(s) into your session${who} — press Enter to send (the echo could not be confirmed, so it was not submitted for you).`); return; }
     // Everything else means we would not touch the pane at all — clipboard fallback.
     const amb = legs.filter(l=>l.delivery==='ambiguous').map(l=>l.why).filter(Boolean);
@@ -4691,7 +4691,7 @@ def capture_iterm_target(root, sid, meta=None, force=False):
 
     The seat is CLAIMED, not last-writer-wins. Every session with a cwd under the project
     reaches this function at turn end — the Marketing 分公司 in its worktree, and any
-    unrelated `claude` they happens to have open in the tree. None of them carry the
+    unrelated `claude` they happen to have open in the tree. None of them carry the
     agentName/teamName stamp a teammate has, so the lead guard upstream waves all of them
     through, and the last one to finish a turn used to own the pane Send typed into. So:
 
@@ -5413,7 +5413,7 @@ def pane_title(name):
 
 
 def iterm_target_info(root):
-    """What Send would do right now, for the board to render BEFORE they clicks: which pane,
+    """What Send would do right now, for the board to render BEFORE they click: which pane,
     what it is called, and whether it will submit. A Send button that cannot name its target
     is the whole complaint — 'it just seems to find the activated terminal'."""
     rec = read_iterm_target(root)
@@ -5578,7 +5578,7 @@ def iterm_prime(root, line, guid=None):
     line. Returns:
 
       ok        typed and submitted — nothing left for them to do
-      typed     landed in the input box, NOT submitted (they presses Enter); the honest
+      typed     landed in the input box, NOT submitted (they press Enter); the honest
                 answer whenever a check could not be passed after the text was already in
       notfound  the pinned pane no longer exists
       nosession the pane exists but has no foreground claude — refused before typing
@@ -5623,7 +5623,7 @@ def iterm_prime(root, line, guid=None):
     # Read the screen BEFORE typing, then write on its own. Two calls instead of one,
     # deliberately: the read may be slow or may fail, and neither outcome may be allowed
     # to leave the write in an unknown state. A failed read costs us the echo check (we
-    # stop at "typed" and they presses Enter); a failed write is the only thing that means
+    # stop at "typed" and they press Enter); a failed write is the only thing that means
     # nothing landed.
     before_body = _squash(_osa(ITERM_READ_APPLESCRIPT, guid) or "")
     if not _osa(ITERM_WRITE_APPLESCRIPT, guid, line):
@@ -5813,7 +5813,7 @@ def serve(root, port):
             elif path == "/send":
                 self._json(200, board_send(root))
             elif path == "/paste":
-                # A screenshot is how they explains half of what they mean, and the composer
+                # A screenshot is how they explain half of what they mean, and the composer
                 # could only take text — so an item needing one could not be answered from
                 # the board at all. The bytes are written into the project and the message
                 # carries the path, which is what a session can actually open.

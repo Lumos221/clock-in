@@ -72,7 +72,7 @@ class StoreCore(unittest.TestCase):
 
     def test_info_never_blocks_a_dept_level_done(self):
         """An info item asks nothing of them — it is never what a DONE resolves, and it
-        leaves the desk only when they toggles it read. Counting it made
+        leaves the desk only when they toggle it read. Counting it made
         `@BOSS-DONE[<dept>]` permanently ambiguous for any dept holding one: on their live
         board the CEO had 7 open info items, the oldest 5 days old, so every dept-level
         DONE raised an ambiguity notice instead of resolving — and the notice then
@@ -1222,7 +1222,7 @@ class BasketAndSend(unittest.TestCase):
         self.assertEqual(e["status"], "open")                  # a question, not a resolution
 
     def test_send_leaves_an_asked_decision_unread(self):
-        """The fold is Information-only: a Needs-you item they questions is still theirs
+        """The fold is Information-only: a Needs-you item they question is still theirs
         to answer — it must stay in the queue, not slip into History."""
         s = {"entries": []}
         board.add_entry(s, "QA", "needs", "db?", NOW)          # QA-1 (Needs you)
